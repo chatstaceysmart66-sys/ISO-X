@@ -7,5 +7,5 @@ Comment[ar]=فتح خطوات البدء وأدوات النظام وخيارا�
 Exec=/usr/local/bin/isox-welcome
 Icon=iso-x
 Terminal=false
-Categories=System;Utility;
+Categories=System;
 StartupNotify=true

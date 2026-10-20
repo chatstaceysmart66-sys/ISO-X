@@ -321,6 +321,17 @@ QEMU_BIOS_EXIT=2
 - `python3 -m pytest -q` — exit 1 لأن pytest غير مثبت (`No module named pytest`).
 - `./build.sh` — exit 2 عند حاجز root؛ لم يصل إلى `lb build`. فحص QEMU — exit 2 بسبب غياب `xorriso`، ولا تتوفر أدوات QEMU/OVMF.
 - نتيجة الاختبار الكامل والبناء الحالي موثقة في `docs/BUILD_AND_TEST_RESULTS_AR.md`.
+
+## 11. تحقق Debian Trixie وCI — 2026-10-20
+
+- أُثبتت تبعيات الاختبار في Debian Trixie داخل Docker، وشُغلت الاختبارات على Python 3.13.5 / pytest 8.3.5: `python3 -m pytest -q` — 11 passed؛ `tests/smoke.sh` وجميع اختبارات المشروع المحددة exit 0.
+- `bash -n` لكل سكربتات Bash/hooks و`sh -n` لسكربتات initramfs — exit 0. ShellCheck مع `-S warning`, `desktop-file-validate`, `xmllint` لـXML/SVG، و`systemd-analyze verify` داخل rootfs مؤقت — exit 0.
+- `scripts/install-build-deps.sh` اكتمل داخل Trixie وثبت أدوات Live Build وQEMU وOVMF والاختبار. بعد التثبيت: `df -h /workspace` أظهر 16 GiB حرة، وRAM إجمالية 7.8 GiB. شرط البناء 20 GiB لم يتحقق؛ `./build.sh` لم يُشغّل داخل الحاوية.
+- على المضيف كانت مساحة workspace 19 GiB وUID 1000. لا يوجد تجاوز لشرط الحجم أو محاولة كتابة ISO وهمية.
+- أُضيف `.github/workflows/iso-build.yml` إلى الدفع التلقائي و`workflow_dispatch`: تنظيف مساحة على runner مؤقت، إعادة قياس الموارد على المضيف وداخل Trixie، تشغيل الاختبارات والبناء وEl Torito/System Area وBIOS/UEFI headless. YAML ونصوص Bash اجتازت التحليل، لكن GitHub Actions لم يُشغّل بعد.
+- الجولة الأخيرة داخل Trixie: `python3 -m pytest -q` — 11 passed؛ `bash tests/smoke.sh`, اختبارات العقود والمصدر والخزنة وUSB وQEMU failure detector — exit 0؛ ShellCheck `-S warning`, desktop-file-validate, xmllint، وsystemd verify — exit 0. Python هو 3.13.5.
+- بعد تنصيب متطلبات البناء الكاملة كان المتاح 16 GiB فقط، فقُطع المسار قبل `./build.sh` برمز 32؛ لم تُنتج ISO ولم تُختبر BIOS/UEFI فعلياً. Workflow YAML وhost/container Bash اجتازا التحليل؛ لا run أو artifact بعد.
+- لم تنتج ISO، ولم يجر QEMU boot أو اختبار BIOS/UEFI. ينتظر ذلك runner CI ينجح في فحوص 20 GiB/4 GiB؛ اختبار GUI والأجهزة الحقيقية باقٍ.
 - لا يُسجل نجاح بناء ISO أو إقلاع BIOS/UEFI قبل ظهور ملف ISO واختباره فعلياً؛ قائمة اختبارات العتاد في `docs/HARDWARE_ACCEPTANCE_CHECKLIST_AR.md` لا تزال غير منفذة.
 
 ## 9. حدود هذا التقرير

@@ -1,0 +1,125 @@
+name: ISO-X Debian Trixie ISO
+
+on:
+  push:
+    branches:
+      - fix/isox-build-and-runtime
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Reclaim disposable runner space and check host limits
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/share/boost /usr/local/share/chromium /usr/local/share/powershell
+          df -h "$GITHUB_WORKSPACE"
+          free -h
+          available_kb="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 {print $4}')"
+          memory_kb="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
+          (( available_kb >= 20 * 1024 * 1024 )) || { echo "Need 20 GiB free; available ${available_kb} KiB" >&2; exit 20; }
+          (( memory_kb >= 4 * 1024 * 1024 )) || { echo "Need 4 GiB RAM; available ${memory_kb} KiB" >&2; exit 21; }
+          command -v docker
+          docker info --format 'Docker server {{.ServerVersion}}'
+
+      - name: Run Trixie checks, build and BIOS/UEFI boot tests
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence
+          docker pull debian:trixie
+          docker run --rm --privileged \
+            -e GITHUB_WORKSPACE=/workspace \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            debian:trixie bash -Eeuo pipefail -c '
+              export LANG=C.UTF-8 LC_ALL=C.UTF-8
+              mkdir -p evidence
+              exec > >(tee -a evidence/ci-trixie.log) 2>&1
+              printf "Container OS: "; . /etc/os-release; printf "%s %s\\n" "$PRETTY_NAME" "${VERSION_CODENAME:-unknown}"
+              test "${VERSION_CODENAME:-}" = trixie
+              test "$(dpkg --print-architecture)" = amd64
+              df -h "$GITHUB_WORKSPACE"
+              free -h
+              apt-get update
+              ./scripts/install-build-deps.sh
+              df -h "$GITHUB_WORKSPACE"
+              free -h
+              python3 --version
+              python3 -m pytest --version
+              bash tests/smoke.sh
+              python3 -m pytest -q
+              python3 tests/test_build_contracts.py
+              python3 tests/test_source_config.py
+              python3 tests/test_secure_vault.py
+              bash tests/test_write_usb_validation.sh
+              find . -type f \( -name "*.sh" -o -path "./auto/config" -o -name "*.hook.chroot" \) -print0 | xargs -0 -n1 bash -n
+              sh -n initramfs/hooks/isox-watermark initramfs/scripts/init-premount/isox-watermark-guard
+              find . -type f \( -name "*.sh" -o -path "./auto/config" -o -name "*.hook.chroot" \) -print0 | xargs -0 shellcheck -S warning
+              desktop-file-validate desktop/*.desktop
+              find desktop -name "*.xml" -print0 | xargs -0 -n1 xmllint --noout
+              find assets -name "*.svg" -print0 | xargs -0 -n1 xmllint --noout
+              rootfs="$(mktemp -d)"
+              trap "rm -rf $rootfs" EXIT
+              mkdir -p "$rootfs/usr/lib/systemd/system"
+              cp -a /usr/lib/systemd/system/*.target "$rootfs/usr/lib/systemd/system/"
+              install -D -m 0644 systemd/isox-preload.service "$rootfs/etc/systemd/system/isox-preload.service"
+              install -D -m 0644 systemd/isox-preload.timer "$rootfs/etc/systemd/system/isox-preload.timer"
+              install -D -m 0644 systemd/isox-zram.service "$rootfs/etc/systemd/system/isox-zram.service"
+              install -D -m 0755 scripts/isox-preload.py "$rootfs/usr/local/bin/isox-preload"
+              install -D -m 0755 scripts/isox-zram-setup "$rootfs/usr/local/sbin/isox-zram-setup"
+              systemd-analyze verify --root="$rootfs" isox-preload.service isox-preload.timer isox-zram.service
+              df -h "$GITHUB_WORKSPACE"
+              free -h
+              read -r _ _ _ available_kb _ < <(df -Pk "$GITHUB_WORKSPACE" | tail -n 1)
+              read -r _ memory_kb _ < /proc/meminfo
+              (( available_kb >= 20 * 1024 * 1024 )) || { echo "Need 20 GiB free inside Trixie; available ${available_kb} KiB" >&2; exit 22; }
+              (( memory_kb >= 4 * 1024 * 1024 )) || { echo "Need 4 GiB RAM inside Trixie; available ${memory_kb} KiB" >&2; exit 23; }
+              ISOX_BUILD_LOG="$GITHUB_WORKSPACE/evidence/isox-build.log" ./build.sh
+              test -s ISO-X-0.4.0-live-amd64.iso
+              sha256sum --check ISO-X-0.4.0-live-amd64.iso.sha256
+              stat -c "ISO bytes: %s" ISO-X-0.4.0-live-amd64.iso | tee evidence/iso-size.txt
+              sha256sum ISO-X-0.4.0-live-amd64.iso | tee evidence/iso-sha256.txt
+              xorriso -indev ISO-X-0.4.0-live-amd64.iso -report_el_torito plain 2>&1 | tee evidence/eltorito.txt
+              xorriso -indev ISO-X-0.4.0-live-amd64.iso -report_system_area plain 2>&1 | tee evidence/system-area.txt
+              grep -Eiq "BIOS|Platform.*0x00" evidence/eltorito.txt
+              grep -Eiq "UEFI|EFI|Platform.*0xef" evidence/eltorito.txt
+              grep -Eiq "MBR|System area" evidence/system-area.txt
+              test ! -e build-live/chroot/var/lib/isox-build-secrets/isox-release.key
+              dpkg-query --admindir=build-live/chroot/var/lib/dpkg -W > evidence/installed-packages.txt
+              xorriso -indev ISO-X-0.4.0-live-amd64.iso -find / -name filesystem.squashfs -exec lsdl 2>&1 | tee evidence/squashfs-entry.txt
+              grep -q filesystem.squashfs evidence/squashfs-entry.txt
+              bash tests/qemu-acceptance.sh check ISO-X-0.4.0-live-amd64.iso evidence/qemu-check
+              bash tests/qemu-acceptance.sh bios-headless ISO-X-0.4.0-live-amd64.iso evidence/qemu-bios
+              bash tests/qemu-acceptance.sh uefi-headless ISO-X-0.4.0-live-amd64.iso evidence/qemu-uefi
+            ' \
+            2>&1 | tee evidence/ci-trixie-container.log
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isox-build-diagnostics-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload verified ISO
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ISO-X-0.4.0-live-amd64
+          path: |
+            ISO-X-0.4.0-live-amd64.iso
+            ISO-X-0.4.0-live-amd64.iso.sha256
+          if-no-files-found: error
+          retention-days: 30

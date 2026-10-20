@@ -6,7 +6,7 @@ STATE="$($RFKILL list 2>/dev/null || true)"
 COUNT="$(grep -c 'Soft blocked:' <<<"$STATE" || true)"
 [[ "$COUNT" -gt 0 ]] || {
   MESSAGE="لا توجد أجهزة لاسلكية يعرضها النظام؛ قد لا يدعمها QEMU."
-  command -v notify-send >/dev/null 2>&1 && notify-send "ISO-X — وضع الطيران" "$MESSAGE" || true
+  if command -v notify-send >/dev/null 2>&1; then notify-send "ISO-X — وضع الطيران" "$MESSAGE" || true; fi
   echo "$MESSAGE" >&2
   exit 3
 }
@@ -21,15 +21,15 @@ fi
 AFTER="$($RFKILL list 2>/dev/null || true)"
 if [[ "$ACTION" == block ]] && ! grep -q 'Soft blocked: yes' <<<"$AFTER"; then
   MESSAGE="لم يؤكد rfkill حظر الأجهزة؛ افحص صلاحيات النظام والعتاد."
-  command -v notify-send >/dev/null 2>&1 && notify-send "ISO-X — وضع الطيران" "$MESSAGE" || true
+  if command -v notify-send >/dev/null 2>&1; then notify-send "ISO-X — وضع الطيران" "$MESSAGE" || true; fi
   echo "$MESSAGE" >&2
   exit 5
 fi
 if [[ "$ACTION" == unblock ]] && ! grep -q 'Soft blocked: no' <<<"$AFTER"; then
   MESSAGE="لم يؤكد rfkill رفع الحظر؛ افحص صلاحيات النظام والعتاد."
-  command -v notify-send >/dev/null 2>&1 && notify-send "ISO-X — وضع الطيران" "$MESSAGE" || true
+  if command -v notify-send >/dev/null 2>&1; then notify-send "ISO-X — وضع الطيران" "$MESSAGE" || true; fi
   echo "$MESSAGE" >&2
   exit 6
 fi
-command -v notify-send >/dev/null 2>&1 && notify-send "ISO-X — وضع الطيران" "$MESSAGE" || true
+if command -v notify-send >/dev/null 2>&1; then notify-send "ISO-X — وضع الطيران" "$MESSAGE" || true; fi
 echo "$MESSAGE"

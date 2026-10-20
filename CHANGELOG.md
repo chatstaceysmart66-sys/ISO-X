@@ -2,6 +2,9 @@
 
 ## 2026-10-20 — إصلاح البناء والتشغيل (قيد التحقق النهائي)
 
+- `.github/workflows/iso-build.yml`: إضافة CI على Ubuntu runner مع تنفيذ Debian Trixie في Docker، فحص مساحة/ذاكرة صريح قبل build، اختبارات ومدققات المصدر، فحص ISO/El Torito، إقلاع BIOS/UEFI headless، وحفظ سجل `lb build`. يرفع diagnostics دائماً وISO فقط عند النجاح الكامل؛ YAML تحقّق محلياً، وتشغيل Actions لم يبدأ قبل دفع التغييرات.
+- `scripts/install-build-deps.sh`: إضافة pytest وdesktop-file-utils وxmllint وsystemd وprocps وفحص الأدوات ومفسر pytest. اختبارات Trixie نجحت؛ مساحة ما بعد التثبيت (16 GiB) حالت دون بناء محلي.
+
 - `scripts/build-iso.sh`: ضمان إنشاء `etc/default` قبل توليد إعدادات locale ولوحة المفاتيح؛ إبقاء مسار الإخراج ومراجعة ISO وبصمة SHA-256 بعد نجاح `lb build` فقط.
 - `config/package-lists/iso-x.list.chroot`: استخدام أسماء Trixie التي ظهرت في الفهرس (`libgles2`, `polkitd`) وحذف `fonts-kacst` و`pinta` غير المتاحتين؛ لم يُحذف ملف تطبيق مستخدم.
 - `scripts/build-iso.sh`, hook/initramfs watermark: فصل وحدة watermark الاختيارية عن مسار الإقلاع والبناء الأساسي؛ تحذير واستمرار عند غيابها/تعطلها. الميزة لا تساوي Secure Boot ولا تحمي من تعديل boot chain.

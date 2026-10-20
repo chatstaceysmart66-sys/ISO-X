@@ -29,7 +29,7 @@ lb config noauto \
   --iso-application "ISO-X 0.4.0" \
   --iso-publisher "ISO-X / Abdullah Lazim" \
   --iso-volume "ISOX040_LIVE" \
-  --bootappend-live "boot=live config components quiet splash username=user hostname=iso-x" \
+  --bootappend-live "boot=live config components quiet splash username=user hostname=iso-x console=ttyS0,115200n8 systemd.show_status=yes systemd.log_target=console" \
   --bootappend-live-failsafe "boot=live components username=user hostname=iso-x nomodeset noapic noacpi nosmp noapm nodma nomce nosplash" \
   --memtest none \
   "${@}"

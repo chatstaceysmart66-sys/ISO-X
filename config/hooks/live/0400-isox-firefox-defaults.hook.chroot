@@ -14,7 +14,9 @@ MARKER='ISO-X local start page'
 [ -r "$START_FILE" ] || { echo "ISO-X local browser start page is missing" >&2; exit 1; }
 touch "$PREFS"
 if ! grep -Fq "$MARKER" "$PREFS"; then
-  printf '\n// %s; user profiles may override this default.\n' "$MARKER" >> "$PREFS"
-  printf 'pref("browser.startup.homepage", "%s");\n' "$START_PAGE" >> "$PREFS"
-  printf 'pref("browser.startup.page", 1);\n' >> "$PREFS"
+  {
+    printf '\n// %s; user profiles may override this default.\n' "$MARKER"
+    printf 'pref("browser.startup.homepage", "%s");\n' "$START_PAGE"
+    printf 'pref("browser.startup.page", 1);\n'
+  } >> "$PREFS"
 fi

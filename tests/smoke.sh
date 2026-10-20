@@ -33,6 +33,7 @@ bash -n \
   "$ROOT/tests/test_watermark_integrity.sh" "$ROOT/tests/test_secureboot_validation.sh" \
   "$ROOT/tests/test_initramfs_watermark_guard.sh" "$ROOT/tests/qemu-acceptance.sh" "$ROOT/initramfs/hooks/isox-watermark" \
   "$ROOT/tests/test_write_usb_validation.sh" \
+  "$ROOT/tests/test_qemu_headless_validation.sh" \
   "$ROOT/initramfs/scripts/init-premount/isox-watermark-guard" "$ROOT/auto/config"
 sh -n "$ROOT/initramfs/hooks/isox-watermark" "$ROOT/initramfs/scripts/init-premount/isox-watermark-guard"
 if command -v openssl >/dev/null 2>&1; then
@@ -40,6 +41,7 @@ if command -v openssl >/dev/null 2>&1; then
   bash "$ROOT/tests/test_secureboot_validation.sh"
   bash "$ROOT/tests/test_initramfs_watermark_guard.sh"
   bash "$ROOT/tests/test_write_usb_validation.sh"
+  bash "$ROOT/tests/test_qemu_headless_validation.sh"
 else
   echo "SKIP: OpenSSL not installed"
 fi

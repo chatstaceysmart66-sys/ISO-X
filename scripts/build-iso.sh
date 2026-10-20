@@ -4,7 +4,6 @@ set -Eeuo pipefail
 # ISO-X 0.4.0 Debian Trixie Live build.
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${ISOX_BUILD_DIR:-${PROJECT_DIR}/build-live}"
-DIST="trixie"
 KEY_IN="${ISOX_RELEASE_KEY:-}"
 WATERMARK_ENABLED="${ISOX_ENABLE_WATERMARK:-0}"
 STAGED_KEY="${BUILD_DIR}/config/includes.chroot/var/lib/isox-build-secrets/isox-release.key"
@@ -37,8 +36,10 @@ if [[ -n "$BUILD_USER_HOME" && "$BUILD_USER" != root && -x "$BUILD_USER_HOME/.ca
   export CARGO_HOME="$BUILD_USER_HOME/.cargo"
   export RUSTUP_HOME="$BUILD_USER_HOME/.rustup"
 fi
-OS_ID="$(. /etc/os-release; printf '%s' "${ID:-unknown}")"
-OS_CODENAME="$(. /etc/os-release; printf '%s' "${VERSION_CODENAME:-unknown}")"
+# shellcheck source=/etc/os-release
+. /etc/os-release
+OS_ID="${ID:-unknown}"
+OS_CODENAME="${VERSION_CODENAME:-unknown}"
 if [[ "$OS_ID" != debian || "$OS_CODENAME" != trixie ]]; then
   if [[ "${ISOX_ALLOW_FOREIGN_BUILD_HOST:-0}" == 1 && ( "$OS_ID" == ubuntu || "$OS_ID" == debian ) ]]; then
     echo "تحذير: مضيف البناء ${OS_ID}/${OS_CODENAME} غير Trixie؛ صورة الهدف تبقى Debian Trixie، لكن القبول النهائي يتطلب اختبارًا مستقلًا." >&2
@@ -402,8 +403,8 @@ ISO_PATH="${BUILD_DIR}/live-image-amd64.hybrid.iso"
 [[ -s "$ISO_PATH" ]] || { echo "لم ينتج live-build ملف ISO متوقعًا؛ افحص سجل البناء." >&2; exit 9; }
 xorriso -indev "$ISO_PATH" -pvd_info >/dev/null || { echo "فشل فحص بنية ISO الناتجة؛ لن تُنشر الصورة." >&2; exit 10; }
 cp -f "$ISO_PATH" "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso"
-sha256sum "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso" > "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso.sha256"
-sha256sum --check "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso.sha256" >/dev/null || { echo "فشل تحقق SHA-256 للصورة الناتجة." >&2; exit 11; }
+(cd "$PROJECT_DIR" && sha256sum ISO-X-0.4.0-live-amd64.iso > ISO-X-0.4.0-live-amd64.iso.sha256)
+(cd "$PROJECT_DIR" && sha256sum --check ISO-X-0.4.0-live-amd64.iso.sha256) >/dev/null || { echo "فشل تحقق SHA-256 للصورة الناتجة." >&2; exit 11; }
 echo "ISO generated: $PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso"
 echo "SHA256: $(cut -d' ' -f1 "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso.sha256")"
 echo "NOTE: boot-performance and GUI acceptance testing remain a separate required step."
