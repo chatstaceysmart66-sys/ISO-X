@@ -3,7 +3,7 @@
 **تاريخ مراجعة السجل:** 2026-10-20  
 **الفرع:** `fix/isox-build-and-runtime`  
 **الهدف:** Debian GNU/Linux 13 Trixie، amd64.  
-**الحالة:** اختبارات المصدر في Debian Trixie ناجحة؛ لم تُبنَ ISO لأن المساحة داخل الحاوية بعد تثبيت أدوات البناء أقل من الحد الإلزامي.
+**الحالة:** CI بنى ISO حقيقية وفحص SHA-256 وEl Torito/System Area؛ فشل QEMU BIOS بسبب إعداد USB ناقص في الاختبار، لذلك لم يُرفع Artifact الإصدار ولم يثبت الإقلاع الفعلي.
 
 ## نتائج الاختبارات
 
@@ -28,17 +28,21 @@
 | `git diff --check` | نجاح نهائي، exit 0 | لا توجد whitespace errors. |
 | Debian Trixie Docker / Python 3.13.5 / pytest 8.3.5 | نجاح، exit 0 | `python3 -m pytest -q`: 11 passed. smoke والاختبارات المحددة والمدققات نجحت. |
 | `./scripts/install-build-deps.sh` داخل Trixie | نجاح، exit 0 | ثبتت الأدوات المطلوبة وتحققت الإصدارات. بعد التثبيت كانت المساحة 16 GiB متاحة. |
-| مساحة وذاكرة حاوية Trixie بعد اعتماديات البناء الكاملة | رفض البناء، exit 32 | `df -h /workspace`: 32 GiB إجمالي، 14 GiB مستخدم، 16 GiB متاح؛ أقل من 20 GiB. الذاكرة الكلية 7.8 GiB. لم يبدأ `./build.sh`. |
+| مساحة Codespace داخل حاوية Trixie | رفض build المحلي، exit 32 | `df -h /workspace`: 32 GiB إجمالي و16 GiB متاح؛ أقل من 20 GiB. GitHub runner المؤقت وفّر مساحة كافية للبناء الفعلي. |
 | ShellCheck `-S warning`, `desktop-file-validate`, `xmllint`, `systemd-analyze verify` | نجاح، exit 0 داخل Trixie | أزيلت ملاحظات ShellCheck ذات مستوى warning، وعولج تصنيف desktop المكرر. |
 | فهارس Debian Trixie amd64 | نجاح، 148 اسماً و0 مفقود | فُحصت `main`, `contrib`, `non-free`, `non-free-firmware` مباشرةً بما في ذلك headers/build tools الاختيارية؛ البناء ما زال الاختبار النهائي لحل الاعتماديات. |
 | `python3 -m pytest -q` على مفسّر المضيف | نجاح، exit 0 | 11 passed على Python 3.14.2؛ تحقق منفصل إضافي نجح على Python 3.13.5 في Trixie. |
-| `./build.sh` | رفض مسبق، exit 2 | المستخدم UID 1000؛ الرسالة الفعلية: `شغّل البناء على Linux بصلاحيات root`. لم يبدأ `lb build`. |
-| `bash tests/qemu-acceptance.sh check` | لم يُنفذ على ISO | لا توجد ISO ناتجة للاختبار. |
-| Workflow GitHub Actions | YAML وBash اجتازا التحليل؛ سيبدأ عند دفع هذا التغيير | يتحقق من موارد runner، ويشغّل Trixie tests/build/QEMU، ويرفع التشخيص دائماً وISO فقط عند النجاح الكامل. لا يوجد run أو artifact حتى الآن. |
+| `./build.sh` في Codespace | رفض مسبق، exit 2 | UID 1000 ومساحة أقل من الحد؛ لم يبدأ build محلياً. البناء الفعلي جرى داخل GitHub runner. |
+| `bash tests/qemu-acceptance.sh check` في CI | نجاح | sidecar SHA-256 وبيانات xorriso اجتازا الفحص. |
+| QEMU BIOS headless | فشل harness، QEMU exit 1 / helper exit 10 | غياب USB bus لـ`usb-tablet`؛ serial فارغ ولم يبدأ إقلاع النظام. أضيف xHCI صريح ويحتاج run جديداً. |
+| QEMU UEFI headless | لم يُنفذ | تسلسل CI توقف عند فشل BIOS؛ لا نتيجة UEFI. |
+| Workflow GitHub Actions run `39471524581` | فشل، job exit 10 | [سجل التشغيل والـdiagnostics](https://github.com/chatstaceysmart66-sys/ISO-X/actions/runs/39471524581)؛ ISO artifact تخطى شرط النجاح. |
 
 ## بناء ISO
 
-لا يوجد ملف `ISO-X-0.4.0-live-amd64.iso` ناتج عن هذه المراجعة، ولذلك لا توجد بصمة إصدار للإبلاغ عنها. اكتمل تثبيت أدوات Trixie داخل Docker، لكن المساحة الحرة بعد التثبيت كانت 16 GiB؛ امتنعنا عن `./build.sh` احتراماً لشرط 20 GiB. سيبدأ workflow عند الدفع، لكنه سيوقف البناء بأمان إذا بقيت مساحة runner أو Trixie دون الحد.
+بنى CI ملف `ISO-X-0.4.0-live-amd64.iso` فعلياً، حجمه `2,617,245,696` بايت (2.44 GiB)، وبصمته SHA-256 هي `989adb37d5b178f27951ac4ca3c9d4b8d9ae0c23862b585095411db32eda648b`. اجتاز `sha256sum --check` و`xorriso`; كشف El Torito مدخلي BIOS وUEFI، وكشف System Area ‏MBR/isohybrid/GPT/APM. لم يُرفع ISO كـArtifact صالح لأن workflow يشترط نجاح QEMU أيضاً؛ انتهت صلاحية runner وأزيلت الصورة منه.
+
+فشل تشغيل BIOS headless قبل بدء الآلة الافتراضية: `qemu-system-x86_64: -device usb-tablet: No 'usb-bus' bus found for device 'usb-tablet'`؛ خرج QEMU 1 ثم helper 10 لغياب دليل `graphical.target`. هذا خطأ إعداد في harness وليس دليلاً على فشل أو نجاح إقلاع ISO. UEFI لم يُشغّل لأن تسلسل CI توقف عند فشل BIOS. أُضيف xHCI صريح إلى المصدر ويحتاج run جديداً لإثبات الإقلاع.
 
 عند نجاح بناء فعلي، يجب حفظ الأمر ورمز الخروج، وجود الملف وحجمه، نتيجة `xorriso`, ومخرجات `sha256sum --check`. لا تعتبر `bash -n` أو الاختبارات المصدرية بديلاً عن ذلك.
 

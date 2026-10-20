@@ -467,3 +467,12 @@ QEMU_BIOS_EXIT=2
 ## 10.6 الحالة الحالية الصريحة
 
 تم إصلاح العيوب المصدرية القابلة للتحقق التي ظهرت في هذه المرحلة، وأصبحت الاختبارات الساكنة النهائية ناجحة. تبقى المرحلة الحاسمة غير منفذة لأن بيئة التنفيذ لا تستطيع الوصول إلى Debian package repositories ولم تتوفر أدوات البناء/المحاكاة. يلزم مضيف Debian 13 Trixie amd64 مع إنترنت لتثبيت المتطلبات، ثم تشغيل `./build.sh` بمفتاح اختبار خارج مجلد المصدر، وتوثيق أخطاء البناء وإصلاحها قبل تجربة BIOS وUEFI. قائمة الاختبارات العملية في `docs/HARDWARE_ACCEPTANCE_CHECKLIST_AR.md`.
+
+## 11. نتيجة التنفيذ الآلي الفعلي — 2026-10-20
+
+- GitHub Actions run [`39471524581`](https://github.com/chatstaceysmart66-sys/ISO-X/actions/runs/39471524581) نجح في تنظيف Runner وتثبيت متطلبات Debian Trixie amd64 وتشغيل فحوص المصدر، ثم نفذ `./build.sh` و`lb build` بنجاح.
+- ISO الناتجة داخل Runner: `2,617,245,696` بايت؛ SHA-256: `989adb37d5b178f27951ac4ca3c9d4b8d9ae0c23862b585095411db32eda648b`. تحقق `sha256sum --check` و`xorriso` ناجحان.
+- تقرير El Torito أثبت BIOS `/isolinux/isolinux.bin` وUEFI `/boot/grub/efi.img`. System Area أظهر MBR isohybrid وGPT/APM. وُجد `/live/filesystem.squashfs` وmanifest للحزم.
+- إقلاع BIOS لم يبدأ: QEMU رفض `usb-tablet` لأن helper لم ينشئ USB bus، ثم خرج helper 10 لغياب سجل `graphical.target`. لم يُشغّل UEFI بسبب توقف التسلسل عند BIOS. لذلك لم يرفع Workflow ISO artifact؛ رفع diagnostics artifact `isox-build-diagnostics-39471524581` فقط.
+- أصلح commit `842713c` هذا الخطأ بإضافة `qemu-xhci` وربط tablet به، وأضيف اختبار عقد محلي. ينتظر الإصلاح run جديداً؛ حتى ذلك الحين لا يُعد BIOS أو UEFI boot مقبولاً.
+- الملف المرحلي كان داخل Runner المؤقت وانتهى عمره؛ لا رابط تنزيل ISO صالح حالياً، رغم أن ملفاً حقيقياً بُني وفُحص أثناء run.

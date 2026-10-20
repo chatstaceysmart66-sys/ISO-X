@@ -2,7 +2,7 @@
 
 ## 2026-10-20 — إصلاح البناء والتشغيل (قيد التحقق النهائي)
 
-- `.github/workflows/iso-build.yml`: إضافة CI على Ubuntu runner مع تنفيذ Debian Trixie في Docker، فحص مساحة/ذاكرة صريح قبل build، اختبارات ومدققات المصدر، فحص ISO/El Torito، إقلاع BIOS/UEFI headless، وحفظ سجل `lb build`. يرفع diagnostics دائماً وISO فقط عند النجاح الكامل؛ YAML تحقّق محلياً، وتشغيل Actions لم يبدأ قبل دفع التغييرات.
+- `.github/workflows/iso-build.yml`: CI بنى ISO فعلية وفحص SHA-256 وEl Torito/System Area، لكنه فشل في QEMU BIOS قبل الإقلاع بسبب USB bus مفقود في helper؛ لذلك رُفع diagnostics ولم تُرفع ISO artifact. أصلح helper في `tests/qemu-acceptance.sh` بإضافة xHCI صريح، ويحتاج إعادة CI لإثبات BIOS وUEFI.
 - `scripts/install-build-deps.sh`: إضافة pytest وdesktop-file-utils وxmllint وsystemd وprocps وفحص الأدوات ومفسر pytest. اختبارات Trixie نجحت؛ مساحة ما بعد التثبيت (16 GiB) حالت دون بناء محلي.
 
 - `scripts/build-iso.sh`: ضمان إنشاء `etc/default` قبل توليد إعدادات locale ولوحة المفاتيح؛ إبقاء مسار الإخراج ومراجعة ISO وبصمة SHA-256 بعد نجاح `lb build` فقط.

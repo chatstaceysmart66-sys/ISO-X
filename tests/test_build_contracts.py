@@ -173,6 +173,12 @@ def test_watermark_header_can_be_generated_without_mutating_the_source_tree():
     assert source_header.read_bytes() == original
 
 
+def test_qemu_usb_tablet_has_an_explicit_controller():
+    qemu_script = (ROOT / "tests/qemu-acceptance.sh").read_text(encoding="utf-8")
+    assert "-device qemu-xhci,id=xhci" in qemu_script
+    assert "-device usb-tablet,bus=xhci.0" in qemu_script
+
+
 if __name__ == "__main__":
     test_browser_homepage_is_staged_and_configured()
     test_firefox_defaults_hook_applies_after_existing_packaged_prefs()
@@ -183,3 +189,4 @@ if __name__ == "__main__":
     test_legacy_tk_shell_is_not_staged_as_a_second_desktop()
     test_build_script_rejects_unprivileged_invocation_without_staging_files()
     test_watermark_header_can_be_generated_without_mutating_the_source_tree()
+    test_qemu_usb_tablet_has_an_explicit_controller()

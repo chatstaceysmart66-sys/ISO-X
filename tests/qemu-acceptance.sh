@@ -63,7 +63,8 @@ case "$MODE" in
     # QEMU's -nic options intentionally use commas within a single argument.
     # shellcheck disable=SC2054
     # Prefer hardware acceleration on CI hosts that expose KVM; otherwise use TCG.
-    ARGS=(-m 1024 -smp 2 -boot order=d -cdrom "$ISO" -nic user,model=e1000 -device usb-tablet)
+        ARGS=(-m 1024 -smp 2 -boot order=d -cdrom "$ISO" -nic user,model=e1000 \
+          -device qemu-xhci,id=xhci -device usb-tablet,bus=xhci.0)
     if [[ -r /dev/kvm && -w /dev/kvm ]]; then
       ARGS+=(-accel kvm)
     else
