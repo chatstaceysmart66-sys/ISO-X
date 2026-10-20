@@ -49,7 +49,6 @@ jobs:
               test "${VERSION_CODENAME:-}" = trixie
               test "$(dpkg --print-architecture)" = amd64
               df -h "$GITHUB_WORKSPACE"
-              free -h
               apt-get update
               ./scripts/install-build-deps.sh
               df -h "$GITHUB_WORKSPACE"
