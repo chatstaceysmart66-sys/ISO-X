@@ -137,7 +137,7 @@ class WelcomeWindow(Gtk.Window):
         button_data = [
             ("الإنترنت والمتصفح", "browser", "web-browser", False),
             ("الملفات", "files", "system-file-manager", False),
-            ("مركز التطبيقات", "applications", "system-software-install", False),
+            ("متجر ISO-X", "applications", "system-software-install", False),
             ("إعدادات النظام", "settings", "preferences-system", False),
             ("إعدادات الشبكة", "network", "network-wired", False),
             ("مراقبة النظام", "monitor", "utilities-system-monitor", False),

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Static regression checks; these do not imply successful ISO build or boot."""
 from pathlib import Path
-import ast
 import re
 import os
 import subprocess
@@ -96,21 +95,16 @@ def test_firefox_defaults_hook_applies_after_existing_packaged_prefs():
 
 def test_app_center_queries_and_package_operations_are_background_and_privileged():
     source = (ROOT / "app/isox_appcenter.py").read_text(encoding="utf-8")
-    appcenter = source.split("class AppCenter(Gtk.Window):", 1)[1]
-    populate = appcenter.split("    def _populate(self):", 1)[1].split("    def _refresh_states", 1)[0]
-    assert "pkg_installed(" not in populate, "Package state must not block GTK population"
-    assert "threading.Thread(target=work, daemon=True).start()" in appcenter
-    assert "['pkexec', 'apt-get', *arguments]" in source
-    assert "self._run_privileged(['update'])" in appcenter
-    assert "'--no-install-recommends'" in appcenter and "app['pkg']" in appcenter
-    assert "buttons=Gtk.ButtonsType.OK_CANCEL" in appcenter
-    assert "subprocess.SubprocessError" in appcenter
-    module = ast.parse(source)
-    catalog_node = next(node for node in module.body if isinstance(node, ast.Assign)
-                        and any(isinstance(target, ast.Name) and target.id == "CATALOG" for target in node.targets))
-    catalog = ast.literal_eval(catalog_node.value)
-    package_names = [app["pkg"] for app in catalog]
-    assert len(package_names) == len(set(package_names)), "App Center contains duplicate package entries"
+    backend = (ROOT / "app/isox_store_backend.py").read_text(encoding="utf-8")
+    assert "self.backend.search(query, category, source=source)" in source
+    assert "threading.Thread(target=work, daemon=True).start()" in source
+    assert '["pkexec", "/usr/bin/apt-get", *arguments]' in backend
+    assert '"--no-install-recommends"' in backend
+    assert '"--no-auto-remove"' in backend
+    assert "buttons=Gtk.ButtonsType.OK_CANCEL" in source
+    assert "self.backend.is_installed(app.source, app.package_id)" in source
+    assert "subprocess.Popen" in backend and "shell=True" not in backend
+    assert 'FLATHUB_URL = "https://dl.flathub.org/repo/flathub.flatpakrepo"' in backend
 
 
 def test_file_operations_are_confirmed_and_run_in_background():

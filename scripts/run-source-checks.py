@@ -30,6 +30,7 @@ def checks(junit_path: Path) -> list[tuple[str, list[str]]]:
         ("build-contracts", [sys.executable, "tests/test_build_contracts.py"]),
         ("source-config", [sys.executable, "tests/test_source_config.py"]),
         ("secure-vault", [sys.executable, "tests/test_secure_vault.py"]),
+        ("store-backend", [sys.executable, "tests/test_store_backend.py"]),
         ("schema", [sys.executable, "tests/test_schema.py"]),
         ("upstream-integration", [sys.executable, "tests/test_upstream_integration.py"]),
         ("usb-validation", ["bash", "tests/test_write_usb_validation.sh"]),

@@ -16,6 +16,9 @@ assert {"3d", "2d_bevy_render", "x11"} <= features
 
 build = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
 auto_config = (ROOT / "auto/config").read_text(encoding="utf-8")
+packages_text = (ROOT / "config/package-lists/iso-x.list.chroot").read_text(encoding="utf-8")
+packages = {line.strip() for line in packages_text.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")}
 for required in (
     '"$PROJECT_DIR/auto/config"', 'scripts/encode-watermark.py',
     'scripts/isox-run.py', 'scripts/isox-snap-window.sh', 'scripts/secure-vault.py',
@@ -53,8 +56,20 @@ for asset in (
     "tests/test_secure_vault.py", "tests/test_secureboot_validation.sh",
     "README.md", "build.sh", "docs/THIRD_PARTY_LICENSES.md",
     "db/migrations/003_isox_031.sql", "db/migrations/004_isox_040.sql",
+    "app/isox_store_backend.py", "scripts/generate-store-sounds.py",
+    "desktop/isox-store.desktop", "tests/test_store_backend.py",
 ):
     assert (ROOT / asset).is_file(), f"Missing feature/integration asset: {asset}"
+
+assert {"appstream", "python3-yaml", "flatpak", "pulseaudio-utils"} <= packages
+for store_asset, image_path in (
+    ("$PROJECT_DIR/app/isox_store_backend.py", "config/includes.chroot/usr/share/iso-x/isox_store_backend.py"),
+    ('"$PROJECT_DIR"/assets/sounds/*.wav', "config/includes.chroot/usr/share/iso-x/assets/sounds/"),
+    ("$PROJECT_DIR/desktop/isox-store.desktop", "config/includes.chroot/usr/share/applications/isox-store.desktop"),
+):
+    assert store_asset in build and image_path in build, f"Store asset is not staged: {store_asset}"
+store_menu = (ROOT / "desktop/openbox-menu.xml").read_text(encoding="utf-8")
+assert '<item label="ISO-X Store">' in store_menu and "isox_appcenter.py" in store_menu
 
 assert 'Image("iso-x-plymouth.png")' in (ROOT / "plymouth/isox/isox.script").read_text()
 plymouth_dims = __import__("struct").unpack(">II", (ROOT / "assets/iso-x-plymouth.png").read_bytes()[16:24])

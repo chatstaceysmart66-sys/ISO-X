@@ -24,6 +24,10 @@ dbus-x11
 python3
 python3-gi
 python3-gi-cairo
+appstream
+python3-yaml
+flatpak
+pulseaudio-utils
 gir1.2-gtk-3.0
 gir1.2-vte-2.91
 gir1.2-gtksource-3.0

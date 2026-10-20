@@ -135,6 +135,7 @@ df -h "$PROJECT_DIR"
 
 mkdir -p config/package-lists \
   config/includes.chroot/usr/share/iso-x/assets \
+  config/includes.chroot/usr/share/iso-x/assets/sounds \
   config/includes.chroot/usr/share/doc/iso-x \
   config/includes.chroot/usr/share/backgrounds/iso-x \
   config/includes.chroot/usr/share/icons/hicolor/scalable/apps \
@@ -169,6 +170,8 @@ fi
 
 install -m 0644 "$PROJECT_DIR/app/iso_x_gtk.py" config/includes.chroot/usr/share/iso-x/iso_x_gtk.py
 install -m 0644 "$PROJECT_DIR/app/isox_appcenter.py" config/includes.chroot/usr/share/iso-x/isox_appcenter.py
+install -m 0644 "$PROJECT_DIR/app/isox_store_backend.py" config/includes.chroot/usr/share/iso-x/isox_store_backend.py
+install -m 0644 "$PROJECT_DIR"/assets/sounds/*.wav config/includes.chroot/usr/share/iso-x/assets/sounds/
 install -m 0644 "$PROJECT_DIR/app/isox_welcome.py" config/includes.chroot/usr/share/iso-x/isox_welcome.py
 install -m 0644 "$PROJECT_DIR/assets/iso-x-start.html" config/includes.chroot/usr/share/iso-x/start.html
 install -m 0644 "$PROJECT_DIR/README.md" config/includes.chroot/usr/share/doc/iso-x/README.md
@@ -288,6 +291,7 @@ exec /usr/bin/python3 /usr/share/iso-x/iso_x_gtk.py "$@"
 LAUNCH
 chmod 0755 config/includes.chroot/usr/local/bin/iso-x
 install -m 0644 "$PROJECT_DIR/desktop/isox-welcome.desktop" config/includes.chroot/usr/share/applications/isox-welcome.desktop
+install -m 0644 "$PROJECT_DIR/desktop/isox-store.desktop" config/includes.chroot/usr/share/applications/isox-store.desktop
 cat > config/includes.chroot/usr/share/applications/iso-x.desktop <<'DESKTOP'
 [Desktop Entry]
 Type=Application

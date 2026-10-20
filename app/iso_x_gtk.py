@@ -643,7 +643,7 @@ class ISOXGtk(Gtk.Window):
         elif shutil.which("netsurf"):
             self.launch_app("browser", ["netsurf"])
         else:
-            self.notify("لم يُعثر على Firefox ESR أو NetSurf. افتح مركز التطبيقات وتحقق من اتصال الإنترنت.")
+            self.notify("لم يُعثر على Firefox ESR أو NetSurf. افتح متجر ISO-X وتحقق من اتصال الإنترنت.")
 
     def open_or_install_firefox(self):
         if shutil.which("firefox-esr") or shutil.which("firefox"):

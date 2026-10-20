@@ -9,22 +9,26 @@ python3 -m py_compile \
   "$ROOT/app/iso_x_shell.py" \
   "$ROOT/app/iso_x_gtk.py" \
   "$ROOT/app/isox_appcenter.py" \
+  "$ROOT/app/isox_store_backend.py" \
   "$ROOT/app/isox_welcome.py" \
   "$ROOT/scripts/isox-preload.py" \
   "$ROOT/scripts/secure-vault.py" \
   "$ROOT/scripts/isox-run.py" \
   "$ROOT/scripts/encode-watermark.py" \
+  "$ROOT/scripts/generate-store-sounds.py" \
   "$ROOT/scripts/isox-speedtest" \
   "$ROOT/tests/test_upstream_integration.py" \
   "$ROOT/tests/test_build_contracts.py" \
   "$ROOT/tests/test_schema.py" \
   "$ROOT/tests/test_source_config.py" \
-  "$ROOT/tests/test_secure_vault.py"
+  "$ROOT/tests/test_secure_vault.py" \
+  "$ROOT/tests/test_store_backend.py"
 python3 "$ROOT/tests/test_schema.py"
 python3 "$ROOT/tests/test_source_config.py"
 python3 "$ROOT/tests/test_build_contracts.py"
 python3 "$ROOT/tests/test_upstream_integration.py"
 python3 "$ROOT/tests/test_secure_vault.py"
+python3 "$ROOT/tests/test_store_backend.py"
 bash -n \
   "$ROOT/scripts/build-iso.sh" "$ROOT/scripts/isox-zram-setup" \
   "$ROOT/scripts/generate-dev-signing-key.sh" "$ROOT/scripts/collect-performance.sh" \
