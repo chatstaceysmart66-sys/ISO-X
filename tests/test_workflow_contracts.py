@@ -17,6 +17,8 @@ bios = job("bios")
 uefi = job("uefi")
 summary = job("acceptance-summary")
 build_helper = (Path(__file__).resolve().parents[1] / "scripts/ci-build-in-trixie.sh").read_text()
+ready_probe = (Path(__file__).resolve().parents[1] / "scripts/isox-ci-ready.sh").read_text()
+ready_service = (Path(__file__).resolve().parents[1] / "systemd/isox-ci-ready.service").read_text()
 
 assert "needs: build" in bios and "needs: build" in uefi
 assert "scripts/run-source-checks.py" in source
@@ -46,4 +48,6 @@ assert "hashFiles(" not in workflow
 for ref in re.findall(r"uses: actions/[^\s@]+@([0-9a-f]{40})", workflow):
     assert len(ref) == 40
 assert workflow.count("Node.js 24") >= 3
+assert "deadline=$(( $(date +%s) + 120 ))" in ready_probe
+assert "TimeoutStartSec=130s" in ready_service
 print("PASS: workflow keeps boot gates independent and protects candidate/final artifact conditions.")

@@ -237,6 +237,21 @@
 - هل الـWorkflow يرفع المرشح ويحفظ الأدلة ويشغّل UEFI بعد فشل BIOS: لا يحسمه فحص YAML أو tests محلية؛ يلزم تشغيل Actions.
 - لا تقيس هذه الجولة أداء RAM 2GB، ولا تختبر USB Persistence، أو التثبيت/إعادة الإقلاع، أو وظائف سطح المكتب داخل جلسة حقيقية.
 
+### نتائج الاستئناف والتحقق المحلي — 2026-10-20
+
+حالة المستودع عند بدء هذا الاستئناف: الفرع `fix/isox-build-and-runtime` على الالتزام المحلي `b5b444d56d14075743beb069ab6d92d2d316261f`، والفرع البعيد عند الفحص المباشر `caf58594bea006c983d45751f113dfe6ed8b89eb`. لم يُستبدل أي تاريخ ولا توجد نتيجة push أو Actions جديدة في هذه الجولة حتى وقت كتابة هذا الملحق.
+
+- أضيف `TimeoutStartSec=130s` لخدمة `isox-ci-ready.service`، لأن probe ينتظر حتى 120 ثانية؛ اختبار عقد workflow يربط المهلة بين السكربت والوحدة.
+- شدّد `qemu-runner.py` على توفر QMP ولقطة VGA مبكرة، ويرفض مسارات الصور القديمة، ولا يقبل marker يتبعه خروج QEMU غير صفري. اختبار fake-QEMU يكتب PPM ويغطي فقد QMP والصورة القديمة والخروج 42 بعد marker، مع بقاء الاختبار غير دال على إقلاع فعلي.
+- اقتبست وسائط أجهزة USB في `qemu-acceptance.sh` كوسائط Bash منفصلة. كشف ShellCheck خطأ SC2054 أولاً؛ عُدّل المصدر وعقد الاختبار، ثم اجتاز ShellCheck.
+- كشف `actionlint` 1.7.12 في خطوة مستقلة خطأ SC2129 في كتابة مخرجات GitHub المتكررة؛ جُمعت الأسطر في كتلة redirect واحدة، وبعدها اجتاز `actionlint` ملف workflow. اجتاز كذلك تحليل YAML عبر Ruby Psych.
+- تشغيل جامع الفحوص بعد إصلاح عقد الوسائط: **32 PASS، 0 FAIL، 0 NOT_RUN، exit 0**؛ شمل `pytest` (**12 passed**)، smoke، اختبارات البناء والمصدر وvault/schema/upstream/USB/QEMU الوهمي/Secure Boot/watermark/CI-results/workflow، وbash/sh syntax وShellCheck وdesktop-file-validate وXML/SVG. ثُبتت أدوات التحقق المتاحة في بيئة التطوير، ووُجه Python cache ونتائج التشغيل وactionlint إلى `/tmp`؛ لم تُترك bytecode أو أدلة داخل المستودع.
+- `systemd-analyze verify --root=<temp>` للوحدات الخمس، بعد stage للـtargets والملفات التنفيذية المشار إليها، انتهى exit 0. لا يثبت هذا تنفيذ الخدمة في صورة Trixie ولا إصدار marker من guest.
+- مساحة `/workspaces` وDocker root كانت 19 GiB متاحة، بينما build guard يشترط 20 GiB على الأقل؛ لذلك لم يُشغّل `lb build` ولم تُنتج ISO. الذاكرة المتاحة تجاوزت الحد، لكن ذلك لا يزيل نقص التخزين. لم يُشغّل QEMU حقيقي لعدم وجود ISO، رغم توفر QEMU/OVMF/xorriso محلياً. لا توجد SHA أو لقطة BIOS/UEFI جديدة.
+- `gh auth status` أعاد exit 1. بدأت محاولة تسجيل الدخول الرسمية عبر الويب، لكنها انتهت بـ`context deadline exceeded` قبل المصادقة؛ لم يحدث push ولم يُشغّل GitHub Actions ولا يوجد رابط run أو Artifact جديد. لم تُدرج بيانات الاعتماد أو رمز الجهاز.
+
+**الاستنتاج:** الإصلاحات المحلية واختباراتها الوهمية/الساكنة اجتازت، لكن البناء الحقيقي والإقلاع BIOS/UEFI ونشر CI غير مثبتة. سبب فشل run `39474948006` التاريخي ما زال غير محسوم دون artifact وسجلات أصلية.
+
 ### متابعة مراجعة التعديلات والتحقق — 2026-10-20
 
 - عُدّل `tests/test_workflow_contracts.py` ليتحقق من استدعاء `scripts/run-source-checks.py` في وظيفة `source-check`، ومن وجود `source-tests.json` في وظيفة التقرير التي تستهلكه؛ الملف الناتج ليس اسماً literal داخل مقطع وظيفة المصدر.

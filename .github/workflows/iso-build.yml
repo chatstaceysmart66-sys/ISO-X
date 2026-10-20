@@ -185,10 +185,12 @@ jobs:
           system_area=PASS
           variant=CI_BOOT_DIAGNOSTIC_NOT_RELEASE
           EOF
-          echo "iso_name=$(basename "$iso")" >> "$GITHUB_OUTPUT"
-          echo "iso_sha256=$actual" >> "$GITHUB_OUTPUT"
-          echo "iso_size=$size" >> "$GITHUB_OUTPUT"
-          echo "validated=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "iso_name=$(basename "$iso")"
+            echo "iso_sha256=$actual"
+            echo "iso_size=$size"
+            echo "validated=true"
+          } >> "$GITHUB_OUTPUT"
           mkdir -p candidate-payload
           cp "$iso" "$iso.sha256" candidate/ci-nonce.txt candidate/build-metadata.json candidate-payload/
           cp evidence/iso-validated.ok candidate-payload/

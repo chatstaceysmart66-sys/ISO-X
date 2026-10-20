@@ -67,7 +67,7 @@ case "$MODE" in
     # shellcheck disable=SC2054
     ARGS=(-m 1024 -smp 2 -boot order=d -cdrom "$ISO" -nic user,model=e1000)
     if [[ "$HEADLESS" -eq 0 ]]; then
-      ARGS+=(-device qemu-xhci,id=xhci -device usb-tablet,bus=xhci.0)
+      ARGS+=(-device "qemu-xhci,id=xhci" -device "usb-tablet,bus=xhci.0")
     fi
     if [[ -r /dev/kvm && -w /dev/kvm ]]; then
       QEMU_ACCEL=kvm

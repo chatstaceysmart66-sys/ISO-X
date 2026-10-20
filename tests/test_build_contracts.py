@@ -183,8 +183,8 @@ def test_watermark_header_can_be_generated_without_mutating_the_source_tree():
 
 def test_qemu_usb_tablet_has_an_explicit_controller():
     qemu_script = (ROOT / "tests/qemu-acceptance.sh").read_text(encoding="utf-8")
-    assert "-device qemu-xhci,id=xhci" in qemu_script
-    assert "-device usb-tablet,bus=xhci.0" in qemu_script
+    assert '-device "qemu-xhci,id=xhci"' in qemu_script
+    assert '-device "usb-tablet,bus=xhci.0"' in qemu_script
 
 
 if __name__ == "__main__":

@@ -68,6 +68,8 @@ class QMP:
         if self.reader is None:
             return False
         try:
+            if destination.exists():
+                raise FileExistsError(f"refusing to reuse stale screenshot path: {destination}")
             self._write({
                 "execute": "human-monitor-command",
                 "arguments": {"command-line": f'screendump "{destination}"'},
@@ -90,7 +92,9 @@ class QMP:
 
 def classify(serial: str, timed_out: bool, returncode: int | None, marker_seen: bool) -> str:
     if marker_seen:
-        return "PASS_BOOT"
+        if returncode in (None, -signal.SIGTERM, -signal.SIGKILL):
+            return "PASS_BOOT"
+        return "QEMU_INFRASTRUCTURE_FAILURE"
     if returncode not in (None, 0, -signal.SIGTERM, -signal.SIGKILL):
         return "QEMU_INFRASTRUCTURE_FAILURE"
     if not serial.strip():
@@ -273,8 +277,12 @@ def main() -> int:
             failure = None
             try:
                 qmp_available = qmp.connect(process, min(started + 1, started + args.timeout))
-                if qmp_available and qmp.screenshot(evidence / f"qemu-{args.mode}-early.ppm"):
+                if not qmp_available:
+                    failure = "QMP monitor did not become available; VGA evidence cannot be captured."
+                elif qmp.screenshot(evidence / f"qemu-{args.mode}-early.ppm"):
                     screenshots.append(f"qemu-{args.mode}-early.ppm")
+                else:
+                    failure = "Unable to capture the early VGA screenshot through QMP."
                 second_snapshot_at = started + min(15, max(2, args.timeout // 3))
                 while process.poll() is None:
                     serial_bytes = serial_path.read_bytes()
@@ -294,10 +302,14 @@ def main() -> int:
             except Exception as error:
                 failure = f"{type(error).__name__}: {error}"
             finally:
+                final_screenshot = False
                 if qmp_available:
                     name = f"qemu-{args.mode}-final.ppm"
-                    if qmp.screenshot(evidence / name):
+                    final_screenshot = qmp.screenshot(evidence / name)
+                    if final_screenshot:
                         screenshots.append(name)
+                    elif timed_out:
+                        failure = failure or "Unable to capture the final VGA screenshot before timeout cleanup."
                 qmp.close()
                 terminate_group(process)
             process_group_clean = not group_has_live_processes(process.pid)

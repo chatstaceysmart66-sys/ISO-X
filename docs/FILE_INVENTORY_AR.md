@@ -5,9 +5,10 @@
 - الفرع: `fix/isox-build-and-runtime`
 - HEAD: `caf58594bea006c983d45751f113dfe6ed8b89eb`
 - `git status --short --branch`: شجرة نظيفة عند بدء الفحص.
-- عدد الملفات المتتبعة سيُثبت في جدول التغطية بعد إكمال القراءة.
+- جدول التغطية بعد ملحق الاستئناف يقارن المسارات الحالية مباشرةً مع `git ls-files`.
 - جرى جرد الملفات المتتبعة بـ `git ls-files`، وقياس الأسطر/البايتات بـ `wc -lc` وفحص النوع بـ `file`. لم تظهر ملفات غير متتبعة في الحالة الابتدائية.
-- ثبت الجرد: 92 ملفاً متتبعاً، 87 ملفاً نصياً و5 صور PNG ثنائية. عدد الأسطر في الملف الثنائي غير ذي معنى؛ عُرض نوعه وأبعاده وحجمه بدلاً منه.
+- جرد بداية المرحلة صفر: 92 ملفاً متتبعاً، 87 ملفاً نصياً و5 صور PNG ثنائية.
+- بعد إضافة ملفات CI والتقارير في الالتزام السابق، أصبح الجرد الحالي 104 ملفات: 99 ملفاً نصياً و5 صور PNG ثنائية. عُرض نوع الصور وأبعادها وحجمها بدلاً من عدد أسطر غير ذي معنى.
 
 ## الدفعة 1: إعدادات البناء، الحزم، hooks
 
@@ -114,6 +115,8 @@
 | `docs/THIRD_PARTY_LICENSES.md` | 4638 بايت / 35 سطراً | سجل تراخيص مراجع Debian Live Config/OxyOS وحزم Debian/Rust. | يُنسخ إلى `/usr/share/doc/iso-x/THIRD_PARTY_LICENSES.md`. | يصرح أن inventory النهائي للحزم والتراخيص ينتظر build؛ لا يثبت رخصة موحدة لكل source. |
 | `docs/UPSTREAM_INTEGRATION_AR.md` | 6062 بايت / 30 سطراً | يشرح خيارات عدم نسخ upstream Debian/OxyOS والتوافقات المحلية. | يُنسخ إلى `/usr/share/doc/iso-x/UPSTREAM_INTEGRATION_AR.md`. | ادعاءات المراجعة upstream ليست قابلة للتحقق من ملفات ISO-X المحلية وحدها. |
 | `docs/UPSTREAM_REVIEW_AR.md` | 5014 بايت / 38 سطراً | تقرير مراجعة مصادر Windows Lite وحدود عدم نسخها. | يُنسخ إلى `/usr/share/doc/iso-x/UPSTREAM_REVIEW_AR.md`. | لا يغطي مصادر Debian/OxyOS؛ ذلك في integration report. |
+| `docs/FILE_INVENTORY_AR.md` | 53591 بايت / 288 سطراً | جرد وظائف الملفات واعتمادياتها وتغطية قراءتها. | لا يدخل ISO؛ تقرير للمستودع. | يحتوي نتائج مرحلية؛ بعض الأقسام أُعيد تحديثها في هذه الجولة، لا يمثل ذلك قراءة كاملة جديدة لكل محتواه. |
+| `docs/PROJECT_MAP_AR.md` | 48312 بايت / 265 سطراً | خريطة البناء والإقلاع والاختبارات والحدود المجهولة. | لا يدخل ISO؛ تقرير للمستودع. | يحتوي نتائج مرحلية؛ أضيفت نتائج التحقق الحالية في ملحق، ولا تثبت الإقلاع أو CI. |
 
 ## الدفعة 4: Rust وSQLite والاختبارات وCI
 
@@ -126,9 +129,9 @@
 | `db/migrations/003_isox_031.sql` | 311 بايت / 6 أسطر | يضبط watermark version 0.3.1 ويسجل migration. | ينسخ ويُشغّل شرطياً من GTK. | لا اختبار مستقل. |
 | `db/migrations/004_isox_040.sql` | 238 بايت / 3 أسطر | يسجل marker 0.4.0 دون تغيير schema. | ينسخ ويُشغّل شرطياً من GTK. | `test_build_contracts.py` يتحقق من ذكره؛ لا اختبار migration فعلي منفصل. |
 | `tests/smoke.sh` | 2661 بايت / 52 سطراً (نسخة العمل الحالية) | يوجه `py_compile` عبر `PYTHONPYCACHEPREFIX` إلى temp خارج المستودع، يشغل اختبارات مباشرة وفحوص shell، وينظف cache عند الخروج. | CI ومستخدم محلي. | PASS؛ تحقق `find` عدم بقاء `__pycache__` بعد التشغيل؛ لا يثبت build أو boot. |
-| `tests/test_build_contracts.py` | 11687 بايت / 200 سطر (نسخة العمل الحالية) | assertions لعقود staging/apps/hooks/packages/الترخيص، وإضافة CI-only gating وportable SHA sidecar وتعريف شهادة التوقيع. | pytest وCI؛ ويمكن تشغيله كبرنامج مباشر. | PASS؛ static only ولا ينفذ بناء ISO. |
+| `tests/test_build_contracts.py` | 11691 بايت / 200 سطر (نسخة العمل الحالية) | assertions لعقود staging/apps/hooks/packages/الترخيص، وإضافة CI-only gating وportable SHA sidecar وتعريف شهادة التوقيع، وعقد USB tablet/controller. | pytest وCI؛ ويمكن تشغيله كبرنامج مباشر. | PASS بعد تحديث عقد مطابقة الوسائط المقتبسة؛ static only ولا ينفذ بناء ISO. |
 | `tests/test_initramfs_watermark_guard.sh` | 788 بايت / 17 سطراً | يتحقق أن guard يعرض تحذير metadata غائبة ويواصل الإقلاع باستخدام Plymouth fake. | يستدعيه smoke.sh/CI. | لا يغطي حالة module حقيقي/توقيع سليم. |
-| `tests/test_qemu_headless_validation.sh` | 3543 بايت / 105 سطراً (نسخة العمل الحالية) | يشغّل QEMU وهمياً ويختبر نجاح nonce مبكراً، nonce مضللاً، serial فارغاً، timeout وخروج QEMU بخطأ. | `smoke.sh` وsource-check في CI. | PASS محلياً لهذه الحالات؛ لا يثبت إقلاع ISO حقيقية. |
+| `tests/test_qemu_headless_validation.sh` | 7722 بايت / 189 سطراً (نسخة العمل الحالية) | يشغّل QEMU وهمياً وQMP؛ يتحقق من PPM، غياب QMP، مسارات screenshots القديمة، nonce المضلل، serial الفارغ، timeout والخروج غير الصفري بعد marker. | `smoke.sh` وsource-check في CI. | PASS محلياً؛ لا يثبت إقلاع ISO حقيقية أو QMP حقيقياً. |
 | `tests/test_schema.py` | 4318 بايت / 65 سطراً | يفحص schema الجارية وtriggers والبيانات المحلية وmigration 0.1.0. | pytest/smoke/CI. | لا يغطي كل استهلاك DB أو migration 003/004. |
 | `tests/test_secure_vault.py` | 2613 بايت / 59 سطراً | roundtrip Unicode، wrong passphrase وtampered archive، ويتحقق tempdirs بجانب output. | pytest وCI. | اختبار وظيفي محلي؛ لا يختبر واجهة GTK أو OOM أحجام ضخمة. |
 | `tests/test_secureboot_validation.sh` | 1357 بايت / 27 سطراً | ينشئ مفاتيح fixture، يتحقق من تطابق key/cert ويرفض عدم التطابق والشهادة التالفة. | smoke.sh/CI. | لا يختبر UEFI Secure Boot أو MOK. |
@@ -136,29 +139,24 @@
 | `tests/test_upstream_integration.py` | 3372 بايت / 60 سطراً | يتحقق من وثائق مصادر Windows-inspired، الحظر على shell=True في welcome، الأصول والربط بالـ build. | smoke.sh وpytest. | static only. |
 | `tests/test_watermark_integrity.sh` | 942 بايت / 14 سطراً | اختبار توقيع RSA detached لعينة نصية ثم تعديلها. | smoke.sh/CI. | لا يبني أو يوقع module Linux حقيقياً. |
 | `tests/test_write_usb_validation.sh` | 780 بايت / 24 سطراً | fake xorriso، يقبل بصمة ISO الاختبارية ويرفض بصمة خاطئة قبل كتابة جهاز. | smoke.sh وCI. | لا يختبر disk selection أو write فعلي؛ ISO وهمية. |
-| `tests/qemu-acceptance.sh` | 5710 بايت / 132 سطراً (نسخة العمل الحالية) | يشغل QEMU المرئي أو headless؛ headless يفوض التشغيل إلى `qemu-runner.py` ويفصل stdout/stderr ويسجل النسخة والمسرّع. | يدوي وBIOS/UEFI jobs. | اختبار QEMU الحقيقي لم ينفّذ؛ الصور تتطلب QMP ودعم QEMU على runner. |
-| `tests/qemu-runner.py` | 13693 بايت / 345 سطراً (نسخة العمل الحالية) | يشغل محاولة BIOS/UEFI في process group مستقل، يراقب nonce الضيف، يلتقط VGA بصيغة PPM عبر QMP، يكتب JSON والسجلات ويفرض timeout/cleanup. | `qemu-acceptance.sh` في CI فقط. | اختبارات fake QEMU ناجحة؛ لا إثبات إقلاع فعلي، ووجود QMP/VGA ما زال يتطلب بيئة QEMU. |
+| `tests/qemu-acceptance.sh` | 5714 بايت / 132 سطراً (نسخة العمل الحالية) | يشغل QEMU المرئي أو headless؛ headless يفوض التشغيل إلى `qemu-runner.py` ويفصل stdout/stderr ويسجل النسخة والمسرّع. وسائط USB device مقتبسة كحجج منفصلة صحيحة. | يدوي وBIOS/UEFI jobs. | ShellCheck وfake-QEMU اجتازا؛ اختبار QEMU الحقيقي لم ينفذ. |
+| `tests/qemu-runner.py` | 14425 بايت / 357 سطراً (نسخة العمل الحالية) | يشغل محاولة BIOS/UEFI في process group مستقل، يراقب nonce الضيف، يلتقط VGA بصيغة PPM عبر QMP، يرفض إعادة استخدام screenshot قديمة ويصنف خروج QEMU غير الصفري بعد marker كفشل بنية تحتية. | `qemu-acceptance.sh` في CI فقط. | اختبارات fake QEMU ناجحة؛ لا إثبات إقلاع فعلي، ووجود QMP/VGA ما زال يتطلب بيئة QEMU. |
 | `scripts/isox-ci-ready.sh` | 1203 بايت / 36 سطراً | يتحقق من kernel cmdline والـnonce وgraphical target وLightDM وXorg وجلسة المستخدم النشطة. | لا يدخل ISO العادية؛ داخل `/usr/local/sbin` في CI variant. | `bash -n` ناجح؛ لم يُشغّل داخل guest. |
-| `systemd/isox-ci-ready.service` | 244 بايت / 11 سطراً | oneshot مشروط بـ`isox.ci=1` وبعد target الرسومي وLightDM. | CI variant فقط. | `systemd-analyze verify` نجح داخل root مصطنع على المضيف؛ ليس Trixie rootfs. |
+| `systemd/isox-ci-ready.service` | 265 بايت / 12 سطراً | oneshot مشروط بـ`isox.ci=1` وبعد target الرسومي وLightDM، بمهلة 130 ثانية تغطي انتظار probe البالغ 120 ثانية. | CI variant فقط. | `systemd-analyze verify --root=<temp>` نجح مع الملفات التنفيذية staged؛ ليس Trixie rootfs أو اختباراً زمنياً للخدمة. |
 | `systemd/isox-ci-ready.timer` | 218 بايت / 11 سطراً | يؤخر تشغيل probe 15 ثانية ويفعّل من `multi-user.target`. | CI variant فقط. | `systemd-analyze verify` نجح داخل root مصطنع على المضيف؛ ليس Trixie rootfs. |
 | `scripts/ci-build-in-trixie.sh` | 2229 بايت / 48 سطراً (جديد) | يبني نسخة CI التشخيصية داخل Debian Trixie، يجهز rootfs staging للتحقق من systemd، ويفحص ملف ISO والبنية والبصمة. | يستدعيه build job؛ يكتب الأدلة إلى workspace. | `bash -n` فقط؛ لم يُنفذ داخل Trixie ولم يبن ISO فعلياً. |
 | `scripts/create-ci-results.py` | 8978 بايت / 210 سطراً | يجمع نتائج source/build/BIOS/UEFI والبيئة والبصمة في JSON، ويصرّح بأن Persistence غير منفذة ويرفض المدخلات العددية أو JSON غير الصالحة. | acceptance-summary في Actions. | اختبارات التوليد والحالات والمدخلات غير الصالحة ناجحة؛ لا تشغيل حقيقياً مسجلاً. |
+| `scripts/run-source-checks.py` | 6354 بايت / 131 سطراً | يشغّل pytest واختبارات المصدر وsyntax وShellCheck وDesktop/XML، ويحفظ log وJSON لكل فحص مع حالة NOT_RUN صريحة للأداة المفقودة. | source-check في Actions؛ أدلة الاختبار خارج المستودع حسب وسائط التشغيل. | اجتاز التشغيل الحالي كل الفحوص المتاحة؛ يحسب pytest cases مع خطوات الفحص في summary. |
 | `tests/ci-results.schema.json` | 2729 بايت / 67 سطراً | يعرّف شكل تقرير القبول machine-readable. | `tests/test_ci_results.py`. | الاختبار يغطي الحقول الأساسية وJSON المكسور، وليس validator JSON Schema عاماً. |
 | `tests/test_ci_results.py` | 7176 بايت / 147 سطراً | يختبر إنشاء التقرير ورفض JSON المكسور والتقرير الناقص والمدخلات العددية غير الصالحة. | source-check. | PASS محلياً. |
-| `tests/test_workflow_contracts.py` | 2437 بايت / 49 سطراً (نسخة العمل الحالية) | assertions ساكنة حول استقلال BIOS/UEFI وشروط Artifacts والبوابات وimmutable action pins ومساحة runner. | source-check وpytest. | PASS؛ لا يشغّل GitHub Actions. |
-| `.github/workflows/iso-build.yml` | 18640 بايت / 416 سطراً (نسخة العمل الحالية) | يقسم source-check وbuild candidate وBIOS وUEFI وacceptance-summary؛ المرشح ISO تشخيصية CI معلّمة وليست إصداراً عادياً. | GitHub Actions. | YAML والعقود الساكنة اجتازت الفحص؛ لم تُشغّل Actions لغياب gh authentication، ولم يُرفع artifact فعلي. |
+| `tests/test_workflow_contracts.py` | 2735 بايت / 53 سطراً (نسخة العمل الحالية) | assertions ساكنة حول استقلال BIOS/UEFI وشروط Artifacts والبوابات وimmutable action pins ومساحة runner ومهلة جاهزية الضيف. | source-check وpytest. | PASS؛ لا يشغّل GitHub Actions. |
+| `.github/workflows/iso-build.yml` | 18612 بايت / 418 سطراً (نسخة العمل الحالية) | يقسم source-check وbuild candidate وBIOS وUEFI وacceptance-summary؛ المرشح ISO تشخيصية CI معلّمة وليست إصداراً عادياً. | GitHub Actions. | اجتاز actionlint وYAML parse والعقود الساكنة؛ لم تُشغّل Actions أو يُرفع artifact. |
 
-**تنبيه تحديث:** جدول التغطية أسفل هذه الصفحة يوثق مجموعة الملفات الـ92 عند بداية مرحلة الفهم؛ الملفات المذكورة أعلاه والمضافة لاحقاً لا تُدرج بأثر رجعي ضمن ذلك العدد. تغيرت أحجام بعض الصفوف بفعل التعديلات، لذلك أدرجت الحجم الحالي حيث كُتب "نسخة العمل الحالية". لا يعني ذلك أن بقية ملفات المشروع أعيدت قراءتها في هذه الجولة.
+**تحديث:** قيس العدد الحالي من `git ls-files` بعد التزام CI السابق: 104 مسارات، منها 99 نصياً و5 PNG ثنائية. جدول التغطية أدناه يضم كل المسارات المتتبعة الآن. لا يعني تاريخ القراءة في الجدول أن كل هذه الملفات أُعيدت قراءتها في جولة الاستئناف الحالية.
 
-### تحقق مراجعة التعديلات — 2026-10-20
+## جدول التغطية الحالي للملفات المتتبعة
 
-- أحدث تشغيل لمجمع الفحوص: 30 PASS، صفر FAIL، و2 NOT_RUN، ورمز المجمع 1. الأدوات غير المتاحة: `shellcheck` و`desktop-file-validate`؛ لا يُحسب أي منهما نجاحاً.
-- اجتاز `pytest` (12 passed)، smoke، اختبارات QEMU الوهمية، تحليل YAML، bash/sh syntax، Python compile، `xmllint` و`systemd-analyze verify` على rootfs مؤقت. لم يُشغّل ISO build أو QEMU حقيقي أو GitHub Actions.
-- فحصتُ امتداد screendump وصُحح إلى `.ppm` لأن أمر QEMU HMP `screendump` ينتج PPM؛ لا توجد لقطات فعلية قبل تشغيل QEMU.
-
-## جدول التغطية النهائي للملفات المتتبعة عند بداية الفحص
-
-العدد المرجعي هو 92 مساراً من `git ls-files` عند بداية مرحلة الفهم. قُرئت الملفات النصية الـ87 كاملةً ضمن دفعات القراءة؛ عُرضت صور PNG الخمس باستخدام `file` لفحص النوع والأبعاد والحجم فقط، ولم تُقرأ بايتاتها على أنها نص. ملفات التوثيق التي تحتوي نتائج تاريخية لا تُعدّ دليلاً على إعادة تنفيذها في هذه الجلسة. الملفات الجديدة في ملحق المرحلة الحالية غير متتبعة ولا تدخل في العدد المرجعي.
+كان جرد بداية المرحلة صفر 92 مساراً (87 نصياً و5 صور PNG). أضيف منذ ذلك الحين 12 ملفاً نصياً متتبعاً: قُرئت 10 منها بالكامل لهذه المراجعة، بينما لم يُقرأ ملفا التقرير الحاليان كاملين؛ راجعت الأجزاء المرتبطة بالتغييرات فقط، ولذلك وُسما جزئياً صراحةً. الصور الخمس فُحصت بياناتها باستخدام `file` فقط.
 
 | المسار | حالة التغطية |
 |---|---|
@@ -211,6 +209,8 @@
 | `docs/THIRD_PARTY_LICENSES.md` | قُرئ بالكامل |
 | `docs/UPSTREAM_INTEGRATION_AR.md` | قُرئ بالكامل |
 | `docs/UPSTREAM_REVIEW_AR.md` | قُرئ بالكامل |
+| `docs/FILE_INVENTORY_AR.md` | قُرئ جزئياً (تحديث نطاق التغطية والنتائج؛ لم يُقرأ كامل الملف في هذه الجولة) |
+| `docs/PROJECT_MAP_AR.md` | قُرئ جزئياً (مراجعة الأقسام ذات الصلة وإضافة النتائج؛ لم يُقرأ كامل الملف في هذه الجولة) |
 | `docs/previews/isox-welcome-design-preview.png` | ثنائي (فُحصت بياناته فقط) |
 | `initramfs/hooks/isox-watermark` | قُرئ بالكامل |
 | `initramfs/scripts/init-premount/isox-watermark-guard` | قُرئ بالكامل |
@@ -222,16 +222,20 @@
 | `plymouth/isox/isox.script` | قُرئ بالكامل |
 | `scripts/apply-windows-look.sh` | قُرئ بالكامل |
 | `scripts/build-iso.sh` | قُرئ بالكامل |
+| `scripts/ci-build-in-trixie.sh` | قُرئ بالكامل |
 | `scripts/collect-performance.sh` | قُرئ بالكامل |
+| `scripts/create-ci-results.py` | قُرئ بالكامل |
 | `scripts/encode-watermark.py` | قُرئ بالكامل |
 | `scripts/generate-dev-signing-key.sh` | قُرئ بالكامل |
 | `scripts/install-build-deps.sh` | قُرئ بالكامل |
 | `scripts/isox-preload.py` | قُرئ بالكامل |
+| `scripts/isox-ci-ready.sh` | قُرئ بالكامل |
 | `scripts/isox-run.py` | قُرئ بالكامل |
 | `scripts/isox-snap-window.sh` | قُرئ بالكامل |
 | `scripts/isox-speedtest` | قُرئ بالكامل |
 | `scripts/isox-zram-setup` | قُرئ بالكامل |
 | `scripts/record-demo.sh` | قُرئ بالكامل |
+| `scripts/run-source-checks.py` | قُرئ بالكامل |
 | `scripts/secure-vault.py` | قُرئ بالكامل |
 | `scripts/secure-vault.sh` | قُرئ بالكامل |
 | `scripts/secureboot-enroll.sh` | قُرئ بالكامل |
@@ -239,10 +243,15 @@
 | `scripts/write-usb.sh` | قُرئ بالكامل |
 | `systemd/isox-preload.service` | قُرئ بالكامل |
 | `systemd/isox-preload.timer` | قُرئ بالكامل |
+| `systemd/isox-ci-ready.service` | قُرئ بالكامل |
+| `systemd/isox-ci-ready.timer` | قُرئ بالكامل |
 | `systemd/isox-zram.service` | قُرئ بالكامل |
 | `tests/qemu-acceptance.sh` | قُرئ بالكامل |
+| `tests/ci-results.schema.json` | قُرئ بالكامل |
+| `tests/qemu-runner.py` | قُرئ بالكامل |
 | `tests/smoke.sh` | قُرئ بالكامل |
 | `tests/test_build_contracts.py` | قُرئ بالكامل |
+| `tests/test_ci_results.py` | قُرئ بالكامل |
 | `tests/test_initramfs_watermark_guard.sh` | قُرئ بالكامل |
 | `tests/test_qemu_headless_validation.sh` | قُرئ بالكامل |
 | `tests/test_schema.py` | قُرئ بالكامل |
@@ -252,10 +261,11 @@
 | `tests/test_upstream_integration.py` | قُرئ بالكامل |
 | `tests/test_watermark_integrity.sh` | قُرئ بالكامل |
 | `tests/test_write_usb_validation.sh` | قُرئ بالكامل |
+| `tests/test_workflow_contracts.py` | قُرئ بالكامل |
 | `three-d-login/Cargo.toml` | قُرئ بالكامل |
 | `three-d-login/src/main.rs` | قُرئ بالكامل |
 
-**حصيلة التغطية:** قُرئ بالكامل: 87؛ قُرئ جزئياً: 0؛ لم يُقرأ: 0؛ ثنائي فُحصت بياناته فقط: 5.
+**حصيلة التغطية الحالية:** قُرئ بالكامل: 97؛ قُرئ جزئياً: 2؛ لم يُقرأ: 0؛ ثنائي فُحصت بياناته فقط: 5؛ الإجمالي: 104.
 
 ## التصنيف الوظيفي
 
@@ -265,14 +275,14 @@
 - **Hooks البناء:** ملفات `config/hooks/live/*.hook.chroot` الخمسة؛ watermark hook مصدر موجود لكنه لا يُنسخ إلا عند تفعيل الخيار.
 - **خدمات systemd:** `systemd/` (ثلاث وحدات/مؤقتات) مع إعدادات تفعيلها وتثبيتها في سكربت البناء.
 - **Desktop وواجهة المكتب:** `desktop/` (Openbox menu/rc وtint2 وdesktop entry)، التطبيقات GTK، وملفات desktop التي يولدها `scripts/build-iso.sh`.
-- **أصول:** صور PNG خمس، SVG ثلاثة، وHTML واحد تحت `assets/`، إضافة إلى معاينة PNG في `docs/previews/`.
+- **أصول:** خمس صور PNG، وثلاثة SVG، وHTML واحد تحت `assets/`، إضافة إلى معاينة PNG في `docs/previews/`.
 - **Plymouth:** ملف إعداد `.plymouth` وscript، مع assets ذات صلة في `assets/`.
 - **توثيق:** ملفات الجذر Markdown وملفات `docs/`؛ منها تقارير حالة/نتائج تاريخية لا تُعامل كدليل تشغيل حالي.
-- **اختبارات:** 12 ملفاً في `tests/`؛ لا يوجد اختبار إقلاع موثوق كامل في مصدر الاختبارات الحالي.
+- **اختبارات:** 16 ملفاً في `tests/`؛ لا يوجد اختبار إقلاع موثوق كامل في مصدر الاختبارات الحالي.
 
 ## الملفات غير المتتبعة والنواتج والمكررات
 
-- عند بدء الفحص لم يوجد untracked حسب الحالة الأولية. بعد إنشاء المخرجات المسموحة، يظهر الآن ملفا المعرفة فقط كغير متتبعين: `docs/FILE_INVENTORY_AR.md` و`docs/PROJECT_MAP_AR.md`.
+- عند بدء الفحص لم يوجد untracked حسب الحالة الأولية. ملفا المعرفة الحاليان أصبحا متتبعين في الالتزام السابق؛ التغييرات الحالية تعديلات على ملفات متتبعة، ولم تُنشأ ملفات غير متتبعة في هذه الجولة.
 - لا يوجد حالياً `build-live/`, `evidence/`, ISO/sidecar أو مجلدات cache معروفة داخل المستودع. إنشاء هذه النواتج لم يُجر.
 - لم يظهر من مراجعة المسارات تطابق ملفين متتبعين بوصفهما نسختين متطابقتين. وجود PNG وSVG للهوية نفسها مقصود كتنويعين، لا يثبت تكراراً بايتياً.
 - أمثلة ملفات مصدرية يتيمة/غير مضمّنة بحسب أوامر النسخ: `app/iso_x_shell.py` (واجهة Tkinter القديمة)، `scripts/collect-performance.sh`, `scripts/record-demo.sh`, `scripts/secureboot-enroll.sh`, و`kernel/isox-watermark/dkms.conf`. وكذلك `assets/iso-x-desktop-wallpaper.svg` يُنسخ لكن ملف wallpaper profile يختار PNG. هذه نتائج ربط source/build لا دليل على تعطل ميزة ضمن image.
