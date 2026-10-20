@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON_CACHE="$(mktemp -d "${TMPDIR:-/tmp}/isox-smoke-pycache.XXXXXX")"
+trap 'rm -rf "$PYTHON_CACHE"' EXIT
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONPYCACHEPREFIX="$PYTHON_CACHE"
 python3 -m py_compile \
   "$ROOT/app/iso_x_shell.py" \
   "$ROOT/app/iso_x_gtk.py" \

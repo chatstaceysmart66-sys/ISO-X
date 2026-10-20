@@ -19,8 +19,8 @@ Modes:
   check   Check ISO exists, SHA256, hybrid/El Torito metadata, and record output.
   bios    Boot the ISO with legacy BIOS, 2 vCPUs and 1024 MiB RAM.
   uefi    Boot with OVMF UEFI, 2 vCPUs and 1024 MiB RAM.
-  bios-headless Boot until graphical.target and capture serial output (10 min cap).
-  uefi-headless Boot with OVMF until graphical.target and capture serial output (10 min cap).
+  bios-headless Require the CI guest readiness nonce; capture VGA and serial evidence.
+  uefi-headless Require the CI guest readiness nonce with OVMF; capture VGA and serial evidence.
   install Boot with a fresh 24 GiB qcow2 TEST disk (never a host disk) attached.
 
 BIOS/UEFI GUI checks are manual. Close QEMU to return. These modes do not
@@ -57,28 +57,31 @@ case "$MODE" in
     echo "Saved: $EVIDENCE/iso-preflight.txt"
     ;;
   bios|uefi|install|bios-headless|uefi-headless)
-    need qemu-system-x86_64; need qemu-img
+    need qemu-system-x86_64
+    if [[ "$MODE" == install ]]; then need qemu-img; fi
     require_iso
     mkdir -p "$EVIDENCE"
+    HEADLESS=0
+    [[ "$MODE" == *-headless ]] && HEADLESS=1
     # QEMU's -nic options intentionally use commas within a single argument.
     # shellcheck disable=SC2054
-    # Prefer hardware acceleration on CI hosts that expose KVM; otherwise use TCG.
-        ARGS=(-m 1024 -smp 2 -boot order=d -cdrom "$ISO" -nic user,model=e1000 \
-          -device qemu-xhci,id=xhci -device usb-tablet,bus=xhci.0)
+    ARGS=(-m 1024 -smp 2 -boot order=d -cdrom "$ISO" -nic user,model=e1000)
+    if [[ "$HEADLESS" -eq 0 ]]; then
+      ARGS+=(-device qemu-xhci,id=xhci -device usb-tablet,bus=xhci.0)
+    fi
     if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+      QEMU_ACCEL=kvm
       ARGS+=(-accel kvm)
     else
       QEMU_ACCEL='tcg,thread=multi'
       ARGS+=(-accel "$QEMU_ACCEL")
     fi
-    HEADLESS=0
-    [[ "$MODE" == *-headless ]] && HEADLESS=1
     if [[ "$HEADLESS" -eq 1 ]]; then
-      need timeout
       QEMU_TIMEOUT="${ISOX_QEMU_TIMEOUT:-600}"
       [[ "$QEMU_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ISOX_QEMU_TIMEOUT must be a positive integer." >&2; exit 3; }
-      ARGS+=(-display none -serial "file:$EVIDENCE/qemu-$MODE-serial.log" -monitor none)
-    else
+      QEMU_NONCE="${ISOX_QEMU_NONCE:-}"
+      [[ "$QEMU_NONCE" =~ ^[a-f0-9]{32}$ ]] || { echo "Set ISOX_QEMU_NONCE to the nonce embedded in the CI-only ISO variant." >&2; exit 3; }
+    elif [[ "$HEADLESS" -eq 0 ]]; then
       ARGS+=(-display gtk)
     fi
     if [[ "$MODE" == uefi || "$MODE" == uefi-headless ]]; then
@@ -102,23 +105,25 @@ case "$MODE" in
     fi
     {
       echo "Launching mode=$MODE; ISO=$ISO"
-      echo 'Expected test target: QEMU, 2 vCPUs, 1024 MiB RAM.'
-      echo 'Do not mark this test passed unless the screen confirms the expected result.'
+      echo "Expected test target: QEMU, 2 vCPUs, 1024 MiB RAM; accelerator=$QEMU_ACCEL."
+      qemu-system-x86_64 -version
+      if command -v dpkg-query >/dev/null 2>&1; then
+        dpkg-query -W qemu-system-x86 ovmf 2>&1 || true
+      fi
+      if [[ -r /dev/kvm && -w /dev/kvm ]]; then echo 'KVM: readable+writable'; else echo 'KVM: unavailable; using TCG'; fi
       printf 'QEMU command: qemu-system-x86_64'
       printf ' %q' "${ARGS[@]}"
       printf '\n'
     } | tee "$EVIDENCE/qemu-launch-$MODE.txt"
     if [[ "$HEADLESS" -eq 1 ]]; then
-      set +e
-      timeout --signal=TERM --kill-after=15 "$QEMU_TIMEOUT" qemu-system-x86_64 "${ARGS[@]}" 2>&1 | tee "$EVIDENCE/qemu-$MODE.log"
-      QEMU_STATUS=${PIPESTATUS[0]}
-      set -e
-      if [[ "$QEMU_STATUS" -ne 124 ]] || ! grep -Eiq 'Reached target.*(Graphical Interface|graphical\.target)' "$EVIDENCE/qemu-$MODE-serial.log"; then
-        echo "FAIL: $MODE did not reach graphical.target (QEMU/timeout exit=$QEMU_STATUS)." >&2
-        exit 10
-      fi
-      echo "PASS: $MODE reached graphical.target; serial log: $EVIDENCE/qemu-$MODE-serial.log"
-      exit 0
+      python3 "$ROOT/tests/qemu-runner.py" \
+        --mode "$MODE" \
+        --evidence "$EVIDENCE" \
+        --nonce "$QEMU_NONCE" \
+        --timeout "$QEMU_TIMEOUT" \
+        --accelerator "$QEMU_ACCEL" \
+        -- qemu-system-x86_64 "${ARGS[@]}"
+      exit $?
     fi
     qemu-system-x86_64 "${ARGS[@]}" 2>&1 | tee "$EVIDENCE/qemu-$MODE.log"
     echo "QEMU exited. Record observed outcome and any screenshot manually under: $EVIDENCE"

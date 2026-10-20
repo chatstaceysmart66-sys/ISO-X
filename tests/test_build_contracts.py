@@ -17,6 +17,9 @@ licenses = (ROOT / "docs/THIRD_PARTY_LICENSES.md").read_text(encoding="utf-8")
 # BIOS-compatible SYSLINUX plus UEFI GRUB are explicit for deterministic output.
 assert '--binary-images iso-hybrid' in auto
 assert '--bootloaders "syslinux grub-efi"' in auto
+assert 'if [ "${ISOX_CI_BOOT:-0}" = 1 ]; then' in auto
+assert 'BOOTAPPEND_LIVE="boot=live config components quiet splash username=user hostname=iso-x console=ttyS0,115200n8 systemd.show_status=yes systemd.log_target=console"' in auto
+assert 'loglevel=7 systemd.show_status=yes systemd.log_target=console isox.ci=1 isox.ci.nonce=' in auto
 
 # All source SQL migration files must be installed into the image at their matching paths.
 migrations = sorted((ROOT / "db/migrations").glob("*.sql"))
@@ -39,6 +42,11 @@ assert 'mkdir -p config/includes.chroot/etc/default' in build
 assert build.index('mkdir -p config/includes.chroot/etc/default') < build.index('config/includes.chroot/etc/default/locale')
 assert build.index('mkdir -p config/includes.chroot/etc/default') < build.index('config/includes.chroot/etc/default/keyboard')
 assert 'ناتج إصدار سابق موجود' in build
+assert 'cd "$(dirname -- "$OUTPUT_ISO")"' in build
+assert 'sha256sum "$(basename -- "$OUTPUT_ISO")"' in build
+assert 'if [[ "$CI_BOOT" == 1 ]]' in build
+assert 'isox-ci-ready.timer' in build
+assert 'CERT_IN="${ISOX_RELEASE_CERT:-}"' in build
 assert build.index('if [[ "${EUID}" -ne 0 ]]') < build.index('ISOX_WATERMARK_OUTPUT=')
 assert build.count('ISOX_WATERMARK_OUTPUT=') == 1
 upstream_report = (ROOT / "docs/UPSTREAM_INTEGRATION_AR.md").read_text(encoding="utf-8")

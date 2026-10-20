@@ -3,6 +3,14 @@ set -eu
 # ISO-X 0.4.0: Trixie amd64, a live desktop and Debian installer.
 # These are ISO-X's own build values; no upstream distro branding is exposed in the desktop.
 # `noauto` prevents live-build from recursively invoking this file.
+BOOTAPPEND_LIVE="boot=live config components quiet splash username=user hostname=iso-x console=ttyS0,115200n8 systemd.show_status=yes systemd.log_target=console"
+if [ "${ISOX_CI_BOOT:-0}" = 1 ]; then
+  case "${ISOX_CI_NONCE:-}" in
+    *[!a-f0-9]*|'') echo "ISOX_CI_BOOT requires a lowercase hexadecimal nonce." >&2; exit 2 ;;
+  esac
+  [ "${#ISOX_CI_NONCE}" -eq 32 ] || { echo "ISOX_CI_NONCE must contain 32 hexadecimal characters." >&2; exit 2; }
+  BOOTAPPEND_LIVE="boot=live config components username=user hostname=iso-x console=tty0 console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes systemd.log_target=console isox.ci=1 isox.ci.nonce=${ISOX_CI_NONCE}"
+fi
 lb config noauto \
   --apt-recommends false \
   --apt-indices false \
@@ -29,7 +37,7 @@ lb config noauto \
   --iso-application "ISO-X 0.4.0" \
   --iso-publisher "ISO-X / Abdullah Lazim" \
   --iso-volume "ISOX040_LIVE" \
-  --bootappend-live "boot=live config components quiet splash username=user hostname=iso-x console=ttyS0,115200n8 systemd.show_status=yes systemd.log_target=console" \
+  --bootappend-live "$BOOTAPPEND_LIVE" \
   --bootappend-live-failsafe "boot=live components username=user hostname=iso-x nomodeset noapic noacpi nosmp noapm nodma nomce nosplash" \
   --memtest none \
   "${@}"

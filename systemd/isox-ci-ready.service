@@ -1,0 +1,11 @@
+[Unit]
+Description=ISO-X CI-only graphical session readiness probe
+ConditionKernelCommandLine=isox.ci=1
+After=graphical.target lightdm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/isox-ci-ready
+
+[Install]
+WantedBy=graphical.target

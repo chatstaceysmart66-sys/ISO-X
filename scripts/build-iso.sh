@@ -5,7 +5,13 @@ set -Eeuo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${ISOX_BUILD_DIR:-${PROJECT_DIR}/build-live}"
 KEY_IN="${ISOX_RELEASE_KEY:-}"
+CERT_IN="${ISOX_RELEASE_CERT:-}"
 WATERMARK_ENABLED="${ISOX_ENABLE_WATERMARK:-0}"
+CI_BOOT="${ISOX_CI_BOOT:-0}"
+CI_NONCE="${ISOX_CI_NONCE:-}"
+OUTPUT_ISO="${ISOX_OUTPUT_ISO:-${PROJECT_DIR}/ISO-X-0.4.0-live-amd64.iso}"
+[[ "$OUTPUT_ISO" == /* ]] || OUTPUT_ISO="${PROJECT_DIR}/${OUTPUT_ISO}"
+OUTPUT_SHA256="${OUTPUT_ISO}.sha256"
 STAGED_KEY="${BUILD_DIR}/config/includes.chroot/var/lib/isox-build-secrets/isox-release.key"
 STAGED_CERT="${BUILD_DIR}/config/includes.chroot/var/lib/isox-build-secrets/isox-release.crt"
 CLEAN_STAGED=0
@@ -49,6 +55,11 @@ if [[ "$OS_ID" != debian || "$OS_CODENAME" != trixie ]]; then
 fi
 [[ "$(dpkg --print-architecture)" == amd64 ]] || { echo "يتطلب البناء معمارية amd64." >&2; exit 2; }
 [[ "$WATERMARK_ENABLED" == 0 || "$WATERMARK_ENABLED" == 1 ]] || { echo "ISOX_ENABLE_WATERMARK يقبل 0 أو 1 فقط." >&2; exit 2; }
+[[ "$CI_BOOT" == 0 || "$CI_BOOT" == 1 ]] || { echo "ISOX_CI_BOOT يقبل 0 أو 1 فقط." >&2; exit 2; }
+if [[ "$CI_BOOT" == 1 && ! "$CI_NONCE" =~ ^[a-f0-9]{32}$ ]]; then
+  echo "ISOX_CI_BOOT=1 يتطلب ISOX_CI_NONCE من 32 خانة hex صغيرة." >&2
+  exit 2
+fi
 FREE_KB="$(df -Pk "$PROJECT_DIR" | awk 'NR==2 {print $4}')"
 MEM_KB="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
 (( FREE_KB >= 20*1024*1024 )) || { echo "تحتاج مساحة فارغة لا تقل عن 20 GiB؛ المتاح: $((FREE_KB/1024/1024)) GiB." >&2; exit 2; }
@@ -67,10 +78,13 @@ if [[ "$WATERMARK_ENABLED" == 1 ]]; then
 else
   echo "وحدة watermark معطّلة افتراضيًا ولا تشارك في الإقلاع الأساسي."
 fi
+  if [[ "$CI_BOOT" == 1 ]]; then
+    echo "إنشاء CI-only boot variant؛ probe لن يصدر علامة ما لم يُتحقق من الجلسة الرسومية."
+  fi
 if [[ -e "${BUILD_DIR}/config" || ( -d "$BUILD_DIR" && -n "$(find "$BUILD_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ) ]]; then
   echo "مجلد بناء غير فارغ: ${BUILD_DIR}; لن أحذفه أو أعيد استخدامه تلقائيًا. انقله/احذفه يدويًا بعد التأكد من محتوياته." >&2; exit 7
 fi
-for artifact in "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso" "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso.sha256"; do
+for artifact in "$OUTPUT_ISO" "$OUTPUT_SHA256"; do
   if [[ -e "$artifact" ]]; then
     echo "ناتج إصدار سابق موجود: $artifact؛ انقله يدوياً قبل بدء بناء جديد كي لا يلتبس مع ناتج هذه المحاولة." >&2
     exit 7
@@ -202,6 +216,13 @@ install -m 0755 "$PROJECT_DIR/scripts/isox-zram-setup" config/includes.chroot/us
 install -m 0755 "$PROJECT_DIR/scripts/isox-preload.py" config/includes.chroot/usr/local/bin/isox-preload
 install -m 0644 "$PROJECT_DIR/systemd/isox-zram.service" config/includes.chroot/etc/systemd/system/isox-zram.service
 ln -sfn ../isox-zram.service config/includes.chroot/etc/systemd/system/multi-user.target.wants/isox-zram.service
+if [[ "$CI_BOOT" == 1 ]]; then
+  install -m 0755 "$PROJECT_DIR/scripts/isox-ci-ready.sh" config/includes.chroot/usr/local/sbin/isox-ci-ready
+  install -m 0644 "$PROJECT_DIR/systemd/isox-ci-ready.service" config/includes.chroot/etc/systemd/system/isox-ci-ready.service
+  install -m 0644 "$PROJECT_DIR/systemd/isox-ci-ready.timer" config/includes.chroot/etc/systemd/system/isox-ci-ready.timer
+  mkdir -p config/includes.chroot/etc/systemd/system/multi-user.target.wants
+  ln -sfn ../isox-ci-ready.timer config/includes.chroot/etc/systemd/system/multi-user.target.wants/isox-ci-ready.timer
+fi
 install -m 0644 "$PROJECT_DIR/systemd/isox-preload.service" config/includes.chroot/usr/lib/systemd/user/isox-preload.service
 install -m 0644 "$PROJECT_DIR/systemd/isox-preload.timer" config/includes.chroot/usr/lib/systemd/user/isox-preload.timer
 # The timer runs only for a user's own session, but the program is a no-op unless
@@ -402,9 +423,13 @@ lb build
 ISO_PATH="${BUILD_DIR}/live-image-amd64.hybrid.iso"
 [[ -s "$ISO_PATH" ]] || { echo "لم ينتج live-build ملف ISO متوقعًا؛ افحص سجل البناء." >&2; exit 9; }
 xorriso -indev "$ISO_PATH" -pvd_info >/dev/null || { echo "فشل فحص بنية ISO الناتجة؛ لن تُنشر الصورة." >&2; exit 10; }
-cp -f "$ISO_PATH" "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso"
-(cd "$PROJECT_DIR" && sha256sum ISO-X-0.4.0-live-amd64.iso > ISO-X-0.4.0-live-amd64.iso.sha256)
-(cd "$PROJECT_DIR" && sha256sum --check ISO-X-0.4.0-live-amd64.iso.sha256) >/dev/null || { echo "فشل تحقق SHA-256 للصورة الناتجة." >&2; exit 11; }
-echo "ISO generated: $PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso"
-echo "SHA256: $(cut -d' ' -f1 "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso.sha256")"
+mkdir -p "$(dirname -- "$OUTPUT_ISO")"
+cp -f "$ISO_PATH" "$OUTPUT_ISO"
+(
+  cd "$(dirname -- "$OUTPUT_ISO")"
+  sha256sum "$(basename -- "$OUTPUT_ISO")" > "$(basename -- "$OUTPUT_SHA256")"
+  sha256sum --check "$(basename -- "$OUTPUT_SHA256")" >/dev/null
+) || { echo "فشل تحقق SHA-256 للصورة الناتجة." >&2; exit 11; }
+echo "ISO generated: $OUTPUT_ISO"
+echo "SHA256: $(cut -d' ' -f1 "$OUTPUT_SHA256")"
 echo "NOTE: boot-performance and GUI acceptance testing remain a separate required step."

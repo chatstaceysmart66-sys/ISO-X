@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ISO-X CI acceptance result",
+  "type": "object",
+  "required": [
+    "project", "release", "branch", "commit", "run_id", "run_attempt",
+    "timestamp_utc", "environment", "checks", "exit_codes", "iso", "bios", "uefi",
+    "persistence", "test_summary", "test_summary_unit", "test_checks", "acceptance_gate_summary", "remaining_issues"
+  ],
+  "properties": {
+    "project": {"const": "ISO-X"},
+    "release": {"type": "string"},
+    "branch": {"type": "string"},
+    "commit": {"type": "string"},
+    "run_id": {"type": "string"},
+    "run_attempt": {"type": "string"},
+    "timestamp_utc": {"type": "string", "format": "date-time"},
+    "environment": {"type": "object"},
+    "checks": {
+      "type": "object",
+      "required": ["source_checks", "iso_build_and_structure", "bios_boot", "uefi_boot"],
+      "additionalProperties": {"enum": ["PASS", "FAIL", "NOT_RUN", "CANCELLED"]}
+    },
+    "exit_codes": {
+      "type": "object",
+      "required": ["source_checks", "iso_build", "iso_sha256", "xorriso_structure", "bios_qemu", "uefi_qemu"],
+      "additionalProperties": {"type": ["integer", "null"]}
+    },
+    "iso": {
+      "type": "object",
+      "required": ["size_bytes", "sha256", "structural_validation", "ci_boot_diagnostic_variant", "release_eligible"],
+      "properties": {
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "structural_validation": {"enum": ["PASS", "NOT_PASSED"]},
+        "ci_boot_diagnostic_variant": {"type": "boolean"},
+        "release_eligible": {"type": "boolean"}
+      }
+    },
+    "bios": {"$ref": "#/$defs/boot"},
+    "uefi": {"$ref": "#/$defs/boot"},
+    "persistence": {
+      "type": "object",
+      "required": ["status", "reason"],
+      "properties": {"status": {"enum": ["PASS", "FAIL", "NOT_IMPLEMENTED", "NOT_RUN"]}, "reason": {"type": "string"}}
+    },
+    "test_summary": {
+      "type": "object",
+      "required": ["passed", "failed", "skipped", "not_run"],
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "test_summary_unit": {"type": "string"},
+    "test_checks": {"type": "array", "items": {"type": "object"}},
+    "acceptance_gate_summary": {
+      "type": "object",
+      "required": ["passed", "failed", "skipped", "not_run"],
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "remaining_issues": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "boot": {
+      "type": "object",
+      "required": ["job_result", "status", "gate", "qemu_started", "duration_seconds", "accelerator", "qemu_version", "firmware", "firmware_version", "marker_seen", "screenshots", "serial_indicators", "serial_indicator_scope"],
+      "properties": {
+        "job_result": {"type": "string"},
+        "status": {"type": "string"},
+        "gate": {"enum": ["PASS", "FAIL", "NOT_RUN", "CANCELLED"]},
+        "qemu_started": {"type": ["boolean", "null"]},
+        "duration_seconds": {"type": ["number", "null"]},
+        "accelerator": {"type": "string"},
+        "qemu_version": {"type": "string"},
+        "firmware": {"type": "string"},
+        "firmware_version": {"type": "string"},
+        "serial_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "marker_seen": {"type": ["boolean", "null"]},
+        "serial_indicators": {
+          "type": "object",
+          "required": ["bootloader", "kernel", "initramfs", "systemd", "graphical_target", "display_manager"],
+          "properties": {
+            "bootloader": {"type": ["boolean", "null"]},
+            "kernel": {"type": ["boolean", "null"]},
+            "initramfs": {"type": ["boolean", "null"]},
+            "systemd": {"type": ["boolean", "null"]},
+            "graphical_target": {"type": ["boolean", "null"]},
+            "display_manager": {"type": ["boolean", "null"]}
+          }
+        },
+        "serial_indicator_scope": {"type": "string"},
+        "screenshots": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

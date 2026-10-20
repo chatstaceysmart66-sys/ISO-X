@@ -476,3 +476,54 @@ QEMU_BIOS_EXIT=2
 - إقلاع BIOS لم يبدأ: QEMU رفض `usb-tablet` لأن helper لم ينشئ USB bus، ثم خرج helper 10 لغياب سجل `graphical.target`. لم يُشغّل UEFI بسبب توقف التسلسل عند BIOS. لذلك لم يرفع Workflow ISO artifact؛ رفع diagnostics artifact `isox-build-diagnostics-39471524581` فقط.
 - أصلح commit `842713c` هذا الخطأ بإضافة `qemu-xhci` وربط tablet به، وأضيف اختبار عقد محلي. ينتظر الإصلاح run جديداً؛ حتى ذلك الحين لا يُعد BIOS أو UEFI boot مقبولاً.
 - الملف المرحلي كان داخل Runner المؤقت وانتهى عمره؛ لا رابط تنزيل ISO صالح حالياً، رغم أن ملفاً حقيقياً بُني وفُحص أثناء run.
+
+## 12. تحديث تشخيص QEMU وتقسيم CI — 2026-10-20
+
+هذا سجل للعمل المحلي بعد خط الأساس أعلاه؛ لا يغيّر أو يمحو تاريخ run `39471524581` ولا يدّعي الاطلاع على Artifact run `39474948006`. كان `HEAD` عند `caf58594bea006c983d45751f113dfe6ed8b89eb` والفرع `fix/isox-build-and-runtime` وقت إعداد السجل؛ حالة commit/push المذكورة هنا تخص تلك اللقطة السابقة.
+
+### تغييرات مصدرية قيد التحقق
+
+- `auto/config` و`scripts/build-iso.sh`: مسار `ISOX_CI_BOOT=1` منفصل، يزيل `quiet splash` ويضيف console VGA/serial وloglevel ومُعرّف CI وnonce فقط للنسخة التشخيصية. الإعداد العادي لا يضم خدمة probe.
+- أضيف `scripts/isox-ci-ready.sh` وخدمة systemd/timer: marker لا يصدر إلا بعد أن يتحقق guest من target الرسومي وLightDM وXorg وجلسة `user` النشطة. لا يوجد دليل تشغيل حقيقي لهذه الخدمة حتى الآن.
+- `tests/qemu-acceptance.sh` يستخدم `tests/qemu-runner.py` في headless. المشغّل يسجل serial وstdout/stderr منفصلين وQEMU version وأمر التشغيل والمسرّع وJSON، ويدير QMP لصور VGA، ويوقف QEMU عند marker مطابق أو timeout. الحالات لا تعتبر timeout نجاحاً.
+- `tests/test_qemu_headless_validation.sh` صار يشغّل fake QEMU بحالات marker صحيح مبكر، marker مضلل، serial فارغ، timeout، وخطأ QEMU مباشر.
+- workflow مقسّم إلى source-check/build/BIOS/UEFI/report. BIOS وUEFI وظيفتان منفصلتان لا تعتمد إحداهما على الأخرى، ويرفع build مرشحاً موسوماً CI diagnostic بعد فحصه الهيكلي والبصمة دون انتظار البوابتين. لا يسمى هذا المرشح إصداراً نهائياً؛ لا توجد بعد صورة عادية غير تشخيصية مؤهلة للنشر.
+- actions مثبّتة إلى SHAs: checkout `v7.0.1`, upload-artifact `v7.0.2`, download-artifact `v8.0.2`؛ المصادر العامة للإصدارات تشير إلى Node.js 24.
+- أضيف مولد تقرير machine-readable ومخطط JSON واختبار رفض JSON التالف. العدادات في التقرير تخص بوابات jobs الأربع، وليست مجموع حالات pytest الفردية؛ هذا معلن في `test_summary_unit`. USB Persistence تبقى غير منفذة.
+- نُقل محتوى بناء الحاوية إلى `scripts/ci-build-in-trixie.sh` لتجنب اقتباسات shell متداخلة داخل workflow. وأُصلح sidecar ليحتوي basename نسبياً؛ الاسم المطلق `/workspace/...` الذي ينتجه container غير قابل للتحقق على runner host بعد نقل الملف.
+
+### النتائج التي نُفذت محلياً بعد التغييرات
+
+| الفحص | الرمز/النتيجة |
+|---|---|
+| `git diff --check` | 0، PASS. |
+| `ruby`/Psych لتحليل `.github/workflows/iso-build.yml` | 0، صياغة YAML فقط. |
+| `bash -n` على السكربتات المعدلة | 0، PASS. |
+| `tests/test_qemu_headless_validation.sh` | 0، PASS لسيناريوهات fake QEMU؛ لا يقلع ISO. |
+| `tests/test_ci_results.py` و`tests/test_workflow_contracts.py` | 0، PASS؛ فحص schema الأساسي وعقود workflow النصية. |
+| `tests/smoke.sh` واختبارات المصدر/USB/Secure Boot/watermark/upstream/schema المنفذة مباشرة | 0، PASS؛ لا تثبت بناء أو تشغيل النظام. |
+| `python3 -m pytest -p no:cacheprovider -q` | `12 passed in 2.60s`, exit 0؛ استخدم venv مؤقتاً في `/tmp` لأن pytest غير موجود على المضيف. |
+| `systemd-analyze verify --root=<temp>` مع ملفات ExecStart staged | exit 0؛ صياغة الوحدة والمسارات اجتازت على rootfs مصطنع باستخدام أداة المضيف، وليس Debian Trixie rootfs حقيقياً. |
+| `tests/smoke.sh` مع cache prefix مؤقت | exit 0؛ فحص `find` و`git status` بعده لم يظهر bytecode أو مخرجات اختبار داخل المستودع. |
+| `gh auth status` | exit 1؛ لا تسجيل دخول، فلا يمكن dispatch أو مراقبة GitHub Actions من هذه البيئة. |
+
+لم يُشغّل بناء ISO ولا QEMU ولا CI في هذه الجولة. الأدوات `qemu-system-x86_64`, `qemu-img`, `xorriso`, `shellcheck`, `desktop-file-validate`, و`actionlint` غير متوفرة على المضيف. لذلك لا توجد هنا نتائج BIOS/UEFI، ولا SHA لصورة جديدة، ولا Screenshots أو OVMF logs، ولا دليل على أن artifact workflow رُفع.
+
+**تظل نتيجة run 39474948006 كما هي مثبتة في التكليف فقط:** QEMU انتهى بمهلة/exit 124 وملف serial فارغ. ملف Artifact لم يكن متاحاً للتنزيل (المحاولة السابقة أعادت 401، و`gh` الآن غير مصادق)، فلا يجوز تحديد bootloader/kernel/initramfs/GUI بوصفه السبب الجذري. يلزم ZIP تشخيص صالح أو صلاحية GitHub Actions، ثم تشغيل workflow على runner فعلي لإكمال التشخيص.
+
+### متابعة التحقق بعد تصحيح عقد Workflow — 2026-10-20
+
+- عُدّل اختبار العقد كي يختبر استدعاء جامع فحوص المصدر في وظيفة `source-check` واستهلاك `source-tests.json` في وظيفة ملخص القبول، بدلاً من اشتراط أن يظهر اسم الملف الناتج ضمن نص وظيفة المصدر نفسها.
+- `pytest -p no:cacheprovider -q`: **12 passed**، exit 0. اختبارات عقود workflow وJSON وQEMU الوهمي نجحت منفردة أيضاً، كلٌ exit 0.
+- شغّل `scripts/run-source-checks.py` المجموعة الكاملة: `30 PASS`, `0 FAIL`, و`2 NOT_RUN` (exit 1). الفحوص غير المنفذة هي `shellcheck` و`desktop-file-validate` لأن الأداتين غير موجودتين. ملفات الأدلة وpytest XML وملف JSON الناتج في `/tmp/isox-source-check-evidence-final2/`، وملفات bytecode في cache خارجي تحت `/tmp`.
+- تحليل YAML، ترجمة Python النحوية، وفحص `git diff --check` نجحت؛ لم يُجر اختبار workflow على GitHub.
+- في لقطة الفحص السابقة ظل `HEAD` والفرع كما هما ولم يكن قد حدث commit أو push. `gh auth status` exit 1 بسبب غياب المصادقة. لم يُنفّذ `lb build` أو QEMU، ولم تُنتج ISO أو سجل إقلاع جديد. لذلك تظل حالة تشغيل `39474948006` والسبب الجذري الدقيق غير محسومين.
+
+### نتائج مراجعة كاملة إضافية — 2026-10-20
+
+- أصلحت مراجعة المشغّل امتداد لقطات `screendump` إلى `.ppm` (بدلاً من `.png` غير المطابق لصيغة QEMU HMP)، وأزيل مفتاح JSON المكرر وبعض الشيفرة غير المستخدمة في `tests/qemu-runner.py`.
+- عُدّل مولد نتائج القبول كي يرفض ISO size أو boot duration غير الرقمي وملف JSON المصدر غير object برسالة خطأ واضحة؛ أضيفت اختبارات رفض لهذه الحالات.
+- عُرّف `CERT_IN` من `ISOX_RELEASE_CERT` في `scripts/build-iso.sh` وأضيف عقد اختبار. هذا يصلح استعمال متغير غير معرّف في المسار الاختياري، لكنه لا يثبت نجاح بناء watermark.
+- بعد ذلك: pytest **12 passed**؛ مجمّع فحوص المصدر **30 PASS / 0 FAIL / 2 NOT_RUN** ورمزه 1 لأن `shellcheck` و`desktop-file-validate` غير متاحين. bash/sh syntax وPython compile وYAML و`xmllint` و`systemd-analyze verify` على rootfs مؤقت اجتازت. QEMU الحقيقي و`lb build` لم ينفذا.
+- بقيت أدوات غير متاحة على المضيف: `shellcheck`, `desktop-file-validate`, `qemu-system-x86_64`, `qemu-img`, `xorriso`, `actionlint`. كما أن `gh auth status` exit 1؛ لم يُشغّل CI ولم تُرفع ملفات.
+- راجعت مرجع GitHub الرسمي لمواصفات hosted runners في 2026-10-20: SSD القياسي 14 GB، وهو أقل من شرط البناء 20 GiB. أُعيدت خطوة تنظيف مسارات أدوات محددة وغير لازمة على VM المستضافة المؤقتة (`/usr/local/lib/android`, `/usr/share/dotnet`, `/opt/ghc`, `/usr/local/share/boost`, `/usr/local/share/chromium`, `/usr/local/share/powershell`) قبل قياس السعة؛ الاختبار الساكن يتحقق من وجودها وترتيبها، ولا يثبت مقدار المساحة الذي ستوفره أو نجاح البناء. المصدر: [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
