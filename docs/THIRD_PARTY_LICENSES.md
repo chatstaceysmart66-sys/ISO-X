@@ -10,12 +10,14 @@
 ## Debian Live Config (reviewed reference; repository not vendored)
 
 - Source: https://github.com/nodiscc/debian-live-config
+- Repository revision inspected: `4856d0f`; the complete 238-entry GitHub tree was reviewed, including the live-build config, package lists, hooks, boot and desktop/service configuration.
 - Reviewed repository `LICENSE`: GNU General Public License version 3.0 (GPL-3.0), and the license text says resulting images contain software packages under various individual licenses.
 - The upstream repository/config tree is **not copied wholesale** into ISO-X. ISO-X has its own `auto/config`, package list and hooks. Therefore the upstream GPL file is recorded as a reviewed reference rather than a license for code copied into this project. If any upstream file is copied in a future change, preserve its copyright headers, the full GPL-3.0 license, and the fact that ISO-X modified it.
 
 ## OxyOS main repository (reviewed reference; code not bundled)
 
 - Source: https://github.com/OxyHQ/OxyOS
+- Repository revision inspected: `815c65f`; the complete 315-entry GitHub tree and the README, live-build config and React/Tauri shell areas were reviewed.
 - The reviewed GitHub repository metadata reported no recognized license (`license: null`) and the 315-entry repository tree did not contain a `LICENSE`, `COPYING`, `COPYRIGHT`, `NOTICE`, or `AUTHORS` file. This does not prove the owner has no separate license grant; it means this audit could not establish permission to redistribute its main-repository source.
 - No OxyOS source files, shell code or artwork have been copied into ISO-X from that repository. Do not vendor/rebrand those files unless a clear license or written permission covering redistribution and modification is obtained. Separate OxyOS sibling repositories may have separate licenses and must be reviewed individually before their contents are used.
 

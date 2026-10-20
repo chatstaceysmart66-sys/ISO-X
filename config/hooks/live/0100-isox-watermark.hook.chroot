@@ -40,8 +40,8 @@ for MODDIR in /lib/modules/*; do
     update-initramfs -u -k "$KVER"
 done
 [[ "$FOUND_KERNEL" -eq 1 ]] || { echo "ISO-X: no kernel headers/build directory were found; refusing an unsigned/unprotected release." >&2; exit 42; }
-# Remove build-only compiler and headers after the module and initramfs are built.
-apt-get purge -y build-essential linux-headers-amd64 >/dev/null
+# Remove the build tool metapackage; keep kernel headers for future maintenance.
+apt-get purge -y build-essential >/dev/null
 # Never store the release private key in the resulting root filesystem.
 rm -f "$KEY" "$CERT"
 rmdir /var/lib/isox-build-secrets 2>/dev/null || true

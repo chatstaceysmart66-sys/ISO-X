@@ -3,6 +3,8 @@
 from pathlib import Path
 import tomllib
 import xml.etree.ElementTree as ET
+import configparser
+import shlex
 
 ROOT = Path(__file__).resolve().parents[1]
 with (ROOT / "three-d-login/Cargo.toml").open("rb") as stream:
@@ -18,7 +20,7 @@ for required in (
     '"$PROJECT_DIR/auto/config"', 'scripts/encode-watermark.py',
     'scripts/isox-run.py', 'scripts/isox-snap-window.sh', 'scripts/secure-vault.py',
     'scripts/toggle-airplane.sh', 'scripts/apply-windows-look.sh',
-    'ISO-X-0.4.0-live-amd64.iso', 'tee "$BUILD_LOG"',
+    'ISO-X-0.4.0-live-amd64.iso', 'tee -a "$BUILD_LOG"',
     '004_isox_040.sql', 'docs/THIRD_PARTY_LICENSES.md',
     'isox-watermark-0.3.1', 'debian-installer-launcher',
 ):
@@ -28,6 +30,11 @@ for required in ('--distribution trixie', '--architectures amd64', '--binary-ima
                  '--bootloaders "syslinux grub-efi"',
                  'username=user hostname=iso-x', '--memtest none'):
     assert required in auto_config, f"Missing live-build configuration: {required}"
+assert '--linux-packages "linux-image"' in auto_config
+assert 'linux-headers-amd64' not in auto_config, "Kernel headers should be optional with the watermark module"
+services_hook = (ROOT / "config/hooks/live/0300-isox-services.hook.chroot").read_text(encoding="utf-8")
+assert "/etc/lightdm/lightdm-gtk-greeter.conf" in services_hook
+assert "iso-x-desktop-wallpaper.png" in services_hook and "iso-x-dragon.png" in services_hook
 assert not any(ROOT.rglob("*.key")), "Private key must not be stored in the source tree"
 assert (ROOT / "build.sh").stat().st_mode & 0o111, "Root one-command build entry point must be executable"
 
@@ -80,11 +87,29 @@ assert len(packages) == len(set(packages)), "Duplicate packages remain in the pa
 assert "debian-installer-launcher" in packages
 for package in ("dmz-cursor-theme", "libnotify-bin", "xfce4-notifyd", "hardinfo", "gnome-calendar", "gnome-disk-utility"):
     assert package in packages, f"Missing requested desktop capability package: {package}"
+assert "fonts-kacst" not in packages and "pinta" not in packages
 assert "firmware-nvidia-graphics" not in packages, "A backports-only package would break the stable-only build"
 assert (ROOT / "desktop/tint2rc").read_text().count("panel_padding =") == 1
 assert "panel_items = LTBSC" in (ROOT / "desktop/tint2rc").read_text()
 assert "pcmanfm --desktop --profile=isox" in build, "Desktop icons and the wallpaper need a desktop manager"
 assert "isox-toggle-airplane" in build and "W-a" in (ROOT / "desktop/openbox-rc.xml").read_text()
+
+desktop = configparser.ConfigParser(interpolation=None)
+desktop.optionxform = str
+desktop.read(ROOT / "desktop/isox-welcome.desktop", encoding="utf-8")
+welcome_exec = shlex.split(desktop["Desktop Entry"]["Exec"])[0]
+assert welcome_exec == "/usr/local/bin/isox-welcome"
+assert "config/includes.chroot/usr/local/bin/isox-welcome" in build
+for xml_path in (ROOT / "desktop/openbox-menu.xml", ROOT / "desktop/openbox-rc.xml"):
+    xml_root = ET.parse(xml_path).getroot()
+    for command_node in xml_root.iter("command"):
+        executable = shlex.split(command_node.text or "")[0]
+        if executable.startswith("/usr/local/bin/"):
+            assert executable.removeprefix("/") in build, f"Unstaged Openbox command: {executable}"
+        elif executable == "dm-tool":
+            assert "lightdm" in packages
+        else:
+            assert executable in packages, f"Openbox command has no package: {executable}"
 
 schema = (ROOT / "db/schema.sql").read_text(encoding="utf-8")
 assert "module_version TEXT NOT NULL DEFAULT '0.3.1'" in schema

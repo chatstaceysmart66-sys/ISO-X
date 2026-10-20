@@ -279,6 +279,50 @@ QEMU_BIOS_EXIT=2
 | P2 | المتصفح واللغة والصوت والطباعة والعتاد | إعدادات ثابتة فقط دون اختبار تشغيل حقيقي | مصفوفة قبول داخل QEMU ثم اختبارات جهاز واقعي للأجهزة الطرفية |
 | P2 | Secure Boot / watermark | مساعد Secure Boot للتحقق فقط، وليس إعداد سلسلة إقلاع موثوقة كاملة | وصف الميزة بدقة واختبار التوقيع/الرفض/المفاتيح الموثوقة بعد تثبيت البيئة |
 
+## 9. متابعة الإصلاح والتحقق — 2026-10-20
+
+هذا القسم أحدث من خط الأساس أعلاه، ويصحح الحالات التي تغيرت. يحتفظ القسم السابق كسجل تاريخي للاختبارات التي أجريت في 2026-10-19؛ لا تُعامل نتائجه كاختبار للتغييرات الحالية.
+
+| المسار | السبب والدليل | الإصلاح المنفذ | اختبار ما بعد الإصلاح |
+|---|---|---|---|
+| `scripts/build-iso.sh` | كانت ملفات `etc/default/locale` و`keyboard` تُكتب قبل ضمان وجود `etc/default`، ما يفشل في تجهيز جديد | إنشاء `config/includes.chroot/etc/default` قبل الكتابة؛ يبقى مجلد البناء غير الفارغ مرفوضاً ولا يمسح تلقائياً | `tests/test_build_contracts.py` يتحقق من ترتيب الإنشاء؛ تشغيل بناء ISO غير متاح حتى الآن |
+| `config/package-lists/iso-x.list.chroot` | أسماء `libgles2-mesa`, `policykit-1`, `fonts-kacst`, `pinta` لم تظهر في فهرس Trixie amd64 الذي فُحص؛ كانت بدائل `libgles2`, `polkitd` ووجود `lxpolkit` محددة في الفهرس | استبدال الاسمين الأولين بأسماء الحزم المؤكدة، حذف `fonts-kacst` و`pinta` بعد تأكيد عدم وجود استعمال لـ Pinta وأن خطوط Noto موجودة | فحص فهرس Debian Trixie amd64 المذكور في سجل الجلسة؛ يلزم إعادة حل كامل للقائمة ضمن `lb build` |
+| `scripts/build-iso.sh`, `config/hooks/live/0100-isox-watermark.hook.chroot`, `initramfs/hooks/isox-watermark`, `initramfs/scripts/init-premount/isox-watermark-guard` | watermark كانت مساراً إلزامياً في صورة البناء؛ غياب الوحدة أو بياناتها كان يمكن أن يحجب الإقلاع، كما كان hook يفرض مفاتيح ورؤوساً على البناء الأساسي | جعل الوحدة والتوقيع اختيارياً عبر `ISOX_ENABLE_WATERMARK=1`، وقصر نسخ hook على الخيار، وتحويل أخطاء حارس initramfs إلى تحذير مع متابعة الإقلاع؛ لا يُدّعى Secure Boot | `bash tests/test_watermark_integrity.sh`, `bash tests/test_secureboot_validation.sh` واختبارات smoke؛ صورة فعلية لم تُبنَ |
+| `scripts/build-iso.sh`, `scripts/install-build-deps.sh` | بناء Bevy/Rust كان مطلوباً ضمن المسار الأساسي ويجري خطر تشغيل تبعيات Rust كـ root | تعطيل المشهد في البناء الافتراضي؛ البناء الاختياري يستخدم حساب صاحب الاستدعاء عند تشغيل السكربت عبر sudo، وتجهيز التبعيات لا يثبت Rust | فحص إعداد المصدر واختبارات البناء؛ Bevy غير مبني ولم يختبر تشغيله |
+| `app/iso_x_gtk.py` | اختصار أرقام 1–4 كان يعترض الكتابة؛ البحث/نسخ الملفات/حفظ المستند قد ينفذ عملاً حاجباً؛ فك ترميز النص قد يستبدل بايتات غير مفهومة | السماح بالاختصارات فقط خارج أدوات إدخال النص، نقل العمليات الثقيلة للخلفية، ورفض حفظ بيانات غير مفكوكة مع كتابة آمنة | ترجمة Python واختبارات المصدر؛ يلزم اختبار GUI بعد بناء ISO |
+| `app/isox_appcenter.py` | الاستعلام عن الحزم كان متزامناً، ولم يظهر تحديث فهارس APT أو تأكيد الإزالة، وكان فشل `pkexec` غير معالج | التحقق بالخلفية، تحديث الفهارس قبل التثبيت وإتاحة تحديث صريح، تأكيد الإزالة، معالجة أخطاء الصلاحية/الشبكة، وتمرير كل تغييرات النظام عبر `pkexec apt-get` | `python3 tests/test_build_contracts.py` و`python3 -m py_compile app/isox_appcenter.py`؛ لم تُختبر GTK على سطح مكتب حي |
+| `auto/config` | كان يطلب `linux-headers` حتى في الصورة الافتراضية رغم جعل وحدة kernel اختيارية | الاقتصار على `linux-image`؛ يضيف إعداد watermark الاختياري `linux-headers-amd64` عند طلبه | `python3 tests/test_source_config.py` — exit 0؛ يلزم بناء الصورة للتحقق من حل live-build |
+| `initramfs/scripts/init-premount/isox-watermark-guard` | `echo /dev/console` وحده لا يضمن ظهور الخطأ عند وجود Plymouth | إرسال الرسالة إلى Plymouth ثم إنهاء splash، مع طباعة console والاستمرار | `bash tests/test_initramfs_watermark_guard.sh` ضمن smoke — exit 0؛ لم يُختبر عرض حقيقي على جهاز |
+| `scripts/secure-vault.py` | أرشيف tar والبيانات المشفرة المؤقتة قد تستهلك tmpfs `/tmp` على أجهزة قليلة الذاكرة | وضع العمل المؤقت بجانب ملف الخزنة/مجلد الاستعادة على قرص الوجهة، مع نقل البيانات على دفعات | `python3 tests/test_secure_vault.py` — exit 0؛ مساحة القرص الفعلية تظل قيد المستخدم |
+| `app/iso_x_gtk.py` | مدير الملفات المخصص كان يوفّر نسخاً فقط، ولا ينفذ النقل أو الحذف المطلوبين | إضافة نقل/حذف مع تأكيد للمستخدم وتشغيل في thread خلفي، ورفض الوجهة الموجودة والنقل إلى مجلد فرعي؛ الحذف دائم ومعلن قبل التأكيد | اختبار عقد في `tests/test_build_contracts.py`؛ ترجمة Python ناجحة؛ لا اختبار GTK تفاعلي في هذه البيئة |
+| `app/isox_appcenter.py` | بطاقتا Evince كانتا تمثلان الحزمة نفسها وتنتجان حالة/اختصارات متكررة | الإبقاء على بطاقة واحدة واختبار تفرد أسماء الحزم في الكتالوج | `python3 tests/test_build_contracts.py` — exit 0 |
+| `scripts/write-usb.sh` | لم يتحقق من sidecar SHA-256 أو سلامة ISO أو سعة القرص قبل `dd` | التحقق من SHA-256 وبنية ISO بواسطة `xorriso`، مقارنة حجم القرص، عرض الهدف والحصول على تأكيد حرفي قبل الكتابة | `bash tests/test_write_usb_validation.sh` — exit 0؛ لا كتابة وسيط حقيقي |
+| `config/hooks/live/0300-isox-services.hook.chroot` | هوية شاشة LightDM لم تكن مضبوطة صراحةً | إعداد خلفية ISO-X وشعارها في LightDM GTK Greeter | اختبار مصدر في `tests/test_source_config.py` — exit 0؛ لا إقلاع مرئي بعد |
+| `scripts/build-iso.sh`, `app/isox_welcome.py`, `three-d-login/src/main.rs` | المشهد الاختياري لم يكن متاحاً من واجهة الترحيب، ونصه يدّعي الانتقال إلى جلسة آمنة رغم أن Bevy ينهي العملية | إضافته للوحة فقط عند وجود executable، مراقبة خروجه، وتصحيح النص ليقول العودة للوحة؛ منع Cargo بصلاحيات root | اختبار عقد/ترجمة Python وBash — exit 0؛ لا GPU أو مشهد مبني للتحقق |
+| `scripts/build-iso.sh`, `app/iso_x_shell.py` | نسخة Tkinter محفوظة كانت تُنسخ إلى ISO دون مشغّل أو `python3-tk`، بينما GTK هي الواجهة الفعلية | إبقاء المصدر التاريخي وعدم تضمينه في الصورة | `python3 tests/test_build_contracts.py` — exit 0 |
+| `scripts/encode-watermark.py`, `scripts/build-iso.sh` | مولّد header كان يكتب إلى شجرة المصدر؛ استدعاء مبكر غير مقصود قبل فحوص البناء جعل اختبار UID يكتشف إنشاء staging قبل الرفض | إضافة output path اختياري وتوليد الرأس داخل staging، ونقل الاستدعاء إلى فرع watermark بعد الحواجز؛ رفض ISO/sidecar سابق بدل استبداله أو الخلط بينه وبين ناتج جديد | `python3 tests/test_build_contracts.py` — exit 0؛ يثبت رفض UID دون إنشاء staging وتطابق header المولّد مع المصدر دون تغييره |
+| `scripts/build-iso.sh`, Openbox autostart | كان IBus يُطلق من autostart مرتين | الاحتفاظ بمشغل Openbox وإزالة ملف XDG الذي ينشئه البناء | اختبار عقد في `tests/test_build_contracts.py` — exit 0 |
+| `README.md`, `docs/ARCHITECTURE_AR.md`, `docs/UPSTREAM_INTEGRATION_AR.md`, `docs/THIRD_PARTY_LICENSES.md` | الوثائق السابقة اشترطت Rust/مفتاحاً دائماً ووصفت watermark كشرط إقلاع، ولم تميز بدقة بين مراجعة مصدر ونسخ كود | تصحيح مسار البناء الاختياري وإضافة مصفوفة توافق/قرار ترخيص مع التزامات المصادر المفحوصة | مراجعة نصية واختبارات التوثيق في `tests/test_build_contracts.py` |
+
+### نتائج البيئة الحالية
+
+- الفرع الحالي `fix/isox-build-and-runtime`؛ التعديلات السابقة محفوظة في شجرة العمل ولم تُدفع إلى remote أثناء هذه الجلسة.
+- الهدف المعلن في `auto/config`: Debian Trixie، amd64، ISO hybrid، Syslinux وGRUB EFI. هذا إعداد وليس إثبات تشغيل.
+- `python3 -m py_compile app/isox_appcenter.py` — exit 0.
+- `python3 tests/test_build_contracts.py` و`python3 tests/test_secure_vault.py` و`bash tests/smoke.sh` — exit 0.
+- تكررت نتيجة `python3 tests/test_build_contracts.py` بعد إصلاح خلل الترتيب الذي أنشأ staging قبل حاجز root؛ exit 0.
+- فحص 146 اسم حزمة من ملفات فهارس Debian Trixie amd64 الرسمية عبر المكونات الأربعة — 0 أسماء مفقودة.
+- فحص 148 اسماً، شاملاً تبعيات watermark الاختيارية (`build-essential`, `linux-headers-amd64`) من فهارس Trixie amd64 — 0 أسماء مفقودة.
+- جولة التسليم الأخيرة: `bash tests/smoke.sh`, Python `py_compile`, Bash/POSIX syntax, XML/SVG، `systemd-analyze verify` داخل staging، و`git diff --check` — جميعها exit 0.
+- `python3 -m pytest -q` — exit 1 (`No module named pytest`)، و`desktop-file-validate`/ShellCheck غير مثبتتين. لم تُجرَ محاولة `sudo` تفاعلية.
+- `bash tests/test_write_usb_validation.sh` — exit 0؛ checksum مطابق قُبل، والمعدل رُفض قبل الكتابة.
+- `python3 tests/test_source_config.py` — exit 0؛ يتضمن فحص ربط desktop/Openbox Exec إلى حزم أو staged launchers.
+- `systemd-analyze verify` على rootfs مؤقت تضمن الوحدات والثنائيات وtargets القياسية — exit 0. ShellCheck و`desktop-file-validate` غير مثبتين.
+- `python3 -m pytest -q` — exit 1 لأن pytest غير مثبت (`No module named pytest`).
+- `./build.sh` — exit 2 عند حاجز root؛ لم يصل إلى `lb build`. فحص QEMU — exit 2 بسبب غياب `xorriso`، ولا تتوفر أدوات QEMU/OVMF.
+- نتيجة الاختبار الكامل والبناء الحالي موثقة في `docs/BUILD_AND_TEST_RESULTS_AR.md`.
+- لا يُسجل نجاح بناء ISO أو إقلاع BIOS/UEFI قبل ظهور ملف ISO واختباره فعلياً؛ قائمة اختبارات العتاد في `docs/HARDWARE_ACCEPTANCE_CHECKLIST_AR.md` لا تزال غير منفذة.
+
 ## 9. حدود هذا التقرير
 
 هذا التقرير خط أساس من الأوامر التي نُفذت فعليًا وفحص ملفات المصدر الموجودة. لم تُجر تغييرات على منطق التطبيقات قبل تدوين هذه النتائج. المرحلة التالية ستنفذ الإصلاحات المسجلة واحدًا تلو الآخر، وتضيف لكل إصلاح السبب والمكان والدليل وإعادة الاختبار في `CHANGELOG.md` و`AUDIT.md`. لن توصف صورة بأنها جاهزة قبل وجود ISO ذي بصمة، وفحص بنية الوسيط، واختبار إقلاع BIOS وUEFI، وتسجيل الحالات غير القابلة للاختبار على هذه البيئة.

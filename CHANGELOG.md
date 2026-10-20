@@ -1,5 +1,24 @@
 # ISO-X — سجل التغييرات
 
+## 2026-10-20 — إصلاح البناء والتشغيل (قيد التحقق النهائي)
+
+- `scripts/build-iso.sh`: ضمان إنشاء `etc/default` قبل توليد إعدادات locale ولوحة المفاتيح؛ إبقاء مسار الإخراج ومراجعة ISO وبصمة SHA-256 بعد نجاح `lb build` فقط.
+- `config/package-lists/iso-x.list.chroot`: استخدام أسماء Trixie التي ظهرت في الفهرس (`libgles2`, `polkitd`) وحذف `fonts-kacst` و`pinta` غير المتاحتين؛ لم يُحذف ملف تطبيق مستخدم.
+- `scripts/build-iso.sh`, hook/initramfs watermark: فصل وحدة watermark الاختيارية عن مسار الإقلاع والبناء الأساسي؛ تحذير واستمرار عند غيابها/تعطلها. الميزة لا تساوي Secure Boot ولا تحمي من تعديل boot chain.
+- `scripts/build-iso.sh`, `scripts/install-build-deps.sh`: جعل بناء Bevy اختيارياً وعدم تثبيت Rust كـ root ضمن تجهيز المضيف؛ لا تُشغّل الجلسة أربع طرفيات تلقائياً.
+- `auto/config`: جعل headers اختيارية مع watermark فقط؛ اختبار guard صار يثبت إرسال الخطأ إلى Plymouth ومتابعة الإقلاع. `scripts/secure-vault.py` يستخدم قرص المخرج للملفات الوسيطة الكبيرة لتقليل ضغط tmpfs.
+- `config/hooks/live/0300-isox-services.hook.chroot`: ضبط خلفية وشعار ISO-X في LightDM GTK Greeter. إزالة تكرار IBus من XDG autostart، مع نقطة Openbox واحدة.
+- `app/isox_welcome.py`, `three-d-login/src/main.rs`: إتاحة Bevy اختيارياً من لوحة الترحيب فقط عند وجوده، وتنبيه المستخدم عند فشله وتصحيح النص. البناء يمنع تشغيل Cargo كـ root.
+- `scripts/write-usb.sh`: التحقق من SHA-256 وبنية ISO وسعة وسيط USB وعرض الجهاز والتأكيد النصي قبل `dd`؛ أضيف اختبار checksum لا يكتب إلى جهاز.
+- `scripts/encode-watermark.py`, `scripts/build-iso.sh`: توجيه header المولد إلى staging بدلاً من تعديل المصدر، ورفض وجود ISO قديم قبل البناء حتى لا يُخلط artifact سابق بنتيجة جديدة.
+- `app/iso_x_gtk.py`: السماح بكتابة الأرقام في أدوات الإدخال، وتحسين عدم إتلاف الملفات عند الترميز/الحفظ، ونقل البحث/النسخ إلى الخلفية ومنع نسخ مجلد إلى نفسه أو تحته.
+- `app/iso_x_gtk.py`: إضافة نقل الملفات وحذفها بتأكيد، مع تنفيذ العمليات الثقيلة بالخلفية ومنع الكتابة فوق الوجهات؛ الحذف نهائي. إزالة بطاقة PDF المكررة من مركز التطبيقات دون حذف ملفات مصدر.
+- `scripts/build-iso.sh`: عدم تضمين نسخة Tkinter التاريخية غير المستعملة في الصورة؛ بقي `app/iso_x_shell.py` في المصدر للتوافق/المرجع ولم يُحذف.
+- `app/isox_appcenter.py`: فحص حالة الحزم بالخلفية؛ إتاحة تحديث الفهارس ومعالجة أخطاء الشبكة والصلاحيات، مع `pkexec` وتأكيد الإزالة.
+- `tests/test_build_contracts.py`, `tests/test_initramfs_watermark_guard.sh`, `tests/test_write_usb_validation.sh`, `tests/test_secure_vault.py`, `tests/smoke.sh`: إضافة اختبارات عقود وتشغيل لحارس الإقلاع، وحاجز build غير root، والتحقق من USB، وموقع ملفات الخزنة المؤقتة، وتشغيلها من smoke حتى دون pytest.
+- `README.md`, `AUDIT.md`, `docs/ARCHITECTURE_AR.md`, `docs/UPSTREAM_INTEGRATION_AR.md`, `docs/THIRD_PARTY_LICENSES.md`: تحديث الحالة وتوثيق الالتزامات ومصفوفة التوافق. لا يوجد كود من OxyOS منسوخ لعدم ظهور ترخيص يسمح بإعادة التوزيع؛ إعداد Debian Live Config لم ينسخ حرفياً.
+- لم ينتج هذا السجل ISO؛ أوامر البناء/الإقلاع وملفات الخرج لا توصف بالنجاح قبل الاختبار الفعلي.
+
 ## 2026-10-19 — مرحلة خط الأساس قبل الإصلاح
 
 - أُضيف `AUDIT.md` لتسجيل نتائج النسخة الاحتياطية وفحص ملفات البناء والحزم والإقلاع والاختبارات قبل تعديلات الكود.

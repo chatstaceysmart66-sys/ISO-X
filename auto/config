@@ -25,7 +25,7 @@ lb config noauto \
   --firmware-binary true \
   --firmware-chroot true \
   --initramfs live-boot \
-  --linux-packages "linux-image linux-headers" \
+  --linux-packages "linux-image" \
   --iso-application "ISO-X 0.4.0" \
   --iso-publisher "ISO-X / Abdullah Lazim" \
   --iso-volume "ISOX040_LIVE" \

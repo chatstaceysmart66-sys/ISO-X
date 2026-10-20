@@ -1,6 +1,6 @@
 //! ISO-X 3D cinematic prototype.
-//! IMPORTANT: this is a visual splash only. It deliberately does NOT collect
-//! passwords or replace LightDM/PAM. Press Enter or wait ~9 seconds to continue.
+//! IMPORTANT: this is an optional visual scene only. It does NOT collect
+//! passwords or replace LightDM/PAM. Press Enter or wait ~9 seconds to close it.
 use bevy::prelude::*;
 use bevy::app::AppExit;
 use std::time::Duration;
@@ -139,7 +139,7 @@ fn setup(
     commands.spawn((Text2d::new("مشهد ترحيبي بصري — المصادقة الحقيقية يديرها LightDM / PAM"),
         TextFont { font_size: 18.0, ..default() }, TextColor(Color::srgb(0.64, 0.72, 0.84)),
         Transform::from_xyz(0.0, -2.0, 1.7)));
-    commands.spawn((Text2d::new("اضغط Enter للمتابعة إلى الجلسة الآمنة"),
+    commands.spawn((Text2d::new("اضغط Enter للإغلاق والعودة إلى لوحة الترحيب"),
         TextFont { font_size: 21.0, ..default() }, TextColor(Color::srgb(1.0, 0.43, 0.0)),
         Transform::from_xyz(0.0, -2.45, 1.7)));
 }

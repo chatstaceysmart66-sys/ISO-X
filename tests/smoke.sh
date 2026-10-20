@@ -12,11 +12,13 @@ python3 -m py_compile \
   "$ROOT/scripts/encode-watermark.py" \
   "$ROOT/scripts/isox-speedtest" \
   "$ROOT/tests/test_upstream_integration.py" \
+  "$ROOT/tests/test_build_contracts.py" \
   "$ROOT/tests/test_schema.py" \
   "$ROOT/tests/test_source_config.py" \
   "$ROOT/tests/test_secure_vault.py"
 python3 "$ROOT/tests/test_schema.py"
 python3 "$ROOT/tests/test_source_config.py"
+python3 "$ROOT/tests/test_build_contracts.py"
 python3 "$ROOT/tests/test_upstream_integration.py"
 python3 "$ROOT/tests/test_secure_vault.py"
 bash -n \
@@ -28,12 +30,16 @@ bash -n \
   "$ROOT/config/hooks/live/0100-isox-watermark.hook.chroot" \
   "$ROOT/config/hooks/live/0050-isox-locales.hook.chroot" "$ROOT/config/hooks/live/0200-isox-plymouth.hook.chroot" \
   "$ROOT/config/hooks/live/0300-isox-services.hook.chroot" \
-  "$ROOT/tests/test_watermark_integrity.sh" "$ROOT/tests/test_secureboot_validation.sh" "$ROOT/tests/qemu-acceptance.sh" "$ROOT/initramfs/hooks/isox-watermark" \
+  "$ROOT/tests/test_watermark_integrity.sh" "$ROOT/tests/test_secureboot_validation.sh" \
+  "$ROOT/tests/test_initramfs_watermark_guard.sh" "$ROOT/tests/qemu-acceptance.sh" "$ROOT/initramfs/hooks/isox-watermark" \
+  "$ROOT/tests/test_write_usb_validation.sh" \
   "$ROOT/initramfs/scripts/init-premount/isox-watermark-guard" "$ROOT/auto/config"
 sh -n "$ROOT/initramfs/hooks/isox-watermark" "$ROOT/initramfs/scripts/init-premount/isox-watermark-guard"
 if command -v openssl >/dev/null 2>&1; then
   bash "$ROOT/tests/test_watermark_integrity.sh"
   bash "$ROOT/tests/test_secureboot_validation.sh"
+  bash "$ROOT/tests/test_initramfs_watermark_guard.sh"
+  bash "$ROOT/tests/test_write_usb_validation.sh"
 else
   echo "SKIP: OpenSSL not installed"
 fi

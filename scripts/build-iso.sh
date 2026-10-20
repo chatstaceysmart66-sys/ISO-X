@@ -6,7 +6,7 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${ISOX_BUILD_DIR:-${PROJECT_DIR}/build-live}"
 DIST="trixie"
 KEY_IN="${ISOX_RELEASE_KEY:-}"
-CERT_IN="${ISOX_RELEASE_CERT:-}"
+WATERMARK_ENABLED="${ISOX_ENABLE_WATERMARK:-0}"
 STAGED_KEY="${BUILD_DIR}/config/includes.chroot/var/lib/isox-build-secrets/isox-release.key"
 STAGED_CERT="${BUILD_DIR}/config/includes.chroot/var/lib/isox-build-secrets/isox-release.crt"
 CLEAN_STAGED=0
@@ -47,49 +47,75 @@ if [[ "$OS_ID" != debian || "$OS_CODENAME" != trixie ]]; then
   fi
 fi
 [[ "$(dpkg --print-architecture)" == amd64 ]] || { echo "يتطلب البناء معمارية amd64." >&2; exit 2; }
+[[ "$WATERMARK_ENABLED" == 0 || "$WATERMARK_ENABLED" == 1 ]] || { echo "ISOX_ENABLE_WATERMARK يقبل 0 أو 1 فقط." >&2; exit 2; }
 FREE_KB="$(df -Pk "$PROJECT_DIR" | awk 'NR==2 {print $4}')"
 MEM_KB="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
 (( FREE_KB >= 20*1024*1024 )) || { echo "تحتاج مساحة فارغة لا تقل عن 20 GiB؛ المتاح: $((FREE_KB/1024/1024)) GiB." >&2; exit 2; }
 (( MEM_KB >= 4*1024*1024 )) || { echo "تحتاج ذاكرة RAM لا تقل عن 4 GiB؛ المتاح: $((MEM_KB/1024/1024)) MiB." >&2; exit 2; }
-for cmd in lb xorriso debootstrap mksquashfs cargo rustc openssl; do
+for cmd in lb xorriso debootstrap mksquashfs openssl; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "المتطلب غير موجود: $cmd" >&2; exit 3; }
 done
-RUST_VERSION="$(rustc --version | awk '{print $2}')"
-echo "Rust toolchain: ${RUST_VERSION}; Bevy requires a current stable Rust compiler."
-cargo --version
-if [[ -z "$KEY_IN" || -z "$CERT_IN" || ! -r "$KEY_IN" || ! -r "$CERT_IN" ]]; then
-  echo "مرّر مفتاح وشهادة الإصدار عبر ISOX_RELEASE_KEY=/secure/key.pem ISOX_RELEASE_CERT=/secure/cert.crt." >&2
-  echo "أنشئ هوية اختبار محلية بواسطة scripts/generate-dev-signing-key.sh؛ لا تضع المفتاح الخاص داخل ZIP أو ISO." >&2
-  exit 5
-fi
-FONT_SOURCE="$(find /usr/share/fonts -type f \( -iname 'NotoSansArabic-Regular.ttf' -o -iname 'NotoSansArabic-VF.ttf' \) -print -quit 2>/dev/null || true)"
-if [[ -z "$FONT_SOURCE" ]]; then
-  echo "خط Noto Sans Arabic غير موجود على مضيف البناء. ثبّت fonts-noto-core أولًا." >&2; exit 6
+if [[ "$WATERMARK_ENABLED" == 1 ]]; then
+  for cmd in make openssl; do
+    command -v "$cmd" >/dev/null 2>&1 || { echo "المتطلب الاختياري غير موجود: $cmd" >&2; exit 3; }
+  done
+  if [[ -z "$KEY_IN" || -z "$CERT_IN" || ! -r "$KEY_IN" || ! -r "$CERT_IN" ]]; then
+    echo "عند تفعيل watermark، مرّر ISOX_RELEASE_KEY وISOX_RELEASE_CERT من خارج المستودع." >&2
+    exit 5
+  fi
+else
+  echo "وحدة watermark معطّلة افتراضيًا ولا تشارك في الإقلاع الأساسي."
 fi
 if [[ -e "${BUILD_DIR}/config" || ( -d "$BUILD_DIR" && -n "$(find "$BUILD_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ) ]]; then
   echo "مجلد بناء غير فارغ: ${BUILD_DIR}; لن أحذفه أو أعيد استخدامه تلقائيًا. انقله/احذفه يدويًا بعد التأكد من محتوياته." >&2; exit 7
 fi
+for artifact in "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso" "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso.sha256"; do
+  if [[ -e "$artifact" ]]; then
+    echo "ناتج إصدار سابق موجود: $artifact؛ انقله يدوياً قبل بدء بناء جديد كي لا يلتبس مع ناتج هذه المحاولة." >&2
+    exit 7
+  fi
+done
 
 # Never place private material under the source tree permanently.
 # Generate the source header as the project owner (not root where invoked via sudo).
-# The 3D scene is a visual welcome animation only; LightDM/PAM remains the
-# actual authentication boundary.
-if [[ "$BUILD_USER" != root && -n "$BUILD_USER_HOME" ]]; then
-  sudo -u "$BUILD_USER" env HOME="$BUILD_USER_HOME" \
-    "$PROJECT_DIR/scripts/encode-watermark.py"
-  sudo -u "$BUILD_USER" env HOME="$BUILD_USER_HOME" \
-    CARGO_HOME="$BUILD_USER_HOME/.cargo" RUSTUP_HOME="$BUILD_USER_HOME/.rustup" \
-    PATH="$BUILD_USER_HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin" \
-    cargo build --release --manifest-path "$PROJECT_DIR/three-d-login/Cargo.toml"
-else
-  "$PROJECT_DIR/scripts/encode-watermark.py"
-  cargo build --release --manifest-path "$PROJECT_DIR/three-d-login/Cargo.toml"
-fi
 CINEMATIC_BIN="$PROJECT_DIR/three-d-login/target/release/isox-cinematic"
-[[ -x "$CINEMATIC_BIN" ]] || { echo "Bevy build did not produce isox-cinematic" >&2; exit 8; }
+CINEMATIC_READY=0
+if [[ "${ISOX_BUILD_CINEMATIC:-0}" == 1 ]]; then
+  if command -v cargo >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1; then
+    if [[ "$BUILD_USER" != root && -n "$BUILD_USER_HOME" ]]; then
+      if sudo -u "$BUILD_USER" env HOME="$BUILD_USER_HOME" \
+        CARGO_HOME="$BUILD_USER_HOME/.cargo" RUSTUP_HOME="$BUILD_USER_HOME/.rustup" \
+        PATH="$BUILD_USER_HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin" \
+        cargo build --release --manifest-path "$PROJECT_DIR/three-d-login/Cargo.toml"; then
+        CINEMATIC_READY=1
+      fi
+    else
+      echo "تحذير: لن تُبنى تبعيات Bevy بصلاحيات root؛ استخدم sudo من حساب عادي أو عطّل المشهد." >&2
+    fi
+    if [[ "$CINEMATIC_READY" -ne 1 ]]; then
+      echo "تحذير: تعذر بناء مشهد Bevy الاختياري؛ سيستمر بناء سطح المكتب بدونه." >&2
+    fi
+  else
+    echo "تحذير: ISOX_BUILD_CINEMATIC=1 لكن Rust/Cargo غير متوفرين؛ سيُبنى النظام من دونه." >&2
+  fi
+else
+  echo "مشهد Bevy معطّل افتراضيًا؛ استخدم ISOX_BUILD_CINEMATIC=1 لبنائه اختياريًا."
+fi
 
 mkdir -p "$BUILD_DIR"
+BUILD_LOG="${ISOX_BUILD_LOG:-${BUILD_DIR}/isox-build.log}"
+mkdir -p "$(dirname -- "$BUILD_LOG")"
+exec > >(tee -a "$BUILD_LOG") 2>&1
 cd "$BUILD_DIR"
+printf 'ISO-X build started: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf 'Host: %s/%s %s\n' "$OS_ID" "$OS_CODENAME" "$(dpkg --print-architecture)"
+uname -a
+for cmd in lb xorriso debootstrap mksquashfs openssl; do
+  printf '%s: ' "$cmd"
+  "$cmd" --version 2>&1 | sed -n '1p' || true
+done
+dpkg-query -W -f='${Package}=${Version}\n' live-build debootstrap squashfs-tools xorriso openssl
+df -h "$PROJECT_DIR"
 "$PROJECT_DIR/auto/config"
 
 mkdir -p config/package-lists \
@@ -97,16 +123,11 @@ mkdir -p config/package-lists \
   config/includes.chroot/usr/share/doc/iso-x \
   config/includes.chroot/usr/share/backgrounds/iso-x \
   config/includes.chroot/usr/share/icons/hicolor/scalable/apps \
-  config/includes.chroot/usr/share/iso-x/cinematic-assets/fonts \
-  config/includes.chroot/usr/share/iso-x/cinematic-assets/images \
   config/includes.chroot/usr/local/bin \
   config/includes.chroot/usr/local/sbin \
   config/includes.chroot/usr/share/applications \
   config/includes.chroot/usr/lib/systemd/user \
   config/includes.chroot/usr/share/iso-x/db/migrations \
-  config/includes.chroot/usr/src/isox-watermark-0.3.1 \
-  config/includes.chroot/etc/initramfs-tools/hooks \
-  config/includes.chroot/etc/initramfs-tools/scripts/init-premount \
   config/includes.chroot/etc/systemd/system/multi-user.target.wants \
   config/includes.chroot/etc/skel/.config/openbox \
   config/includes.chroot/etc/skel/.config/tint2 \
@@ -114,16 +135,21 @@ mkdir -p config/package-lists \
   "config/includes.chroot/etc/skel/سطح المكتب" \
   config/includes.chroot/etc/xdg/openbox \
   config/hooks/live \
-  config/includes.chroot/etc/NetworkManager \
-  config/includes.chroot/var/lib/isox-build-secrets
-
-# Put the client key in the temporary chroot only after the build configuration exists.
-# Enable EXIT cleanup immediately before the first secret copy.
-CLEAN_STAGED=1
-install -m 0600 "$KEY_IN" "$STAGED_KEY"
-install -m 0644 "$CERT_IN" "$STAGED_CERT"
+  config/includes.chroot/etc/NetworkManager
 
 install -m 0644 "$PROJECT_DIR/config/package-lists/iso-x.list.chroot" config/package-lists/iso-x.list.chroot
+if [[ "$WATERMARK_ENABLED" == 1 ]]; then
+  mkdir -p config/includes.chroot/usr/src/isox-watermark-0.3.1 \
+    config/includes.chroot/etc/initramfs-tools/hooks \
+    config/includes.chroot/etc/initramfs-tools/scripts/init-premount \
+    config/includes.chroot/var/lib/isox-build-secrets
+  printf '%s\n' build-essential linux-headers-amd64 >> config/package-lists/iso-x.list.chroot
+  ISOX_WATERMARK_OUTPUT="$BUILD_DIR/config/includes.chroot/usr/src/isox-watermark-0.3.1/watermark_bytes.h" \
+    "$PROJECT_DIR/scripts/encode-watermark.py"
+  CLEAN_STAGED=1
+  install -m 0600 "$KEY_IN" "$STAGED_KEY"
+  install -m 0644 "$CERT_IN" "$STAGED_CERT"
+fi
 
 
 install -m 0644 "$PROJECT_DIR/app/iso_x_gtk.py" config/includes.chroot/usr/share/iso-x/iso_x_gtk.py
@@ -135,11 +161,12 @@ install -m 0644 "$PROJECT_DIR/README_AR.md" config/includes.chroot/usr/share/doc
 install -m 0644 "$PROJECT_DIR/THIRD_PARTY_NOTICES.md" config/includes.chroot/usr/share/doc/iso-x/THIRD_PARTY_NOTICES.md
 install -m 0644 "$PROJECT_DIR/docs/THIRD_PARTY_LICENSES.md" config/includes.chroot/usr/share/doc/iso-x/THIRD_PARTY_LICENSES.md
 install -m 0644 "$PROJECT_DIR/docs/UPSTREAM_INTEGRATION_AR.md" config/includes.chroot/usr/share/doc/iso-x/UPSTREAM_INTEGRATION_AR.md
+install -m 0644 "$PROJECT_DIR/docs/ARCHITECTURE_AR.md" config/includes.chroot/usr/share/doc/iso-x/ARCHITECTURE_AR.md
+install -m 0644 "$PROJECT_DIR/docs/BUILD_AND_TEST_RESULTS_AR.md" config/includes.chroot/usr/share/doc/iso-x/BUILD_AND_TEST_RESULTS_AR.md
 install -m 0644 "$PROJECT_DIR/docs/HARDWARE_ACCEPTANCE_CHECKLIST_AR.md" config/includes.chroot/usr/share/doc/iso-x/HARDWARE_ACCEPTANCE_CHECKLIST_AR.md
 install -m 0644 "$PROJECT_DIR/docs/UPSTREAM_REVIEW_AR.md" config/includes.chroot/usr/share/doc/iso-x/UPSTREAM_REVIEW_AR.md
 install -m 0755 "$PROJECT_DIR/scripts/isox-speedtest" config/includes.chroot/usr/local/bin/isox-speedtest
 install -m 0755 "$PROJECT_DIR/scripts/write-usb.sh" config/includes.chroot/usr/local/sbin/isox-write-usb
-install -m 0644 "$PROJECT_DIR/app/iso_x_shell.py" config/includes.chroot/usr/share/iso-x/iso_x_shell_0.1.py
 install -m 0644 "$PROJECT_DIR/db/schema.sql" config/includes.chroot/usr/share/iso-x/db/schema.sql
 install -m 0644 "$PROJECT_DIR/db/migrations/002_isox_020.sql" config/includes.chroot/usr/share/iso-x/db/migrations/002_isox_020.sql
 install -m 0644 "$PROJECT_DIR/db/migrations/003_isox_031.sql" config/includes.chroot/usr/share/iso-x/db/migrations/003_isox_031.sql
@@ -153,15 +180,23 @@ install -m 0644 "$PROJECT_DIR/plymouth/isox/isox.script" config/includes.chroot/
 install -m 0644 "$PROJECT_DIR/assets/iso-x-desktop-wallpaper.svg" config/includes.chroot/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.svg
 install -m 0644 "$PROJECT_DIR/assets/iso-x-desktop-wallpaper.png" config/includes.chroot/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.png
 install -m 0644 "$PROJECT_DIR/assets/iso-x-dragon.svg" config/includes.chroot/usr/share/icons/hicolor/scalable/apps/iso-x.svg
-install -m 0755 "$CINEMATIC_BIN" config/includes.chroot/usr/local/bin/isox-cinematic
-install -m 0644 "$FONT_SOURCE" config/includes.chroot/usr/share/iso-x/cinematic-assets/fonts/NotoSansArabic-Regular.ttf
-install -m 0644 "$PROJECT_DIR/assets/iso-x-dragon.png" config/includes.chroot/usr/share/iso-x/cinematic-assets/images/iso-x-dragon.png
+if [[ "$CINEMATIC_READY" -eq 1 && -x "$CINEMATIC_BIN" ]]; then
+  FONT_SOURCE="$(find /usr/share/fonts -type f \( -iname 'NotoSansArabic-Regular.ttf' -o -iname 'NotoSansArabic-VF.ttf' \) -print -quit 2>/dev/null || true)"
+  if [[ -n "$FONT_SOURCE" ]]; then
+    install -m 0755 "$CINEMATIC_BIN" config/includes.chroot/usr/local/bin/isox-cinematic
+    install -D -m 0644 "$FONT_SOURCE" config/includes.chroot/usr/share/iso-x/cinematic-assets/fonts/NotoSansArabic-Regular.ttf
+    install -D -m 0644 "$PROJECT_DIR/assets/iso-x-dragon.png" config/includes.chroot/usr/share/iso-x/cinematic-assets/images/iso-x-dragon.png
+  else
+    echo "تحذير: لا يوجد خط مشهد Bevy على المضيف؛ سيُستبعد المشهد من الصورة." >&2
+  fi
+fi
 install -m 0644 "$PROJECT_DIR/assets/iso-x-plymouth.png" config/includes.chroot/usr/share/iso-x/assets/iso-x-plymouth.png
-install -m 0644 "$PROJECT_DIR/kernel/isox-watermark/isox_watermark.c" config/includes.chroot/usr/src/isox-watermark-0.3.1/isox_watermark.c
-install -m 0644 "$PROJECT_DIR/kernel/isox-watermark/Makefile" config/includes.chroot/usr/src/isox-watermark-0.3.1/Makefile
-install -m 0644 "$PROJECT_DIR/kernel/isox-watermark/watermark_bytes.h" config/includes.chroot/usr/src/isox-watermark-0.3.1/watermark_bytes.h
-install -m 0644 "$PROJECT_DIR/initramfs/hooks/isox-watermark" config/includes.chroot/etc/initramfs-tools/hooks/isox-watermark
-install -m 0755 "$PROJECT_DIR/initramfs/scripts/init-premount/isox-watermark-guard" config/includes.chroot/etc/initramfs-tools/scripts/init-premount/isox-watermark-guard
+if [[ "$WATERMARK_ENABLED" == 1 ]]; then
+  install -m 0644 "$PROJECT_DIR/kernel/isox-watermark/isox_watermark.c" config/includes.chroot/usr/src/isox-watermark-0.3.1/isox_watermark.c
+  install -m 0644 "$PROJECT_DIR/kernel/isox-watermark/Makefile" config/includes.chroot/usr/src/isox-watermark-0.3.1/Makefile
+  install -m 0644 "$PROJECT_DIR/initramfs/hooks/isox-watermark" config/includes.chroot/etc/initramfs-tools/hooks/isox-watermark
+  install -m 0755 "$PROJECT_DIR/initramfs/scripts/init-premount/isox-watermark-guard" config/includes.chroot/etc/initramfs-tools/scripts/init-premount/isox-watermark-guard
+fi
 install -m 0755 "$PROJECT_DIR/scripts/isox-zram-setup" config/includes.chroot/usr/local/sbin/isox-zram-setup
 install -m 0755 "$PROJECT_DIR/scripts/isox-preload.py" config/includes.chroot/usr/local/bin/isox-preload
 install -m 0644 "$PROJECT_DIR/systemd/isox-zram.service" config/includes.chroot/etc/systemd/system/isox-zram.service
@@ -172,7 +207,9 @@ install -m 0644 "$PROJECT_DIR/systemd/isox-preload.timer" config/includes.chroot
 # the user enables preload in ISO-X settings; no telemetry or application launches.
 ln -sfn /usr/lib/systemd/user/isox-preload.timer config/includes.chroot/etc/skel/.config/systemd/user/timers.target.wants/isox-preload.timer
 install -m 0755 "$PROJECT_DIR/config/hooks/live/0050-isox-locales.hook.chroot" config/hooks/live/0050-isox-locales.hook.chroot
-install -m 0755 "$PROJECT_DIR/config/hooks/live/0100-isox-watermark.hook.chroot" config/hooks/live/0100-isox-watermark.hook.chroot
+if [[ "$WATERMARK_ENABLED" == 1 ]]; then
+  install -m 0755 "$PROJECT_DIR/config/hooks/live/0100-isox-watermark.hook.chroot" config/hooks/live/0100-isox-watermark.hook.chroot
+fi
 install -m 0755 "$PROJECT_DIR/config/hooks/live/0200-isox-plymouth.hook.chroot" config/hooks/live/0200-isox-plymouth.hook.chroot
 install -m 0755 "$PROJECT_DIR/config/hooks/live/0300-isox-services.hook.chroot" config/hooks/live/0300-isox-services.hook.chroot
 install -m 0755 "$PROJECT_DIR/config/hooks/live/0400-isox-firefox-defaults.hook.chroot" config/hooks/live/0400-isox-firefox-defaults.hook.chroot
@@ -199,7 +236,7 @@ install -D -m 0644 "$PROJECT_DIR/desktop/openbox-menu.xml" config/includes.chroo
 # Seed GTK/PCManFM dark theme, Arabic special folders, wallpaper, and the user desktop profile.
 ISOX_TARGET_HOME="$BUILD_DIR/config/includes.chroot/etc/skel" "$PROJECT_DIR/scripts/apply-windows-look.sh"
 # Arabic-first locale and Baghdad time; keep English available for mixed-language workflows.
-mkdir -p config/includes.chroot/etc
+mkdir -p config/includes.chroot/etc/default
 cat > config/includes.chroot/etc/locale.gen <<'LOCALES'
 ar_IQ.UTF-8 UTF-8
 ar_SA.UTF-8 UTF-8
@@ -223,15 +260,6 @@ GTK_IM_MODULE=ibus
 QT_IM_MODULE=ibus
 XMODIFIERS=@im=ibus
 ENVIRONMENT
-mkdir -p config/includes.chroot/etc/xdg/autostart
-cat > config/includes.chroot/etc/xdg/autostart/ibus-daemon.desktop <<'IBUS'
-[Desktop Entry]
-Type=Application
-Name=Arabic and multilingual input
-Exec=ibus-daemon -drx
-Terminal=false
-NoDisplay=true
-IBUS
 cat > config/includes.chroot/usr/local/bin/iso-x <<'LAUNCH'
 #!/bin/sh
 exec /usr/bin/python3 /usr/share/iso-x/iso_x_gtk.py "$@"
@@ -363,21 +391,19 @@ fi
 if command -v ibus-daemon >/dev/null 2>&1; then
   ibus-daemon -drx >/tmp/isox-ibus.log 2>&1 &
 fi
-if command -v isox-cinematic >/dev/null 2>&1; then
-  /usr/local/bin/isox-cinematic || true
-fi
 exec /usr/local/bin/iso-x
 AUTOSTART
 chmod 0755 config/includes.chroot/etc/skel/.config/openbox/autostart
 
 # Build, verify output exists, then create release hash.
-BUILD_LOG="${ISOX_BUILD_LOG:-/tmp/lb-build.log}"
 echo "Build log: ${BUILD_LOG}"
-lb build 2>&1 | tee "$BUILD_LOG"
+lb build
 ISO_PATH="${BUILD_DIR}/live-image-amd64.hybrid.iso"
 [[ -s "$ISO_PATH" ]] || { echo "لم ينتج live-build ملف ISO متوقعًا؛ افحص سجل البناء." >&2; exit 9; }
+xorriso -indev "$ISO_PATH" -pvd_info >/dev/null || { echo "فشل فحص بنية ISO الناتجة؛ لن تُنشر الصورة." >&2; exit 10; }
 cp -f "$ISO_PATH" "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso"
 sha256sum "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso" > "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso.sha256"
+sha256sum --check "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso.sha256" >/dev/null || { echo "فشل تحقق SHA-256 للصورة الناتجة." >&2; exit 11; }
 echo "ISO generated: $PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso"
 echo "SHA256: $(cut -d' ' -f1 "$PROJECT_DIR/ISO-X-0.4.0-live-amd64.iso.sha256")"
 echo "NOTE: boot-performance and GUI acceptance testing remain a separate required step."

@@ -6,6 +6,7 @@ import os
 import platform
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 import gi
@@ -29,6 +30,7 @@ ACTIONS = {
     "installer": (["debian-installer-launcher"],),
     "monitor": (["xfce4-taskmanager"],),
     "terminal": (["xfce4-terminal"],),
+    "cinematic": (["/usr/local/bin/isox-cinematic"],),
 }
 
 CSS = b"""
@@ -142,6 +144,8 @@ class WelcomeWindow(Gtk.Window):
             ("الطرفية", "terminal", "utilities-terminal", False),
             ("تثبيت ISO-X على القرص", "installer", "drive-harddisk", True),
         ]
+        if find_available_command(command_candidates("cinematic")):
+            button_data.insert(1, ("مشهد ISO-X الاختياري", "cinematic", "applications-graphics", False))
         for i, (label, key, icon_name, is_install) in enumerate(button_data):
             btn = Gtk.Button()
             btn.get_style_context().add_class("install" if is_install else "action")
@@ -217,9 +221,19 @@ class WelcomeWindow(Gtk.Window):
             if response != Gtk.ResponseType.OK:
                 return
         try:
-            subprocess.Popen(argv, close_fds=True, start_new_session=True)
+            process = subprocess.Popen(argv, close_fds=True, start_new_session=True)
+            if key == "cinematic":
+                threading.Thread(target=self._monitor_cinematic, args=(process,), daemon=True).start()
         except OSError as exc:
             self._message(Gtk.MessageType.ERROR, "تعذر فتح الأداة", f"{argv[0]}\n{exc}")
+
+    def _monitor_cinematic(self, process):
+        result = process.wait()
+        if result:
+            GLib.idle_add(
+                self._message, Gtk.MessageType.WARNING, "تعذر تشغيل المشهد الاختياري",
+                "أُغلقت العملية أو تعذر بدء العرض الرسومي. بقيت لوحة الترحيب متاحة؛ يمكنك متابعة استخدام ISO-X.",
+            )
 
     def _show_sources(self, *_args):
         msg = (

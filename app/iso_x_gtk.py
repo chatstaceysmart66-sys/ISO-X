@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ISO-X GTK3 desktop shell, 0.4.0. All telemetry is local-only and opt-in."""
 from __future__ import annotations
-import os, sys, time, json, shutil, subprocess, platform, sqlite3, hashlib
+import os, sys, time, json, shutil, subprocess, platform, sqlite3, hashlib, threading, tempfile
 from pathlib import Path
 
 import gi
@@ -147,7 +147,11 @@ class ISOXGtk(Gtk.Window):
     def on_key_press(self, _widget, event):
         key = Gdk.keyval_name(event.keyval) or ""
         if key in ("1", "2", "3", "4") and not (event.state & Gdk.ModifierType.CONTROL_MASK):
-            self.switch_page(int(key) - 1); return True
+            focus = self.get_focus()
+            accepts_text = isinstance(focus, (Gtk.Entry, Gtk.TextView))
+            if Vte and isinstance(focus, Vte.Terminal): accepts_text = True
+            if not accepts_text:
+                self.switch_page(int(key) - 1); return True
         if key in ("Control_L", "Control_R"):
             now = time.monotonic()
             if now - self.last_ctrl < 0.6: self.open_search()
@@ -223,7 +227,7 @@ class ISOXGtk(Gtk.Window):
         cards = [
             ("ISO-FM · الملفات", "استعراض بمسارين ومعاينة نصية للملفات.", "فتح الملفات", self.show_files),
             ("ISO-Code · المحرر", "تحرير النصوص والشفرة وحفظها محليًا.", "فتح المحرر", self.show_editor),
-            ("ISO-Terminal", "أربع جلسات طرفية منفصلة عند توفر VTE.", "فتح الطرفية", self.show_terminal),
+            ("ISO-Terminal", "جلسة طرفية واحدة عند الطلب.", "فتح الطرفية", self.show_terminal),
             ("Firefox ESR / NetSurf", "يُفتح Firefox ESR عند توفره، وإلا NetSurf الخفيف.", "فتح المتصفح", self.open_browser),
             ("ISO-Control", "معلومات النظام ووضع تقليل المؤثرات.", "الإعدادات", self.show_settings),
             ("F12 · Dev Mode", "قياسات يدوية محلية فقط عند طلب المستخدم.", "مراقبة النظام", self.open_dev_mode),
@@ -239,7 +243,7 @@ class ISOXGtk(Gtk.Window):
         paths = Gtk.Box(spacing=8); self.left_label = Gtk.Label(label=str(self.left_path), xalign=0); self.right_label = Gtk.Label(label=str(self.right_path), xalign=0)
         paths.pack_start(self.left_label, True, True, 3); paths.pack_start(self.right_label, True, True, 3); page.pack_start(paths, False, False, 0)
         toolbar = Gtk.Box(spacing=6)
-        for label, callback in (("أعلى اليسار", lambda: self.go_up("left")), ("أعلى اليمين", lambda: self.go_up("right")), ("تحديث", self.refresh_files), ("نسخ ←", lambda: self.copy_selected("right")), ("نسخ →", lambda: self.copy_selected("left"))):
+        for label, callback in (("أعلى اليسار", lambda: self.go_up("left")), ("أعلى اليمين", lambda: self.go_up("right")), ("تحديث", self.refresh_files), ("نسخ ←", lambda: self.copy_selected("left")), ("نسخ →", lambda: self.copy_selected("right")), ("نقل للجهة الأخرى", self.move_selected), ("حذف المحدد", self.delete_selected)):
             b = Gtk.Button(label=label); b.connect("clicked", lambda _b, cb=callback: cb()); toolbar.pack_start(b, False, False, 0)
         page.pack_start(toolbar, False, False, 0)
         panes = Gtk.Paned.new(Gtk.Orientation.HORIZONTAL)
@@ -311,26 +315,123 @@ class ISOXGtk(Gtk.Window):
         source_base = self.left_path if source_side == "left" else self.right_path
         dest_base = self.right_path if destination_side == "right" else self.left_path
         source = source_base / model[itr][0]
-        destination = dest_base / model[itr][0]
         try:
             if source.is_symlink(): raise ValueError("نسخ الروابط الرمزية غير مدعوم من هذه الواجهة.")
-            if not source.exists(): raise FileNotFoundError(source)
+            source = source.resolve(strict=True)
+            dest_base = dest_base.resolve(strict=True)
+            if source.is_dir() and (dest_base == source or source in dest_base.parents):
+                raise ValueError("لا يمكن نسخ مجلد إلى داخله أو إلى أحد مجلداته الفرعية.")
+            destination = dest_base / source.name
             if destination.exists() or destination.is_symlink(): raise FileExistsError(f"يرفض الكتابة فوق موجود: {destination}")
             confirm = Gtk.MessageDialog(transient_for=self, flags=Gtk.DialogFlags.MODAL, message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.YES_NO, text="تأكيد نسخ الملف")
+            confirm.set_default_response(Gtk.ResponseType.NO)
             confirm.format_secondary_text(f"من: {source}\nإلى: {destination}")
             response = confirm.run(); confirm.destroy()
             if response != Gtk.ResponseType.YES: return
-            if source.is_dir(): shutil.copytree(source, destination, symlinks=False)
-            else: shutil.copy2(source, destination)
-            self.refresh_files(); self.notify(f"تم النسخ إلى: {destination}")
+            self.status.set_text(f"جارٍ نسخ {source.name}…")
+            threading.Thread(target=self._copy_worker, args=(source, destination), daemon=True).start()
         except Exception as exc: self.notify(f"تعذر النسخ: {exc}")
 
+    def _copy_worker(self, source, destination):
+        error = None
+        try:
+            if source.is_dir(): shutil.copytree(source, destination, symlinks=True)
+            else: shutil.copy2(source, destination)
+        except Exception as exc:
+            error = str(exc)
+        GLib.idle_add(self._copy_finished, destination, error)
+
+    def _copy_finished(self, destination, error):
+        self.refresh_files()
+        if error:
+            self.notify(f"تعذر النسخ: {error}")
+        else:
+            self.notify(f"تم النسخ إلى: {destination}")
+        return False
+
     def on_file_selected(self, selection, side):
+        self.active_side = side
         model, itr = selection.get_selected()
         if itr is None: return
         base = self.left_path if side == "left" else self.right_path
         p = (base / model[itr][0]).resolve()
         if p.is_file(): self.preview_file(p)
+
+    def _selected_path(self):
+        side = getattr(self, "active_side", "left")
+        tree = self.left_tree if side == "left" else self.right_tree
+        model, itr = tree.get_selection().get_selected()
+        if itr is None or model[itr][0] == "..":
+            raise ValueError("حدد ملفًا أو مجلدًا عاديًا أولًا.")
+        base = self.left_path if side == "left" else self.right_path
+        return side, base / model[itr][0]
+
+    def move_selected(self, *_args):
+        try:
+            source_side, source = self._selected_path()
+            if source.is_symlink():
+                raise ValueError("نقل الروابط الرمزية غير مدعوم من هذه الواجهة.")
+            source = source.resolve(strict=True)
+            destination_base = (self.right_path if source_side == "left" else self.left_path).resolve(strict=True)
+            if source.is_dir() and (destination_base == source or source in destination_base.parents):
+                raise ValueError("لا يمكن نقل مجلد إلى داخله أو إلى أحد مجلداته الفرعية.")
+            destination = destination_base / source.name
+            if destination.exists() or destination.is_symlink():
+                raise FileExistsError(f"يرفض الكتابة فوق موجود: {destination}")
+            dialog = Gtk.MessageDialog(transient_for=self, flags=Gtk.DialogFlags.MODAL,
+                                       message_type=Gtk.MessageType.QUESTION,
+                                       buttons=Gtk.ButtonsType.YES_NO, text="تأكيد نقل الملف")
+            dialog.format_secondary_text(f"من: {source}\nإلى: {destination}")
+            dialog.set_default_response(Gtk.ResponseType.NO)
+            response = dialog.run(); dialog.destroy()
+            if response != Gtk.ResponseType.YES:
+                return
+            self.status.set_text(f"جارٍ نقل {source.name}…")
+            threading.Thread(target=self._file_operation_worker,
+                             args=("move", source, destination), daemon=True).start()
+        except Exception as exc:
+            self.notify(f"تعذر النقل: {exc}")
+
+    def delete_selected(self, *_args):
+        try:
+            _side, source = self._selected_path()
+            if not source.exists() and not source.is_symlink():
+                raise FileNotFoundError(f"المسار غير موجود: {source}")
+            dialog = Gtk.MessageDialog(transient_for=self, flags=Gtk.DialogFlags.MODAL,
+                                       message_type=Gtk.MessageType.WARNING,
+                                       buttons=Gtk.ButtonsType.YES_NO, text="حذف نهائي")
+            dialog.format_secondary_text(f"سيُحذف هذا العنصر نهائيًا ولا يمكن استعادته:\n{source}")
+            dialog.set_default_response(Gtk.ResponseType.NO)
+            response = dialog.run(); dialog.destroy()
+            if response != Gtk.ResponseType.YES:
+                return
+            self.status.set_text(f"جارٍ حذف {source.name}…")
+            threading.Thread(target=self._file_operation_worker,
+                             args=("delete", source, None), daemon=True).start()
+        except Exception as exc:
+            self.notify(f"تعذر الحذف: {exc}")
+
+    def _file_operation_worker(self, operation, source, destination):
+        error = None
+        try:
+            if operation == "move":
+                shutil.move(str(source), str(destination))
+            elif source.is_symlink() or source.is_file():
+                source.unlink()
+            else:
+                shutil.rmtree(source)
+        except Exception as exc:
+            error = str(exc)
+        GLib.idle_add(self._file_operation_finished, operation, source, destination, error)
+
+    def _file_operation_finished(self, operation, source, destination, error):
+        self.refresh_files()
+        if error:
+            self.notify(f"تعذر {('النقل' if operation == 'move' else 'الحذف')}: {error}")
+        else:
+            result = destination if operation == "move" else source
+            self.notify(f"اكتمل {('النقل' if operation == 'move' else 'الحذف')}: {result}")
+        return False
 
     def preview_file(self, path: Path):
         buf = self.preview.get_buffer()
@@ -360,7 +461,7 @@ class ISOXGtk(Gtk.Window):
     def editor_open(self, *_):
         path = Path(self.editor_path.get_text()).expanduser()
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            text = path.read_text(encoding="utf-8")
             self.editor.get_buffer().set_text(text)
         except Exception as exc: self.notify(f"فشل فتح الملف: {exc}")
 
@@ -368,41 +469,52 @@ class ISOXGtk(Gtk.Window):
         path = Path(self.editor_path.get_text()).expanduser()
         try:
             buf = self.editor.get_buffer(); start, end = buf.get_bounds()
-            path.write_text(buf.get_text(start, end, True), encoding="utf-8")
+            content = buf.get_text(start, end, True)
+            path.parent.mkdir(parents=False, exist_ok=True)
+            mode = path.stat().st_mode & 0o777 if path.exists() else None
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                             prefix=f".{path.name}.", delete=False) as temporary:
+                temporary_path = Path(temporary.name)
+                temporary.write(content)
+                temporary.flush()
+                os.fsync(temporary.fileno())
+            if mode is not None: os.chmod(temporary_path, mode)
+            os.replace(temporary_path, path)
             self.notify(f"تم حفظ {path}")
-        except Exception as exc: self.notify(f"فشل الحفظ: {exc}")
+        except Exception as exc:
+            if "temporary_path" in locals(): temporary_path.unlink(missing_ok=True)
+            self.notify(f"فشل الحفظ؛ بقي الملف الأصلي دون استبدال: {exc}")
 
     def _terminal_page(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        title = Gtk.Label(label="ISO-Terminal · أربع جلسات", xalign=0); title.get_style_context().add_class("iso-title"); page.pack_start(title, False, False, 0)
-        grid = Gtk.Grid(column_spacing=7, row_spacing=7); grid.set_column_homogeneous(True); grid.set_row_homogeneous(True)
+        title = Gtk.Label(label="ISO-Terminal", xalign=0); title.get_style_context().add_class("iso-title"); page.pack_start(title, False, False, 0)
+        self.terminal_grid = Gtk.Grid()
         self.terminals = []
-        if Vte:
-            for i in range(4):
-                term = Vte.Terminal(); term.set_scrollback_lines(1500); term.set_direction(Gtk.TextDirection.LTR)
-                try:
-                    term.spawn_async(Vte.PtyFlags.DEFAULT, str(HOME), [os.environ.get("SHELL", "/bin/bash")], None,
-                                     GLib.SpawnFlags.DEFAULT, None, None, -1, None, None, None)
-                except Exception as exc:
-                    term.feed_child((f"تعذر إنشاء shell: {exc}\r\n").encode())
-                sc = Gtk.ScrolledWindow(); sc.add(term); grid.attach(sc, i % 2, i // 2, 1, 1); self.terminals.append(term)
-        else:
-            warning = Gtk.Label(label="مكوّن VTE غير متوفر. أضف الحزمة gir1.2-vte-2.91 لإظهار الطرفيات المدمجة.")
-            warning.set_line_wrap(True); page.pack_start(warning, False, False, 6)
-            for i in range(4):
-                term_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-                label = Gtk.Label(label=f"الجلسة {i+1}"); entry = Gtk.Entry(); entry.set_placeholder_text("الأمر — ينفذ ضمن shell الحالي")
-                output = Gtk.TextView(); output.set_editable(False); output.set_monospace(True); output.set_size_request(-1, 130)
-                def run(_b, command=entry, view=output):
-                    try:
-                        p = subprocess.run(["/bin/sh", "-lc", command.get_text()], cwd=HOME, capture_output=True, text=True, timeout=10)
-                        view.get_buffer().set_text((p.stdout + p.stderr)[-20000:])
-                    except Exception as exc: view.get_buffer().set_text(str(exc))
-                go = Gtk.Button(label="تنفيذ الأمر"); go.connect("clicked", run)
-                term_box.pack_start(label, False, False, 0); term_box.pack_start(entry, False, False, 0); term_box.pack_start(go, False, False, 0); term_box.pack_start(output, True, True, 0)
-                grid.attach(term_box, i % 2, i // 2, 1, 1)
-        page.pack_start(grid, True, True, 0)
+        new_session = Gtk.Button(label="جلسة طرفية جديدة")
+        new_session.connect("clicked", lambda *_: self._spawn_terminal())
+        page.pack_start(new_session, False, False, 0)
+        page.pack_start(self.terminal_grid, True, True, 0)
         return page
+
+    def _spawn_terminal(self):
+        if not Vte:
+            self.launch_app("terminal", ["xterm"])
+            return
+        terminal = Vte.Terminal()
+        terminal.set_scrollback_lines(1500)
+        terminal.set_direction(Gtk.TextDirection.LTR)
+        try:
+            terminal.spawn_async(Vte.PtyFlags.DEFAULT, str(HOME), [os.environ.get("SHELL", "/bin/bash")], None,
+                                 GLib.SpawnFlags.DEFAULT, None, None, -1, None, None, None)
+        except Exception as exc:
+            terminal.feed_child((f"تعذر إنشاء shell: {exc}\r\n").encode())
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_hexpand(True)
+        scroller.set_vexpand(True)
+        scroller.add(terminal)
+        self.terminal_grid.attach(scroller, 0, len(self.terminals), 1, 1)
+        self.terminals.append(terminal)
+        self.terminal_grid.show_all()
 
     def _browser_page(self):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
@@ -446,7 +558,10 @@ class ISOXGtk(Gtk.Window):
         self.stack.set_visible_child_name(name)
     def show_files(self): self.stack.set_visible_child_name("files"); self.store.app_used("files")
     def show_editor(self): self.stack.set_visible_child_name("editor"); self.store.app_used("editor")
-    def show_terminal(self): self.stack.set_visible_child_name("terminal"); self.store.app_used("terminal")
+    def show_terminal(self):
+        self.stack.set_visible_child_name("terminal")
+        if not self.terminals: self._spawn_terminal()
+        self.store.app_used("terminal")
     def show_settings(self): self.stack.set_visible_child_name("settings")
 
     def open_search(self):
@@ -466,19 +581,33 @@ class ISOXGtk(Gtk.Window):
                   "طرفية": self.show_terminal, "terminal": self.show_terminal, "إعدادات": self.show_settings, "settings": self.show_settings}
         if q.casefold() in routes: routes[q.casefold()](); return
         if q.casefold() in ("netsurf", "firefox", "متصفح", "browser"): self.open_browser(); return
+        self.status.set_text(f"جارٍ البحث عن: {q}")
+        threading.Thread(target=self._search_worker, args=(q,), daemon=True).start()
+
+    def _search_worker(self, query):
         results = []
         try:
             for root, dirs, files in os.walk(HOME):
-                dirs[:] = [d for d in dirs if d not in {".cache", ".local/share/Trash", ".git", "node_modules", ".venv"}]
+                current = Path(root).resolve()
+                trash = (HOME / ".local/share/Trash").resolve()
+                if current == trash or trash in current.parents:
+                    dirs[:] = []
+                    continue
+                dirs[:] = [d for d in dirs if d not in {".cache", ".git", "node_modules", ".venv"}]
                 for name in files + dirs:
-                    if q.casefold() in name.casefold(): results.append(str(Path(root) / name))
+                    if query.casefold() in name.casefold(): results.append(str(Path(root) / name))
                     if len(results) >= 80: break
                 if len(results) >= 80: break
-        except Exception as exc: results.append(str(exc))
+        except Exception as exc: results.append(f"تعذّر البحث: {exc}")
+        GLib.idle_add(self._show_search_results, query, results)
+
+    def _show_search_results(self, query, results):
+        self.status.set_text("بحث ISO-X")
         dlg = Gtk.MessageDialog(transient_for=self, flags=Gtk.DialogFlags.MODAL, message_type=Gtk.MessageType.INFO,
-                                buttons=Gtk.ButtonsType.CLOSE, text=f"نتائج البحث: {q}")
+                                buttons=Gtk.ButtonsType.CLOSE, text=f"نتائج البحث: {query}")
         dlg.format_secondary_text("\n".join(results[:30]) if results else "لا توجد نتائج ضمن مجلد المنزل.")
         dlg.run(); dlg.destroy()
+        return False
 
     def open_dev_mode(self):
         dlg = Gtk.Dialog(title="ISO-X · Dev Mode (F12)", transient_for=self, flags=Gtk.DialogFlags.MODAL)

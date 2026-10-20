@@ -18,18 +18,9 @@ fi
   qemu-system-x86 qemu-utils ovmf openssl fonts-noto-core build-essential pkg-config \
   clang lld cmake ninja-build libudev-dev libasound2-dev libx11-dev libx11-xcb-dev \
   libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev \
-  libxkbcommon-x11-dev libwayland-dev libxcursor-dev libxi-dev libxrandr-dev \
+  libxkbcommon-x11-dev libxcursor-dev libxi-dev libxrandr-dev \
   libxinerama-dev libvulkan-dev git curl wget rsync python3 python3-venv shellcheck
-if ! command -v rustup >/dev/null 2>&1; then
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-fi
-# shellcheck disable=SC1090
-source "$HOME/.cargo/env"
-rustup toolchain install stable
-rustup default stable
-rustc --version
-cargo --version
 for cmd in lb debootstrap mksquashfs xorriso qemu-system-x86_64 qemu-img openssl shellcheck; do
   command -v "$cmd" >/dev/null || { echo "Missing required command after setup: $cmd" >&2; exit 4; }
 done
-printf '\nPASS: build dependencies were installed/verified. This does not build or boot ISO-X yet.\n'
+printf '\nPASS: Debian Live Build and test dependencies were installed/verified. Bevy/Rust is optional and is not installed as root.\n'

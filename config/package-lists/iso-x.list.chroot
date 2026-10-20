@@ -5,8 +5,6 @@
 # `firmware-mediatek` and firmware-nvidia-graphics may require Trixie backports;
 # this stable-only image avoids mixing suites; firmware-misc-nonfree ships the stable Trixie firmware set.
 linux-image-amd64
-linux-headers-amd64
-build-essential
 live-boot
 live-config
 live-config-systemd
@@ -63,7 +61,7 @@ mesa-utils
 libgl1-mesa-dri
 libglx-mesa0
 libegl-mesa0
-libgles2-mesa
+libgles2
 libvulkan1
 mesa-vulkan-drivers
 xserver-xorg-video-intel
@@ -90,7 +88,7 @@ xdg-user-dirs
 xdg-user-dirs-gtk
 xdg-desktop-portal
 xdg-desktop-portal-gtk
-policykit-1
+polkitd
 lxpolkit
 sudo
 htop
@@ -111,7 +109,6 @@ fonts-noto-core
 fonts-noto-extra
 fonts-noto-ui-core
 fonts-noto-color-emoji
-fonts-kacst
 fonts-sil-scheherazade
 fonts-hosny-amiri
 locales
@@ -134,7 +131,6 @@ gvfs-backends
 xfce4-terminal
 mousepad
 galculator
-pinta
 xfce4-screenshooter
 xfce4-taskmanager
 xfce4-settings

@@ -18,10 +18,20 @@ with tempfile.TemporaryDirectory(prefix="isox-vault-test-") as temporary:
     (source / "nested").mkdir()
     (source / "nested" / "hello.txt").write_text("ISO-X local vault test — عربي\n", encoding="utf-8")
     encrypted = base / "source.isoxvault"
+    original_temporary_directory = vault.tempfile.TemporaryDirectory
+    temporary_roots = []
+
+    def record_temporary_directory(*args, **kwargs):
+        temporary_roots.append(Path(kwargs["dir"]).resolve())
+        return original_temporary_directory(*args, **kwargs)
+
+    vault.tempfile.TemporaryDirectory = record_temporary_directory
     restored_parent = base / "restored"
     vault.encrypt(source, encrypted, b"test-only passphrase")
     assert encrypted.is_file() and encrypted.stat().st_size > 64
     vault.decrypt(encrypted, restored_parent, b"test-only passphrase")
+    vault.tempfile.TemporaryDirectory = original_temporary_directory
+    assert temporary_roots == [base.resolve(), base.resolve()]
     restored = restored_parent / "source" / "nested" / "hello.txt"
     assert restored.read_text(encoding="utf-8") == "ISO-X local vault test — عربي\n"
 

@@ -4,17 +4,20 @@ ISO-X is a source project for a lightweight, Arabic-first desktop live system ta
 
 ## One-command build
 
-On a Debian 13 (Trixie) amd64 build host with the required packages, stable Rust toolchain, at least 20 GiB free disk, at least 4 GiB RAM, and a release key/certificate stored **outside this source tree**:
+On a Debian 13 (Trixie) amd64 build host with the required packages, at least 20 GiB free disk and at least 4 GiB RAM:
 
 ```bash
 ./scripts/install-build-deps.sh
-./scripts/generate-dev-signing-key.sh "$HOME/.local/share/isox-signing"
-export ISOX_RELEASE_KEY="$HOME/.local/share/isox-signing/isox-release.key"
-export ISOX_RELEASE_CERT="$HOME/.local/share/isox-signing/isox-release.crt"
-sudo --preserve-env=ISOX_RELEASE_KEY,ISOX_RELEASE_CERT ./build.sh
+sudo ./build.sh
 ```
 
-The development key above is only for test builds; it does not establish trust on a machine with Secure Boot enabled. `build.sh` does not bypass the safety checks in `scripts/build-iso.sh`. Expected output: `ISO-X-0.4.0-live-amd64.iso` plus a `.sha256` file, **only after a successful build**.
+The default image does not build or include the optional watermark kernel module, so no release key or Rust toolchain is required. `ISOX_ENABLE_WATERMARK=1` opts into the separately signed watermark feature and requires `ISOX_RELEASE_KEY` and `ISOX_RELEASE_CERT` from outside the repository. `ISOX_BUILD_CINEMATIC=1` separately opts into the optional Bevy scene and requires a compatible Rust toolchain and network/cache access to its crates. Neither option is part of the default desktop or boot path. The build script rejects an existing non-empty build directory rather than deleting it. A successful run prints the output ISO path and SHA-256; this source checkout has not yet produced a verified ISO.
+
+The USB writer requires the generated sidecar `${ISO}.sha256`, validates it and the ISO structure, checks that the selected whole USB disk is large enough, then requires the exact confirmation `WIPE <disk-name>`. This overwrites the selected device. Review the device model and data before confirming:
+
+```bash
+sudo /usr/local/sbin/isox-write-usb /path/to/ISO-X-0.4.0-live-amd64.iso
+```
 
 ## Repository layout
 
@@ -33,7 +36,7 @@ python3 -m pytest -q
 bash tests/qemu-acceptance.sh check
 ```
 
-Static source tests do not prove the desktop works at runtime. Test BIOS/UEFI boot, networking, audio, browser rendering, settings, shutdown, restart and installation in a disposable VM before installing to real hardware. Record actual results in `AUDIT.md`; never infer success from a source-only test.
+The smoke script runs the source-level checks without requiring pytest. Static source tests do not prove the desktop works at runtime. Test BIOS/UEFI boot, networking, audio, browser rendering, settings, shutdown, restart and installation in a disposable VM before installing to real hardware. Record actual results in `AUDIT.md`; never infer success from a source-only test. See [the latest build and test record](docs/BUILD_AND_TEST_RESULTS_AR.md).
 
 ## Upstream references and licensing
 

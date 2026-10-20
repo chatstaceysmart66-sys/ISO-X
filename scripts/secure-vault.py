@@ -103,7 +103,7 @@ def encrypt(source: Path, output: Path, secret: bytes) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists():
         raise VaultError(f"يرفض استبدال ملف موجود: {output}")
-    with tempfile.TemporaryDirectory(prefix="isox-vault-") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="isox-vault-", dir=output.parent) as tmpdir:
         tmp = Path(tmpdir)
         archive_path, encrypted_path = tmp / "archive.tar", tmp / "cipher.bin"
         with tarfile.open(archive_path, mode="w", format=tarfile.PAX_FORMAT) as archive:
@@ -141,7 +141,7 @@ def decrypt(source: Path, destination: Path, secret: bytes) -> None:
     if destination.exists() and any(destination.iterdir() if destination.is_dir() else [destination]):
         raise VaultError("مجلد الوجهة موجود وغير فارغ؛ لن تُستبدل أي ملفات.")
     destination.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="isox-vault-") as tmpdir:
+    with tempfile.TemporaryDirectory(prefix="isox-vault-", dir=destination.parent) as tmpdir:
         tmp = Path(tmpdir)
         cipher_path, archive_path = tmp / "cipher.bin", tmp / "archive.tar"
         file_size = source.stat().st_size
