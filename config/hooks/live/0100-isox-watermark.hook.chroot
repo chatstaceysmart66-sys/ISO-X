@@ -1,0 +1,47 @@
+#!/bin/bash
+set -euo pipefail
+SRC=/usr/src/isox-watermark-0.3.1
+KEY=/var/lib/isox-build-secrets/isox-release.key
+CERT=/var/lib/isox-build-secrets/isox-release.crt
+[[ -r "$KEY" && -r "$CERT" ]] || { echo "ISO-X release signing key/certificate not staged" >&2; exit 40; }
+install -d -m 0755 /etc/isox
+install -m 0644 "$CERT" /etc/isox/watermark-public.crt
+FOUND_KERNEL=0
+for MODDIR in /lib/modules/*; do
+    [[ -d "$MODDIR/build" ]] || continue
+    FOUND_KERNEL=1
+    KVER=${MODDIR##*/}
+    echo "ISO-X: compiling watermark for ${KVER}"
+    make -C "$MODDIR/build" M="$SRC" clean >/dev/null 2>&1 || true
+    make -C "$MODDIR/build" M="$SRC" modules
+    MODULE="$SRC/isox_watermark.ko"
+    SIGN_TOOL="$MODDIR/build/scripts/sign-file"
+    [[ -x "$SIGN_TOOL" ]] || { echo "missing module signing tool for $KVER" >&2; exit 41; }
+    # Sign the module in the kernel's standard format, then attach a detached
+    # release signature over the final file for the initramfs guard.
+    "$SIGN_TOOL" sha256 "$KEY" "$CERT" "$MODULE"
+    DEST="$MODDIR/updates/isox-watermark/isox_watermark.ko"
+    install -D -m 0644 "$MODULE" "$DEST"
+    depmod -a "$KVER"
+    openssl dgst -sha256 -sign "$KEY" -out /etc/isox/isox_watermark.ko.sig "$DEST"
+    openssl x509 -in "$CERT" -pubkey -noout > /etc/isox/watermark-public.pem
+    openssl dgst -sha256 -verify /etc/isox/watermark-public.pem -signature /etc/isox/isox_watermark.ko.sig "$DEST"
+    sha256sum "$DEST" > /etc/isox/isox_watermark.sha256
+    HASH=$(sha256sum "$DEST" | awk '{print $1}')
+    FINGERPRINT=$(openssl x509 -in "$CERT" -noout -fingerprint -sha256 | awk -F= '{print $2}' | tr -d ':' | tr 'A-F' 'a-f')
+    openssl x509 -in "$CERT" -noout -fingerprint -sha256 > /etc/isox/watermark-fingerprint.txt
+    # Stamp the packaged SQL schema with this exact release artifact's metadata.
+    SCHEMA=/usr/share/iso-x/db/schema.sql
+    if [[ -r "$SCHEMA" ]]; then
+      sed -i "s/module_sha256 TEXT,/module_sha256 TEXT DEFAULT '${HASH}',/" "$SCHEMA"
+      sed -i "s/signing_cert_fingerprint TEXT,/signing_cert_fingerprint TEXT DEFAULT '${FINGERPRINT}',/" "$SCHEMA"
+      sed -i "s/verification_state TEXT NOT NULL DEFAULT 'unconfigured'/verification_state TEXT NOT NULL DEFAULT 'signed'/" "$SCHEMA"
+    fi
+    update-initramfs -u -k "$KVER"
+done
+[[ "$FOUND_KERNEL" -eq 1 ]] || { echo "ISO-X: no kernel headers/build directory were found; refusing an unsigned/unprotected release." >&2; exit 42; }
+# Remove build-only compiler and headers after the module and initramfs are built.
+apt-get purge -y build-essential linux-headers-amd64 >/dev/null
+# Never store the release private key in the resulting root filesystem.
+rm -f "$KEY" "$CERT"
+rmdir /var/lib/isox-build-secrets 2>/dev/null || true

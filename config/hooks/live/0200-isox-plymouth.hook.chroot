@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+THEME=/usr/share/plymouth/themes/isox
+install -d -m 0755 "$THEME"
+install -m 0644 /usr/share/iso-x/assets/iso-x-plymouth.png "$THEME/iso-x-plymouth.png"
+install -m 0644 /usr/share/iso-x/assets/iso-x-boot.svg "$THEME/iso-x-boot.svg"
+install -m 0644 /usr/share/iso-x/assets/isox.plymouth "$THEME/isox.plymouth"
+install -m 0644 /usr/share/iso-x/assets/isox.script "$THEME/isox.script"
+if command -v plymouth-set-default-theme >/dev/null 2>&1; then
+  plymouth-set-default-theme isox
+fi
+if command -v update-initramfs >/dev/null 2>&1; then
+  update-initramfs -u -k all
+fi

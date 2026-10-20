@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""Static source checks. These do not claim to test a booted ISO or real hardware."""
+from pathlib import Path
+import tomllib
+import xml.etree.ElementTree as ET
+
+ROOT = Path(__file__).resolve().parents[1]
+with (ROOT / "three-d-login/Cargo.toml").open("rb") as stream:
+    cargo = tomllib.load(stream)
+assert cargo["package"]["version"] == "0.4.0"
+assert cargo["dependencies"]["bevy"]["version"] == "0.19.1"
+features = set(cargo["dependencies"]["bevy"]["features"])
+assert {"3d", "2d_bevy_render", "x11"} <= features
+
+build = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
+auto_config = (ROOT / "auto/config").read_text(encoding="utf-8")
+for required in (
+    '"$PROJECT_DIR/auto/config"', 'scripts/encode-watermark.py',
+    'scripts/isox-run.py', 'scripts/isox-snap-window.sh', 'scripts/secure-vault.py',
+    'scripts/toggle-airplane.sh', 'scripts/apply-windows-look.sh',
+    'ISO-X-0.4.0-live-amd64.iso', 'tee "$BUILD_LOG"',
+    '004_isox_040.sql', 'docs/THIRD_PARTY_LICENSES.md',
+    'isox-watermark-0.3.1', 'debian-installer-launcher',
+):
+    assert required in build, f"Missing build integration: {required}"
+for required in ('--distribution trixie', '--architectures amd64', '--binary-images iso-hybrid',
+                 '--debian-installer live', '--debian-installer-gui true',
+                 '--bootloaders "syslinux grub-efi"',
+                 'username=user hostname=iso-x', '--memtest none'):
+    assert required in auto_config, f"Missing live-build configuration: {required}"
+assert not any(ROOT.rglob("*.key")), "Private key must not be stored in the source tree"
+assert (ROOT / "build.sh").stat().st_mode & 0o111, "Root one-command build entry point must be executable"
+
+for asset in (
+    "assets/iso-x-dragon.svg", "assets/iso-x-dragon.png",
+    "assets/iso-x-boot.svg", "assets/iso-x-boot.png",
+    "assets/iso-x-desktop-wallpaper.svg", "assets/iso-x-desktop-wallpaper.png",
+    "assets/iso-x-plymouth.png", "docs/QEMU_ACCEPTANCE_AR.md", "tests/qemu-acceptance.sh",
+    "plymouth/isox/isox.plymouth", "plymouth/isox/isox.script",
+    "config/hooks/live/0050-isox-locales.hook.chroot",
+    "config/hooks/live/0100-isox-watermark.hook.chroot",
+    "config/hooks/live/0200-isox-plymouth.hook.chroot",
+    "desktop/openbox-menu.xml", "desktop/openbox-rc.xml",
+    "scripts/install-build-deps.sh", "scripts/isox-run.py", "scripts/isox-speedtest",
+    "scripts/apply-windows-look.sh", "scripts/toggle-airplane.sh", "config/hooks/live/0300-isox-services.hook.chroot",
+    "tests/test_secure_vault.py", "tests/test_secureboot_validation.sh",
+    "README.md", "build.sh", "docs/THIRD_PARTY_LICENSES.md",
+    "db/migrations/003_isox_031.sql", "db/migrations/004_isox_040.sql",
+):
+    assert (ROOT / asset).is_file(), f"Missing feature/integration asset: {asset}"
+
+assert 'Image("iso-x-plymouth.png")' in (ROOT / "plymouth/isox/isox.script").read_text()
+plymouth_dims = __import__("struct").unpack(">II", (ROOT / "assets/iso-x-plymouth.png").read_bytes()[16:24])
+assert max(plymouth_dims) <= 512, f"Plymouth logo should fit low-resolution screens: {plymouth_dims}"
+assert "images/iso-x-dragon.png" in (ROOT / "three-d-login/src/main.rs").read_text()
+assert "png" in cargo["dependencies"]["bevy"]["features"]
+for xml in (ROOT / "desktop/openbox-menu.xml", ROOT / "desktop/openbox-rc.xml",
+            ROOT / "plymouth/isox/isox.plymouth", ROOT / "assets/iso-x-dragon.svg",
+            ROOT / "assets/iso-x-boot.svg", ROOT / "assets/iso-x-desktop-wallpaper.svg"):
+    if xml.suffix == ".xml" or xml.suffix == ".svg":
+        ET.parse(xml)
+
+watermark = (ROOT / "kernel/isox-watermark/isox_watermark.c").read_text(encoding="utf-8")
+assert "^ ISOX_WM_XOR_MASK" in watermark, "Watermark decoding must match the generator's XOR mask"
+assert "PENDING_BUILD_DIGEST" not in watermark
+assert not (ROOT / "kernel/isox-watermark/watermark_digest.h").exists(), "Obsolete fake digest header must not return"
+locales_hook = (ROOT / "config/hooks/live/0050-isox-locales.hook.chroot").read_text(encoding="utf-8")
+assert "printf '%s UTF-8\\n'" in locales_hook, "Locale hook must write real newlines"
+build_tz = next((line for line in build.splitlines() if "Asia/Baghdad" in line and "printf" in line), "")
+assert "printf '%s\\n'" in build_tz, "Timezone file must not contain a literal backslash-n"
+for executable in ("scripts/build-iso.sh", "scripts/encode-watermark.py", "scripts/write-usb.sh",
+                   "scripts/secure-vault.sh", "scripts/isox-run.py", "scripts/isox-snap-window.sh",
+                   "scripts/install-build-deps.sh", "scripts/apply-windows-look.sh", "scripts/toggle-airplane.sh",
+                   "tests/qemu-acceptance.sh", "tests/test_secureboot_validation.sh", "scripts/secureboot-enroll.sh", "scripts/isox-speedtest", "auto/config"):
+    assert (ROOT / executable).stat().st_mode & 0o111, f"Entry point is not executable: {executable}"
+
+packages = [x.strip() for x in (ROOT / "config/package-lists/iso-x.list.chroot").read_text().splitlines()
+            if x.strip() and not x.strip().startswith("#")]
+assert len(packages) == len(set(packages)), "Duplicate packages remain in the package list"
+assert "debian-installer-launcher" in packages
+for package in ("dmz-cursor-theme", "libnotify-bin", "xfce4-notifyd", "hardinfo", "gnome-calendar", "gnome-disk-utility"):
+    assert package in packages, f"Missing requested desktop capability package: {package}"
+assert "firmware-nvidia-graphics" not in packages, "A backports-only package would break the stable-only build"
+assert (ROOT / "desktop/tint2rc").read_text().count("panel_padding =") == 1
+assert "panel_items = LTBSC" in (ROOT / "desktop/tint2rc").read_text()
+assert "pcmanfm --desktop --profile=isox" in build, "Desktop icons and the wallpaper need a desktop manager"
+assert "isox-toggle-airplane" in build and "W-a" in (ROOT / "desktop/openbox-rc.xml").read_text()
+
+schema = (ROOT / "db/schema.sql").read_text(encoding="utf-8")
+assert "module_version TEXT NOT NULL DEFAULT '0.3.1'" in schema
+assert "VALUES ('0.4.0')" in schema
+print("PASS: source config, live installer, app entry points, branding, locale/timezone, database migration, and package-list consistency")
+
+secureboot_script = (ROOT / "scripts/secureboot-enroll.sh").read_text(encoding="utf-8")
+assert "sbctl enroll-keys" not in secureboot_script and "sbctl sign" not in secureboot_script
+assert "does NOT enroll keys" in secureboot_script

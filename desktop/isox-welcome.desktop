@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ISO-X Welcome
+Name[ar]=مرحباً بك في ISO-X
+Comment=Open first steps, system tools, and installation options
+Comment[ar]=فتح خطوات البدء وأدوات النظام وخيارات التثبيت
+Exec=/usr/local/bin/isox-welcome
+Icon=iso-x
+Terminal=false
+Categories=System;Utility;
+StartupNotify=true

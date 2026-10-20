@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""ISO-X quick connection check; measures a small download, not full ISP capacity."""
+from __future__ import annotations
+import re
+import subprocess
+import sys
+import time
+
+TEST_URL = "https://deb.debian.org/debian/dists/trixie/Release"
+PING_TARGET = "deb.debian.org"
+
+
+def ping_ms() -> float | None:
+    try:
+        r = subprocess.run(
+            ["ping", "-n", "-c", "3", "-W", "2", PING_TARGET],
+            capture_output=True, text=True, timeout=12, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    match = re.search(r"(?:rtt|round-trip).*?=\s*[\d.]+/([\d.]+)/", r.stdout)
+    if r.returncode != 0 or not match:
+        return None
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
+
+
+def download_mbps() -> float | None:
+    """Return the observed rate for a small metadata file, or None on failure."""
+    started = time.monotonic()
+    try:
+        r = subprocess.run(
+            ["curl", "--fail", "--location", "--silent", "--show-error",
+             "--connect-timeout", "10", "--max-time", "45", "-o", "/dev/null",
+             "-w", "%{size_download}", TEST_URL],
+            capture_output=True, text=True, timeout=50, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    elapsed = time.monotonic() - started
+    if r.returncode != 0 or elapsed <= 0:
+        return None
+    try:
+        byte_count = int(r.stdout.strip())
+    except (ValueError, TypeError):
+        return None
+    if byte_count <= 0:
+        return None
+    return byte_count * 8 / elapsed / 1_000_000
+
+
+def format_results(download: float | None, latency: float | None) -> str:
+    rate = f"{download:.2f} Mbps (عينة تنزيل صغيرة)" if download is not None else "فشل — تحقق من الشبكة"
+    ping = f"{latency:.1f} ms" if latency is not None else "غير متاح"
+    return f"سرعة العينة: {rate}\nالاستجابة: {ping}"
+
+
+def gui_main() -> int:
+    try:
+        import gi
+        gi.require_version("Gtk", "3.0")
+        from gi.repository import Gtk, GLib
+    except (ImportError, ValueError) as exc:
+        print(f"GTK3 غير متاح: {exc}", file=sys.stderr)
+        return 2
+    import threading
+
+    window = Gtk.Window(title="ISO-X — فحص اتصال الإنترنت")
+    window.set_default_size(440, 220)
+    window.set_border_width(16)
+    window.set_resizable(False)
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+    label = Gtk.Label(label="يقيس تنزيل عينة صغيرة وزمن الاستجابة؛ لا يقدّر السرعة القصوى بدقة.")
+    label.set_line_wrap(True)
+    label.set_justify(Gtk.Justification.CENTER)
+    button = Gtk.Button(label="ابدأ الفحص")
+    spinner = Gtk.Spinner()
+    box.pack_start(label, True, True, 0)
+    box.pack_start(spinner, False, False, 0)
+    box.pack_start(button, False, False, 0)
+    window.add(box)
+
+    def update_ui(download: float | None, latency: float | None) -> bool:
+        spinner.stop()
+        button.set_sensitive(True)
+        label.set_text(format_results(download, latency))
+        return False
+
+    def on_start(_button: Gtk.Button) -> None:
+        button.set_sensitive(False)
+        label.set_text("جارٍ فحص الاتصال...")
+        spinner.start()
+
+        def worker() -> None:
+            download = download_mbps()
+            latency = ping_ms()
+            GLib.idle_add(update_ui, download, latency)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    button.connect("clicked", on_start)
+    window.connect("destroy", Gtk.main_quit)
+    window.show_all()
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    if "--gui" in sys.argv:
+        raise SystemExit(gui_main())
+    print("ISO-X — فحص اتصال سريع (عينة تنزيل صغيرة)")
+    print(format_results(download_mbps(), ping_ms()))

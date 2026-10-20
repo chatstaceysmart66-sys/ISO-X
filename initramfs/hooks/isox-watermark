@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "${1:-}" in prereqs) prereqs; exit 0 ;; esac
+. /usr/share/initramfs-tools/hook-functions
+MODULE="isox_watermark"
+# Kernel packages can run update-initramfs before the release hook builds/signs
+# our module. Skip early invocations; the release hook regenerates the final image.
+for f in watermark-public.crt watermark-public.pem isox_watermark.ko.sig isox_watermark.sha256 watermark-fingerprint.txt; do
+    [ -s "/etc/isox/$f" ] || exit 0
+done
+modprobe --show-depends --set-version "${version:-$(uname -r)}" "$MODULE" >/dev/null 2>&1 || { echo "ISO-X initramfs error: isox_watermark is required but cannot be resolved for this kernel" >&2; exit 1; }
+manual_add_modules "$MODULE"
+copy_exec /usr/bin/openssl /usr/bin
+copy_exec /usr/bin/sha256sum /usr/bin
+mkdir -p "${DESTDIR}/etc/isox"
+for f in watermark-public.crt watermark-public.pem isox_watermark.ko.sig isox_watermark.sha256 watermark-fingerprint.txt; do
+    [ -s "/etc/isox/$f" ] || { echo "ISO-X initramfs build error: missing /etc/isox/$f" >&2; exit 1; }
+    cp -p "/etc/isox/$f" "${DESTDIR}/etc/isox/$f"
+done
+printf '%s\n' 'required_module=isox_watermark' 'developer=عبدالله لازم' 'verification=openssl-sha256+kernel-module-signature' > "${DESTDIR}/etc/isox/watermark-policy"

@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+# ISO-X 0.4.0: Trixie amd64, a live desktop and Debian installer.
+# These are ISO-X's own build values; no upstream distro branding is exposed in the desktop.
+# `noauto` prevents live-build from recursively invoking this file.
+lb config noauto \
+  --apt-recommends false \
+  --apt-indices false \
+  --architectures amd64 \
+  --archive-areas "main contrib non-free non-free-firmware" \
+  --security true \
+  --updates true \
+  --source false \
+  --binary-filesystem ext4 \
+  --binary-images iso-hybrid \
+  --bootloaders "syslinux grub-efi" \
+  --checksums sha256 \
+  --clean \
+  --debconf-frontend noninteractive \
+  --debootstrap-options "--include=ca-certificates,openssl" \
+  --distribution trixie \
+  --debian-installer live \
+  --debian-installer-distribution trixie \
+  --debian-installer-gui true \
+  --firmware-binary true \
+  --firmware-chroot true \
+  --initramfs live-boot \
+  --linux-packages "linux-image linux-headers" \
+  --iso-application "ISO-X 0.4.0" \
+  --iso-publisher "ISO-X / Abdullah Lazim" \
+  --iso-volume "ISOX040_LIVE" \
+  --bootappend-live "boot=live config components quiet splash username=user hostname=iso-x" \
+  --bootappend-live-failsafe "boot=live components username=user hostname=iso-x nomodeset noapic noacpi nosmp noapm nodma nomce nosplash" \
+  --memtest none \
+  "${@}"

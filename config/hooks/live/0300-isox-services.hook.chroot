@@ -1,0 +1,18 @@
+#!/bin/bash
+set -Eeuo pipefail
+# Preserve NetworkManager's control of Wi-Fi; do not enable a standalone
+# wpa_supplicant instance which could conflict with it.
+install -d -m 0755 /etc/NetworkManager
+cat > /etc/NetworkManager/NetworkManager.conf <<'EOF'
+[main]
+plugins=keyfile
+dns=default
+
+[device]
+wifi.scan-rand-mac-address=yes
+EOF
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl enable NetworkManager.service
+  systemctl enable bluetooth.service
+  systemctl enable cups.socket 2>/dev/null || true
+fi
