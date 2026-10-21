@@ -184,3 +184,10 @@
 - أضيف اختبار يمرر قيمة خام صالحة ويرفض البادئة، والأحرف الكبيرة، والقيمة القصيرة، والسطور الزائدة؛ وأضيف فحص عقد workflow يثبت أن المصدر الوحيد يكتب raw token وأن helper البناء لا يستبدل الملف.
 - التحقق المحلي بعد التعديل: `scripts/run-source-checks.py` = 23 check PASS، 55 PASS، 0 FAIL، 0 NOT_RUN، exit 0؛ pytest شغّل 33 حالة PASS. `actionlint v1.7.12`, ShellCheck للسكربتين، `bash -n` و`git diff --check` exit 0. النتيجة لا تثبت build أو boot.
 - تشغيل `39650015616` أكد source-check PASS، build FAIL بسبب nonce، BIOS/UEFI/promote SKIPPED، ولا يوجد Artifact ISO؛ Artifacts الظاهرة هي source-check وbuild-evidence وacceptance-report فقط. لا تُعتبر صورة ذلك التشغيل منتجًا قابلاً للتنزيل.
+
+#### تشخيص BOOT_TIMEOUT في الجلسة الرسومية — 2026-10-21
+
+- run `39653105216` على commit `f624d5478af54d62997a80874482e5e29ebf83d5` نجح في البناء وفحوص بنية ISO، لكنه فشل في BIOS وUEFI بعد 600 ثانية (`BOOT_TIMEOUT`). نُزّلت أدلة QEMU: BIOS وUEFI كلاهما أظهرا `kernel=true`, `initramfs=true`, `systemd=true`, `display_manager=true`, `graphical_target=false`, `marker_seen=false`. سجل serial يصل إلى `Debian GNU/Linux 13 iso-x ttyS0` و`iso-x login:`؛ خدمة الجاهزية انتهت بالفشل، ولم توجد جلسة `user` نشطة.
+- السبب في إعداد المصدر: hook `0300-isox-services.hook.chroot` كان يكتب إعداد greeter فقط ولا يكتب إعداد LightDM auto-login. لا توجد إعدادات auto-login في مصدر المشروع. هذا لا يطابق تصميم Live Desktop: bootappend يحدد `username=user`، وOpenbox autostart يبدأ سطح ISO-X بعد الدخول، واختبار القبول يتطلب جلسة رسومية نشطة لذلك المستخدم. لذلك شاشة greeter ليست سلوك القبول النهائي المقصود.
+- الإصلاح الجاري يضيف drop-in `/etc/lightdm/lightdm.conf.d/50-isox-live-autologin.conf` يربط `user` بجلسة `openbox`، ويتحقق أثناء hook أن `/usr/share/xsessions/openbox.desktop` موجود. اختبار source-config يثبت تطابق اسم الحساب والجلسة مع auto/config ووجود أمر بدء ISO-X. لا يغيّر فحص readiness ولا يصنع PASS. نتائج QEMU لهذا الإصلاح غير متاحة حتى يكتمل التشغيل التالي.
+- غير محسوم/غير منفذ بعد: BIOS/UEFI على الصورة بعد تعديل LightDM، عرض سطح المكتب الفعلي بعد تسجيل الدخول التلقائي، اختبار Persistence عبر reboot، وتشغيل متجر GTK/الصوت على عتاد فعلي. لا يوجد إصدار معتمد.

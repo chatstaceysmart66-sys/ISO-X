@@ -38,6 +38,12 @@ assert 'linux-headers-amd64' not in auto_config, "Kernel headers should be optio
 services_hook = (ROOT / "config/hooks/live/0300-isox-services.hook.chroot").read_text(encoding="utf-8")
 assert "/etc/lightdm/lightdm-gtk-greeter.conf" in services_hook
 assert "iso-x-desktop-wallpaper.png" in services_hook and "iso-x-dragon.png" in services_hook
+assert "/etc/lightdm/lightdm.conf.d/50-isox-live-autologin.conf" in services_hook
+assert "[Seat:*]" in services_hook and "autologin-user=user" in services_hook
+assert "autologin-session=openbox" in services_hook and "user-session=openbox" in services_hook
+assert "/usr/share/xsessions/openbox.desktop" in services_hook
+assert "username=user" in auto_config, "LightDM autologin must match the live-config account."
+assert "exec /usr/local/bin/iso-x" in build, "The authenticated Openbox session must start the ISO-X desktop."
 assert not any(ROOT.rglob("*.key")), "Private key must not be stored in the source tree"
 assert (ROOT / "build.sh").stat().st_mode & 0o111, "Root one-command build entry point must be executable"
 

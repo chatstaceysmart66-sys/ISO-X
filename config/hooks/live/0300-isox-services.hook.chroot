@@ -18,6 +18,17 @@ background=/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.png
 logo=/usr/share/iso-x/assets/iso-x-dragon.png
 user-background=false
 EOF
+cat > /etc/lightdm/lightdm.conf.d/50-isox-live-autologin.conf <<'EOF'
+[Seat:*]
+autologin-user=user
+autologin-user-timeout=0
+autologin-session=openbox
+user-session=openbox
+EOF
+test -r /usr/share/xsessions/openbox.desktop || {
+  echo "Openbox X session is missing; LightDM autologin cannot start the ISO-X desktop." >&2
+  exit 1
+}
 if command -v systemctl >/dev/null 2>&1; then
   systemctl enable NetworkManager.service
   systemctl enable bluetooth.service
