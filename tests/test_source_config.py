@@ -39,6 +39,7 @@ services_hook = (ROOT / "config/hooks/live/0300-isox-services.hook.chroot").read
 assert "/etc/lightdm/lightdm-gtk-greeter.conf" in services_hook
 assert "iso-x-desktop-wallpaper.png" in services_hook and "iso-x-dragon.png" in services_hook
 assert "/etc/lightdm/lightdm.conf.d/50-isox-live-autologin.conf" in services_hook
+assert "install -d -m 0755 /etc/lightdm /etc/lightdm/lightdm.conf.d" in services_hook
 assert "[Seat:*]" in services_hook and "autologin-user=user" in services_hook
 assert "autologin-session=openbox" in services_hook and "user-session=openbox" in services_hook
 assert "/usr/share/xsessions/openbox.desktop" in services_hook

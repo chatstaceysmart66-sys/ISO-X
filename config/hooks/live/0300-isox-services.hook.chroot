@@ -11,7 +11,7 @@ dns=default
 [device]
 wifi.scan-rand-mac-address=yes
 EOF
-install -d -m 0755 /etc/lightdm
+install -d -m 0755 /etc/lightdm /etc/lightdm/lightdm.conf.d
 cat > /etc/lightdm/lightdm-gtk-greeter.conf <<'EOF'
 [greeter]
 background=/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.png
