@@ -36,6 +36,7 @@ def checks(junit_path: Path) -> list[tuple[str, list[str]]]:
         ("usb-validation", ["bash", "tests/test_write_usb_validation.sh"]),
         ("usb-persistence-partition", ["bash", "tests/test_write_usb_persistence.sh"]),
         ("qemu-fake-validation", ["bash", "tests/test_qemu_headless_validation.sh"]),
+        ("desktop-readiness", ["bash", "tests/test_desktop_readiness.sh"]),
         ("secureboot-validation", ["bash", "tests/test_secureboot_validation.sh"]),
         ("initramfs-watermark-validation", ["bash", "tests/test_initramfs_watermark_guard.sh"]),
         ("watermark-integrity", ["bash", "tests/test_watermark_integrity.sh"]),

@@ -79,6 +79,8 @@ case "$MODE" in
     if [[ "$HEADLESS" -eq 1 ]]; then
       QEMU_TIMEOUT="${ISOX_QEMU_TIMEOUT:-600}"
       [[ "$QEMU_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ISOX_QEMU_TIMEOUT must be a positive integer." >&2; exit 3; }
+      QEMU_RENDER_GRACE="${ISOX_QEMU_RENDER_GRACE:-3}"
+      [[ "$QEMU_RENDER_GRACE" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "ISOX_QEMU_RENDER_GRACE must be a non-negative number of seconds." >&2; exit 3; }
       QEMU_NONCE="${ISOX_QEMU_NONCE:-}"
       [[ "$QEMU_NONCE" =~ ^[a-f0-9]{32}$ ]] || { echo "Set ISOX_QEMU_NONCE to the nonce embedded in the CI-only ISO variant." >&2; exit 3; }
     elif [[ "$HEADLESS" -eq 0 ]]; then
@@ -121,6 +123,7 @@ case "$MODE" in
         --evidence "$EVIDENCE" \
         --nonce "$QEMU_NONCE" \
         --timeout "$QEMU_TIMEOUT" \
+        --render-grace "$QEMU_RENDER_GRACE" \
         --accelerator "$QEMU_ACCEL" \
         -- qemu-system-x86_64 "${ARGS[@]}"
       exit $?

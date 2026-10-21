@@ -42,10 +42,28 @@ def qmp_server():
                 words = shlex.split(request["arguments"]["command-line"])
                 if words[0] == "screendump":
                     screenshot_count += 1
-                    Path(words[1]).write_bytes(b"P6\n1 1\n255\n\x00\x00\x00")
+                    if kind == "no-screenshot":
+                        pass
+                    elif kind == "malformed-screenshot":
+                        Path(words[1]).write_bytes(b"P6\nnot-an-image")
+                    elif kind == "small-screenshot":
+                        Path(words[1]).write_bytes(b"P6\n1 1\n255\n\x00\x00\x00")
+                    elif kind == "black-screenshot":
+                        Path(words[1]).write_bytes(b"P6\n640 480\n255\n" + b"\x00" * (640 * 480 * 3))
+                    elif kind == "unrelated-screenshot":
+                      Path(words[1]).write_bytes(b"P6\n640 480\n255\n" + b"\xff" * (640 * 480 * 3))
+                    else:
+                        pixels = bytearray(bytes((10, 10, 15)) * (640 * 480))
+                        pixels[:1500] = bytes((18, 18, 28)) * 500
+                        pixels[1500:1560] = bytes((0, 229, 255)) * 20
+                        Path(words[1]).write_bytes(b"P6\n640 480\n255\n" + pixels)
                     if kind == "marker-exit-error" and screenshot_count == 2:
                         time.sleep(0.5)
-                response = {"return": ""}
+                response = (
+                  {"error": {"class": "GenericError", "desc": "fake screendump error"}}
+                  if kind == "qmp-command-error" and command == "human-monitor-command"
+                  else {"return": ""}
+                )
             else:
                 response = {"return": {}}
             connection.sendall(json.dumps(response).encode() + b"\r\n")
@@ -54,6 +72,9 @@ def qmp_server():
 if os.environ.get("FAKE_QEMU_NO_QMP") != "1":
     threading.Thread(target=qmp_server, daemon=True).start()
 
+if kind == "success-zero-on-term":
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+
 if kind == "immediate-error":
     print("qemu-system-x86_64: test infrastructure error", file=sys.stderr)
     raise SystemExit(42)
@@ -61,7 +82,7 @@ if kind == "misleading":
     with open(serial, "a", encoding="utf-8") as stream:
         stream.write("Reached target Graphical Interface\n")
         stream.write("ISOX_CI_READY nonce=ffffffffffffffffffffffffffffffff\n")
-elif kind == "success" or kind == "qmp-failure":
+elif kind in ("success", "success-zero-on-term", "qmp-failure", "qmp-command-error"):
     time.sleep(1)
     with open(serial, "a", encoding="utf-8") as stream:
         stream.write(f"ISOX_CI_READY nonce={os.environ['FAKE_QEMU_NONCE']}\n")
@@ -70,11 +91,15 @@ elif kind == "marker-exit-error":
         stream.write(f"ISOX_CI_READY nonce={os.environ['FAKE_QEMU_NONCE']}\n")
     time.sleep(0.2)
     raise SystemExit(42)
+elif kind == "timeout":
+  with open(serial, "a", encoding="utf-8") as stream:
+    stream.write("Boot remains in progress\n")
 while True:
     time.sleep(1)
 QEMU
 chmod 0755 "$TMP/bin/qemu-system-x86_64"
 NONCE=0123456789abcdef0123456789abcdef
+export ISOX_QEMU_RENDER_GRACE=0
 
 FAKE_QEMU_KIND=success FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=20 \
   ISOX_QEMU_NONCE="$NONCE" PATH="$TMP/bin:$PATH" \
@@ -86,12 +111,40 @@ from pathlib import Path
 r = json.loads(Path(sys.argv[1]).read_text())
 assert r["status"] == "PASS_BOOT", r
 assert r["marker_seen"] is True and r["process_group_clean"] is True, r
+assert r["shutdown_reason"] == "readiness_marker" and r["termination_requested"] is True, r
+assert r["final_screenshot_valid"] is True, r
 assert r["duration_seconds"] < 5, r
 assert r["serial_bytes"] > 0, r
 assert r["screenshots"] == ["qemu-bios-headless-early.ppm", "qemu-bios-headless-final.ppm"], r
 for screenshot in r["screenshots"]:
     image = Path(sys.argv[1]).parent / screenshot
-    assert image.read_bytes().startswith(b"P6\n1 1\n255\n"), image
+    assert image.read_bytes().startswith(b"P6\n640 480\n255\n"), image
+PY
+
+FAKE_QEMU_KIND=success-zero-on-term FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=20 \
+  ISOX_QEMU_NONCE="$NONCE" PATH="$TMP/bin:$PATH" \
+  bash "$ROOT/tests/qemu-acceptance.sh" bios-headless "$TMP/test.iso" "$TMP/success-zero" \
+  >"$TMP/success-zero.log" 2>&1
+python3 - "$TMP/success-zero/qemu-bios-headless-result.json" <<'PY'
+import json, sys
+from pathlib import Path
+r = json.loads(Path(sys.argv[1]).read_text())
+assert r["status"] == "PASS_BOOT" and r["qemu_exit_code"] == 0, r
+assert r["termination_requested"] is True and r["process_group_clean"] is True, r
+PY
+
+python3 - "$ROOT/tests/qemu-runner.py" <<'PY'
+import importlib.util, signal, sys
+spec = importlib.util.spec_from_file_location("qemu_runner", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+classify = module.classify
+assert classify("", False, 0, True, "readiness_marker", False, False, True) == "QEMU_INFRASTRUCTURE_FAILURE"
+assert classify("", False, -signal.SIGTERM, True, "readiness_marker", True, False, True) == "PASS_BOOT"
+assert classify("", False, -signal.SIGKILL, True, "readiness_marker", True, True, True) == "QEMU_INFRASTRUCTURE_FAILURE"
+assert classify("", False, 42, True, "readiness_marker", True, False, True) == "QEMU_INFRASTRUCTURE_FAILURE"
+assert classify("boot", True, 0, False, "timeout", True, False, True) == "BOOT_TIMEOUT"
+assert classify("", False, 0, True, "readiness_marker", True, False, False) == "QEMU_INFRASTRUCTURE_FAILURE"
 PY
 
 if FAKE_QEMU_KIND=marker-exit-error FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=5 \
@@ -124,6 +177,36 @@ assert r["status"] == "QEMU_INFRASTRUCTURE_FAILURE", r
 assert r["marker_seen"] is True and r["screenshots"] == [], r
 PY
 
+if FAKE_QEMU_KIND=qmp-command-error FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=5 \
+  ISOX_QEMU_NONCE="$NONCE" PATH="$TMP/bin:$PATH" \
+  bash "$ROOT/tests/qemu-acceptance.sh" bios-headless "$TMP/test.iso" "$TMP/qmp-command-error" \
+  >"$TMP/qmp-command-error.log" 2>&1; then
+  echo "FAIL: a QMP screendump error was accepted." >&2
+  exit 1
+fi
+python3 - "$TMP/qmp-command-error/qemu-bios-headless-result.json" \
+  "$TMP/qmp-command-error/qemu-bios-headless-qmp.log" <<'PY'
+import json, sys
+from pathlib import Path
+r = json.loads(Path(sys.argv[1]).read_text())
+assert r["status"] == "QEMU_INFRASTRUCTURE_FAILURE" and r["marker_seen"] is True, r
+assert "fake screendump error" in Path(sys.argv[2]).read_text()
+PY
+
+if FAKE_QEMU_KIND=timeout ISOX_QEMU_TIMEOUT=2 ISOX_QEMU_NONCE="$NONCE" \
+  PATH="$TMP/bin:$PATH" bash "$ROOT/tests/qemu-acceptance.sh" bios-headless \
+  "$TMP/test.iso" "$TMP/timeout" >"$TMP/timeout.log" 2>&1; then
+  echo "FAIL: a boot timeout was accepted." >&2
+  exit 1
+fi
+python3 - "$TMP/timeout/qemu-bios-headless-result.json" <<'PY'
+import json, sys
+from pathlib import Path
+r = json.loads(Path(sys.argv[1]).read_text())
+assert r["status"] == "BOOT_TIMEOUT", r
+assert r["timed_out"] is True and r["marker_seen"] is False, r
+PY
+
 mkdir -p "$TMP/stale"
 printf 'old screenshot' > "$TMP/stale/qemu-bios-headless-early.ppm"
 if FAKE_QEMU_KIND=success FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=5 \
@@ -142,6 +225,16 @@ assert r["marker_seen"] is True, r
 assert Path(sys.argv[2]).read_bytes() == b"old screenshot"
 assert "early.ppm" not in r["screenshots"], r
 PY
+
+for screen_kind in black-screenshot unrelated-screenshot small-screenshot malformed-screenshot no-screenshot; do
+  if FAKE_QEMU_KIND="$screen_kind" FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=5 \
+    ISOX_QEMU_NONCE="$NONCE" PATH="$TMP/bin:$PATH" \
+    bash "$ROOT/tests/qemu-acceptance.sh" bios-headless "$TMP/test.iso" "$TMP/$screen_kind" \
+    >"$TMP/$screen_kind.log" 2>&1; then
+    echo "FAIL: invalid screenshot evidence was accepted ($screen_kind)." >&2
+    exit 1
+  fi
+done
 
 if FAKE_QEMU_KIND=misleading ISOX_QEMU_TIMEOUT=2 ISOX_QEMU_NONCE="$NONCE" \
   PATH="$TMP/bin:$PATH" bash "$ROOT/tests/qemu-acceptance.sh" bios-headless \

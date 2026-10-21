@@ -16,6 +16,42 @@ from pathlib import Path
 
 
 MARKER_PREFIX = "ISOX_CI_READY nonce="
+MIN_SCREENSHOT_WIDTH = 640
+MIN_SCREENSHOT_HEIGHT = 480
+
+
+def validate_ppm(path: Path, require_visible: bool = False) -> tuple[bool, str]:
+    try:
+        image = path.read_bytes()
+    except OSError as error:
+        return False, str(error)
+    if len(image) < 16 or not image.startswith(b"P6"):
+        return False, "not a binary P6 PPM image"
+    header = re.match(rb"P6\s+(\d+)\s+(\d+)\s+(\d+)\s", image)
+    if not header:
+        return False, "malformed PPM header"
+    width, height, maximum = map(int, header.groups())
+    if width < MIN_SCREENSHOT_WIDTH or height < MIN_SCREENSHOT_HEIGHT or maximum != 255:
+        return False, f"unsupported screenshot dimensions or color depth: {width}x{height}, max={maximum}"
+    pixels = image[header.end():]
+    if len(pixels) != width * height * 3:
+        return False, f"pixel payload size mismatch: expected {width * height * 3}, got {len(pixels)}"
+    if require_visible:
+        background = bytes((10, 10, 15))
+        panel = bytes((18, 18, 28))
+        accent = bytes((0, 229, 255))
+        background_count = panel_count = accent_count = 0
+        for index in range(0, len(pixels), 3):
+            color = pixels[index:index + 3]
+            background_count += color == background
+            panel_count += color == panel
+            accent_count += color == accent
+        if background_count < width * height // 20 or panel_count < 500 or accent_count < 20:
+            return False, (
+                "screenshot does not contain the ISO-X desktop palette: "
+                f"background={background_count}, panel={panel_count}, accent={accent_count}"
+            )
+    return True, "ok"
 
 
 class QMP:
@@ -64,7 +100,7 @@ class QMP:
             if "return" in response or "error" in response:
                 return response
 
-    def screenshot(self, destination: Path) -> bool:
+    def screenshot(self, destination: Path, require_visible: bool = False) -> bool:
         if self.reader is None:
             return False
         try:
@@ -77,7 +113,10 @@ class QMP:
             response = self._read_response()
             if "error" in response:
                 raise RuntimeError(str(response["error"]))
-            return destination.is_file() and destination.stat().st_size > 0
+            valid, reason = validate_ppm(destination, require_visible=require_visible)
+            if not valid:
+                raise ValueError(reason)
+            return True
         except (OSError, ValueError, RuntimeError, TimeoutError) as error:
             with self.log.open("a", encoding="utf-8") as stream:
                 stream.write(f"screendump {destination.name}: {error}\n")
@@ -90,13 +129,27 @@ class QMP:
         self.reader = None
 
 
-def classify(serial: str, timed_out: bool, returncode: int | None, marker_seen: bool) -> str:
-    if marker_seen:
-        if returncode in (None, -signal.SIGTERM, -signal.SIGKILL):
-            return "PASS_BOOT"
-        return "QEMU_INFRASTRUCTURE_FAILURE"
+def classify(
+    serial: str,
+    timed_out: bool,
+    returncode: int | None,
+    marker_seen: bool,
+    shutdown_reason: str,
+    termination_requested: bool,
+    termination_escalated: bool,
+    final_screenshot_valid: bool,
+) -> str:
     if returncode not in (None, 0, -signal.SIGTERM, -signal.SIGKILL):
         return "QEMU_INFRASTRUCTURE_FAILURE"
+    if marker_seen:
+        if (
+            shutdown_reason != "readiness_marker"
+            or not termination_requested
+            or termination_escalated
+            or not final_screenshot_valid
+        ):
+            return "QEMU_INFRASTRUCTURE_FAILURE"
+        return "PASS_BOOT"
     if not serial.strip():
         return "NO_SERIAL_OUTPUT"
     if re.search(r"Kernel panic|Unable to mount root fs|Entering emergency mode", serial, re.I):
@@ -129,24 +182,25 @@ def serial_indicators(serial: str) -> dict[str, bool | None]:
     return {name: bool(re.search(pattern, serial, re.I)) for name, pattern in patterns.items()}
 
 
-def terminate_group(process: subprocess.Popen[bytes]) -> None:
+def terminate_group(process: subprocess.Popen[bytes]) -> tuple[bool, bool]:
+    if process.poll() is not None:
+        return False, False
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
-        pass
+        return False, False
+    termination_requested = True
+    termination_escalated = False
     try:
         if process.poll() is None:
             process.wait(timeout=5)
     except subprocess.TimeoutExpired:
         pass
-    try:
-        os.killpg(process.pid, 0)
-    except ProcessLookupError:
-        if process.poll() is None:
-            process.wait()
-        return
+    if not group_has_live_processes(process.pid):
+        return termination_requested, termination_escalated
     try:
         os.killpg(process.pid, signal.SIGKILL)
+        termination_escalated = True
     except ProcessLookupError:
         pass
     try:
@@ -154,6 +208,7 @@ def terminate_group(process: subprocess.Popen[bytes]) -> None:
             process.wait(timeout=5)
     except subprocess.TimeoutExpired:
         pass
+    return termination_requested, termination_escalated
 
 
 def group_has_live_processes(group_id: int) -> bool:
@@ -180,6 +235,7 @@ def main() -> int:
     parser.add_argument("--evidence", required=True, type=Path)
     parser.add_argument("--nonce", required=True)
     parser.add_argument("--timeout", required=True, type=int)
+    parser.add_argument("--render-grace", type=float, default=3.0)
     parser.add_argument("--accelerator", required=True)
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -187,6 +243,8 @@ def main() -> int:
         parser.error("nonce must be 32 lowercase hexadecimal characters")
     if args.timeout < 1:
         parser.error("timeout must be a positive integer")
+    if args.render_grace < 0:
+        parser.error("render grace must not be negative")
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("a QEMU command is required after --")
@@ -274,6 +332,10 @@ def main() -> int:
             screenshots: list[str] = []
             marker_seen = False
             timed_out = False
+            shutdown_reason = "qemu_exit"
+            termination_requested = False
+            termination_escalated = False
+            final_screenshot_valid = False
             failure = None
             try:
                 qmp_available = qmp.connect(process, min(started + 1, started + args.timeout))
@@ -288,6 +350,9 @@ def main() -> int:
                     serial_bytes = serial_path.read_bytes()
                     if nonce_marker.search(serial_bytes):
                         marker_seen = True
+                        shutdown_reason = "readiness_marker"
+                        if args.render_grace:
+                            time.sleep(args.render_grace)
                         break
                     now = time.monotonic()
                     if now >= second_snapshot_at and qmp_available:
@@ -297,21 +362,25 @@ def main() -> int:
                         second_snapshot_at = float("inf")
                     if now - started >= args.timeout:
                         timed_out = True
+                        shutdown_reason = "timeout"
                         break
                     time.sleep(0.2)
             except Exception as error:
                 failure = f"{type(error).__name__}: {error}"
+                shutdown_reason = "runner_error"
             finally:
-                final_screenshot = False
                 if qmp_available:
                     name = f"qemu-{args.mode}-final.ppm"
-                    final_screenshot = qmp.screenshot(evidence / name)
-                    if final_screenshot:
+                    final_screenshot_valid = qmp.screenshot(
+                        evidence / name,
+                        require_visible=marker_seen,
+                    )
+                    if final_screenshot_valid:
                         screenshots.append(name)
-                    elif timed_out:
-                        failure = failure or "Unable to capture the final VGA screenshot before timeout cleanup."
+                    elif marker_seen or timed_out:
+                        failure = failure or "Unable to capture valid final VGA evidence before QEMU cleanup."
                 qmp.close()
-                terminate_group(process)
+                termination_requested, termination_escalated = terminate_group(process)
             process_group_clean = not group_has_live_processes(process.pid)
             qemu_exit_code = process.returncode
             duration = round(time.monotonic() - started, 3)
@@ -321,7 +390,16 @@ def main() -> int:
                 serial_content = b""
                 failure = failure or f"{type(error).__name__}: {error}"
             serial_text = serial_content.decode("utf-8", errors="replace")
-            status = classify(serial_text, timed_out, qemu_exit_code, marker_seen)
+            status = classify(
+                serial_text,
+                timed_out,
+                qemu_exit_code,
+                marker_seen,
+                shutdown_reason,
+                termination_requested,
+                termination_escalated,
+                final_screenshot_valid,
+            )
             if failure or not process_group_clean:
                 status = "QEMU_INFRASTRUCTURE_FAILURE"
             result = {
@@ -330,6 +408,10 @@ def main() -> int:
                 "qemu_started": True,
                 "qemu_exit_code": qemu_exit_code,
                 "timed_out": timed_out,
+                "shutdown_reason": shutdown_reason,
+                "termination_requested": termination_requested,
+                "termination_escalated": termination_escalated,
+                "final_screenshot_valid": final_screenshot_valid,
                 "duration_seconds": duration,
                 "serial_bytes": len(serial_content),
                 "marker_seen": marker_seen,

@@ -232,6 +232,7 @@ install -m 0644 "$PROJECT_DIR/systemd/isox-zram.service" config/includes.chroot/
 ln -sfn ../isox-zram.service config/includes.chroot/etc/systemd/system/multi-user.target.wants/isox-zram.service
 if [[ "$CI_BOOT" == 1 ]]; then
   install -m 0755 "$PROJECT_DIR/scripts/isox-ci-ready.sh" config/includes.chroot/usr/local/sbin/isox-ci-ready
+  install -m 0755 "$PROJECT_DIR/scripts/isox-desktop-window-ready.sh" config/includes.chroot/usr/local/sbin/isox-desktop-window-ready.sh
   install -m 0644 "$PROJECT_DIR/systemd/isox-ci-ready.service" config/includes.chroot/etc/systemd/system/isox-ci-ready.service
   install -m 0644 "$PROJECT_DIR/systemd/isox-ci-ready.timer" config/includes.chroot/etc/systemd/system/isox-ci-ready.timer
   mkdir -p config/includes.chroot/etc/systemd/system/multi-user.target.wants

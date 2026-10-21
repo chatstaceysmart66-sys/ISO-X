@@ -25,6 +25,9 @@ def validate_report(report):
     for key in ("bios", "uefi"):
         if report[key].get("gate") not in statuses:
             raise ValueError(f"invalid {key} gate")
+        for field in ("shutdown_reason", "termination_requested", "termination_escalated", "process_group_clean", "final_screenshot_valid"):
+            if field not in report[key]:
+                raise ValueError(f"missing {key} lifecycle evidence: {field}")
         indicators = report[key].get("serial_indicators", {})
         if set(indicators) != {"bootloader", "kernel", "initramfs", "systemd", "graphical_target", "display_manager"}:
             raise ValueError(f"incomplete {key} serial indicators")

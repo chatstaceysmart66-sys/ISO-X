@@ -70,6 +70,7 @@ for asset in (
 
 assert {"appstream", "python3-yaml", "flatpak", "pulseaudio-utils"} <= packages
 assert "user-setup" in packages, "live-config needs user-setup to create the configured live account."
+assert "isox-desktop-window-ready.sh" in build, "CI readiness must verify the ISO-X application window."
 for store_asset, image_path in (
     ("$PROJECT_DIR/app/isox_store_backend.py", "config/includes.chroot/usr/share/iso-x/isox_store_backend.py"),
     ('"$PROJECT_DIR"/assets/sounds/*.wav', "config/includes.chroot/usr/share/iso-x/assets/sounds/"),

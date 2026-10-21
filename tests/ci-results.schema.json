@@ -61,7 +61,7 @@
   "$defs": {
     "boot": {
       "type": "object",
-      "required": ["job_result", "status", "gate", "qemu_started", "duration_seconds", "accelerator", "qemu_version", "firmware", "firmware_version", "marker_seen", "screenshots", "serial_indicators", "serial_indicator_scope"],
+      "required": ["job_result", "status", "gate", "qemu_started", "duration_seconds", "accelerator", "qemu_version", "firmware", "firmware_version", "marker_seen", "shutdown_reason", "termination_requested", "termination_escalated", "process_group_clean", "final_screenshot_valid", "screenshots", "serial_indicators", "serial_indicator_scope"],
       "properties": {
         "job_result": {"type": "string"},
         "status": {"type": "string"},
@@ -74,6 +74,11 @@
         "firmware_version": {"type": "string"},
         "serial_bytes": {"type": ["integer", "null"], "minimum": 0},
         "marker_seen": {"type": ["boolean", "null"]},
+        "shutdown_reason": {"type": "string"},
+        "termination_requested": {"type": ["boolean", "null"]},
+        "termination_escalated": {"type": ["boolean", "null"]},
+        "process_group_clean": {"type": ["boolean", "null"]},
+        "final_screenshot_valid": {"type": ["boolean", "null"]},
         "serial_indicators": {
           "type": "object",
           "required": ["bootloader", "kernel", "initramfs", "systemd", "graphical_target", "display_manager"],
