@@ -18,6 +18,7 @@ uefi = job("uefi")
 summary = job("acceptance-summary")
 promote = job("promote")
 build_helper = (Path(__file__).resolve().parents[1] / "scripts/ci-build-in-trixie.sh").read_text()
+nonce_reader = (Path(__file__).resolve().parents[1] / "scripts/read-ci-nonce.sh").read_text()
 source_runner = (Path(__file__).resolve().parents[1] / "scripts/run-source-checks.py").read_text()
 ready_probe = (Path(__file__).resolve().parents[1] / "scripts/isox-ci-ready.sh").read_text()
 ready_service = (Path(__file__).resolve().parents[1] / "systemd/isox-ci-ready.service").read_text()
@@ -73,6 +74,10 @@ assert "persistence=NOT_RUN" in promote
 assert "release_eligible=false" in promote
 assert "ISO-X-0.4.0-live-amd64-candidate-" in promote
 assert "needs: [source-check, build, bios, uefi, promote]" in workflow
+assert 'printf \'%s\\n\' "$nonce" > candidate/ci-nonce.txt' in workflow
+assert 'candidate/ci-nonce.txt' not in build_helper
+assert "scripts/read-ci-nonce.sh candidate/ci-nonce.txt" in workflow
+assert "32 lowercase hexadecimal characters" in nonce_reader
 assert "scripts/create-ci-results.py" in summary
 assert "hashFiles(" not in workflow
 for ref in re.findall(r"uses: actions/[^\s@]+@([0-9a-f]{40})", workflow):

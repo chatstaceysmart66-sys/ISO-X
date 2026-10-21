@@ -47,5 +47,4 @@ sha256sum "$ISOX_OUTPUT_ISO" | tee evidence/iso-sha256.txt
 dpkg-query -W live-build qemu-system-x86 qemu-utils ovmf xorriso | tee evidence/build-tools.txt
 printf 'kernel: '
 uname -r | tee evidence/build-kernel.txt
-printf 'nonce: %s\n' "$ISOX_CI_NONCE" > candidate/ci-nonce.txt
 test ! -e "$ISOX_BUILD_DIR/chroot/var/lib/isox-build-secrets/isox-release.key"

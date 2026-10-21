@@ -176,3 +176,11 @@
 - لا يوجد ISO جديد من `HEAD` بعد تغييرات bootloader/Persistence. نتيجة BIOS القديمة `BOOTLOADER_STALL` تخص الصورة التاريخية فقط. BIOS وUEFI على النسخة الجديدة `NOT_RUN`.
 - بناء قسم Persistence في ملف raw تمت تجربته حتى MBR/ext4 فقط. اكتشاف live-boot، إنشاء `persistence.conf` داخل filesystem mounted، كتابة ملف المستخدم/Firefox/الحزمة، إعادة تشغيل guest والتحقق من بقائها: `NOT_RUN`، لأن loop device ممنوع ولا توجد ISO جديدة تقلع من التعديلات.
 - عند تسجيل هذه الملاحظة لم يكن قد حدث commit أو push أو تشغيل workflow. الـISO القديمة ignored، ونسخة raw وأدوات الفحص في `/tmp` فقط؛ لا تُضمّن أيًا منها في commit. `gh auth status` غير مصادق، لذلك لا push ولا تشغيل CI في هذه الجولة.
+
+#### إصلاح تعارض تنسيق CI nonce — 2026-10-21
+
+- تشغيل `39650015616` على commit `6a1cccb61e90046795383ab9311243b9f7ffa9c0` اكتمل بالفشل عند `Validate candidate and write validation manifest`. السجل المرفق في جلسة الإصلاح يثبت أن `candidate/ci-nonce.txt` احتوى `nonce: b8c826a2105b6f374c2043d4fab04be7`، بينما فحص الـworkflow يتطلب 32 خانة hex عارية.
+- السبب الجذري: workflow كان ينشئ الملف بالقيمة الخام، ثم `scripts/ci-build-in-trixie.sh` يكتب فوق الملف نفسه مع السابقة النصية `nonce: `. أزيلت الكتابة الثانية، وأضيف `scripts/read-ci-nonce.sh` لفرض الصيغة نفسها على مستهلكي nonce في التحقق وBIOS وUEFI والترويج؛ لا يُخفف التحقق.
+- أضيف اختبار يمرر قيمة خام صالحة ويرفض البادئة، والأحرف الكبيرة، والقيمة القصيرة، والسطور الزائدة؛ وأضيف فحص عقد workflow يثبت أن المصدر الوحيد يكتب raw token وأن helper البناء لا يستبدل الملف.
+- التحقق المحلي بعد التعديل: `scripts/run-source-checks.py` = 23 check PASS، 55 PASS، 0 FAIL، 0 NOT_RUN، exit 0؛ pytest شغّل 33 حالة PASS. `actionlint v1.7.12`, ShellCheck للسكربتين، `bash -n` و`git diff --check` exit 0. النتيجة لا تثبت build أو boot.
+- تشغيل `39650015616` أكد source-check PASS، build FAIL بسبب nonce، BIOS/UEFI/promote SKIPPED، ولا يوجد Artifact ISO؛ Artifacts الظاهرة هي source-check وbuild-evidence وacceptance-report فقط. لا تُعتبر صورة ذلك التشغيل منتجًا قابلاً للتنزيل.

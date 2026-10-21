@@ -283,6 +283,34 @@ def test_generated_boot_config_validator_rejects_stalls_and_ci_leaks():
         assert "CI nonce parameter is missing or incorrect" in result.stderr
 
 
+def test_ci_nonce_file_reader_accepts_only_raw_lowercase_hex():
+    reader = ROOT / "scripts/read-ci-nonce.sh"
+    with tempfile.TemporaryDirectory(prefix="isox-ci-nonce-") as temporary:
+        nonce_file = Path(temporary) / "ci-nonce.txt"
+        valid_nonce = "0123456789abcdef0123456789abcdef"
+        nonce_file.write_text(f"{valid_nonce}\n", encoding="ascii")
+        result = subprocess.run(
+            ["bash", str(reader), str(nonce_file)],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == f"{valid_nonce}\n"
+
+        for invalid in (
+            f"nonce: {valid_nonce}\n",
+            f"{valid_nonce.upper()}\n",
+            "0123456789abcdef\n",
+            f"{valid_nonce}\nextra\n",
+        ):
+            nonce_file.write_text(invalid, encoding="ascii")
+            result = subprocess.run(
+                ["bash", str(reader), str(nonce_file)],
+                capture_output=True, text=True, check=False,
+            )
+            assert result.returncode != 0, repr(invalid)
+            assert "exactly 32 lowercase hexadecimal characters" in result.stderr
+
+
 def test_usb_writer_accepts_only_expected_iso_hybrid_mbr_table():
     writer = ROOT / "scripts/write-usb.sh"
     with tempfile.TemporaryDirectory(prefix="isox-sfdisk-fixture-") as temporary:
