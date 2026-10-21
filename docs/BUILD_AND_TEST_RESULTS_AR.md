@@ -56,3 +56,19 @@
 - لم يُبنَ مشهد Bevy ولم تُختبر الواجهة الرسومية. Rust/Cargo غير مطلوبين لبناء ISO الافتراضي.
 
 تُسجّل النتائج النهائية والأدلة في `AUDIT.md` و`docs/HARDWARE_ACCEPTANCE_CHECKLIST_AR.md` بعد تنفيذها.
+
+## بناء محلي جديد — ISO-X Store — 2026-10-20
+
+هذه النتائج أحدث من سطر سجل CI أعلاه، وتخص commit `dba48b57128032a9cabefb6deb6eb1f6381cb095` الذي يتضمن ISO-X Store:
+
+| الفحص | النتيجة الفعلية |
+|---|---|
+| `live-build` داخل Debian 13 Trixie amd64 | `P: Build completed successfully`، exit 0. بُنيت نسخة مصدر نظيفة في `/tmp` لأن مساحة workspace أقل من شرط البناء؛ استخدمت الحاوية صلاحيات mount اللازمة لـlive-build. |
+| صورة ISO | [ISO-X-0.4.0-live-amd64.iso](../ISO-X-0.4.0-live-amd64.iso)، `2,657,157,120` بايت. |
+| SHA-256 | `ad282899b7e1c51fd96590807437d29bffa97c898c7e77e09323a2e3c9b28da1`؛ تحقق `sha256sum --check` بنجاح. |
+| `xorriso` | اجتاز فحص الصورة؛ مدخل BIOS ‏`/isolinux/isolinux.bin` ومدخل UEFI ‏`/boot/grub/efi.img` موجودان، مع MBR isohybrid/GPT/APM. |
+| ملفات المتجر في SquashFS | تأكد وجود `isox_store_backend.py` ومدخل سطح المكتب وملفات الأصوات الخمسة داخل نظام الملفات النهائي. |
+| QEMU BIOS | محاولة TCG لمدة 180 ثانية انتهت بـtimeout/exit 124؛ ملف Serial فارغ. لا إثبات لجلسة رسومية أو علامة جاهزية؛ النتيجة غير محسومة. |
+| QEMU UEFI | OVMF بدأ تشغيل DVD، لكن المحاولة انتهت بـtimeout/exit 124 دون علامة جاهزية من النظام؛ النتيجة غير محسومة. |
+| الكتابة على الأقراص | لم يُرفق قرص افتراضي أو جهاز حقيقي؛ لم تُنفذ كتابة على وسيط. |
+| GitHub push/Actions | الدفع فشل exit 128 بسبب غياب اعتماد Git (`unable to get password from user`)، و`gh auth status` غير مصادق. لا تشغيل Actions أو Artifact جديد. |

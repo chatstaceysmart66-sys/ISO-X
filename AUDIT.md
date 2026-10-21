@@ -547,3 +547,11 @@ QEMU_BIOS_EXIT=2
 - نجح `systemd-analyze verify --root=<staged-root>` لوحدات النظام بعد stage الوحدات والملفات التنفيذية؛ فحص وحدات المستخدم لم يكتمل لأن مدير user systemd لم يتهيأ في الحاوية. لم تُعدّل وحدات systemd في تغيير المتجر.
 - المضيف الحالي Ubuntu 24.04، لا Debian Trixie. لا تتوفر جلسة عرض (`DISPLAY`/Wayland فارغان)، ولا Gtk 3 namespace في Python المضيف، ولا `paplay` أو `flatpak` أو `appstreamcli`؛ لذلك لم تُختبر GTK أو إدارة حزم حقيقية أو تشغيل صوت. اختبارات Flatpak تستخدم runner وهميًا مع اختبارات تحقق الهوية.
 - لا تتوفر `lb`، والمساحة المتاحة 18 GiB مقابل شرط بناء 20 GiB؛ لم يبدأ بناء ISO. لا توجد صورة أو SHA جديدة، ولا اختبار إقلاع BIOS/UEFI لهذا التغيير. وجود `xorriso` وQEMU على المضيف وحده لا يثبت شيئًا عن صورة لم تُبنَ.
+
+### تحديث البناء المحلي الفعلي — 2026-10-20
+
+- بُني commit `dba48b57128032a9cabefb6deb6eb1f6381cb095` داخل حاوية Debian 13 Trixie amd64 باستخدام `live-build`. استُخدم مصدر نظيف من `git archive` في `/tmp` لأن مساحة filesystem المؤقت كانت 39 GiB مقابل 18 GiB في workspace. احتاج live-build صلاحية mount داخل الحاوية؛ نجحت المحاولة الثانية مع صلاحية container اللازمة، دون ربط أي قرص جهاز.
+- نتيجة السجل: `P: Build completed successfully`، exit 0. الصورة [ISO-X-0.4.0-live-amd64.iso](./ISO-X-0.4.0-live-amd64.iso) بحجم `2,657,157,120` بايت. SHA-256: `ad282899b7e1c51fd96590807437d29bffa97c898c7e77e09323a2e3c9b28da1`. اجتاز sidecar `sha256sum --check`.
+- `xorriso` أكد El Torito BIOS (`/isolinux/isolinux.bin`) وUEFI (`/boot/grub/efi.img`)، وSystem Area من نوع MBR isohybrid/GPT/APM. وفُحص SquashFS النهائي وثبت وجود `isox_store_backend.py`، ومدخل `isox-store.desktop`، وملفات WAV الخمسة داخله.
+- محاولة QEMU BIOS باستخدام TCG وذاكرة 1 GiB انتهت بعد 180 ثانية بـ`timeout` (exit 124) وسجل Serial فارغ؛ لم تثبت وصول النظام إلى شاشة الدخول أو الجلسة الرسومية. محاولة UEFI عبر OVMF أظهرت بدء firmware تشغيل DVD، ثم انتهت كذلك بـtimeout (exit 124) دون علامة جاهزية من النظام. النتيجتان غير محسومتين وليستا نجاح إقلاع أو إثبات فشل ISO. لم تُرفق أقراص افتراضية أو حقيقية.
+- `git push origin HEAD:refs/heads/fix/isox-build-and-runtime` فشل exit 128 برسالة `unable to get password from user`. `gh auth status` غير مصادق؛ رأس remote بقي `caf58594bea006c983d45751f113dfe6ed8b89eb`. لم يُشغّل GitHub Actions.
