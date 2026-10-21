@@ -8,6 +8,7 @@ linux-image-amd64
 live-boot
 live-config
 live-config-systemd
+user-setup
 systemd-sysv
 initramfs-tools
 xserver-xorg
