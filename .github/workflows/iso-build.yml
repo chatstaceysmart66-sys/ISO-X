@@ -22,7 +22,7 @@ jobs:
       - name: Install static-check tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-pytest shellcheck desktop-file-utils libxml2-utils
+          sudo apt-get install -y python3-pytest shellcheck desktop-file-utils libxml2-utils fdisk
 
       - name: Run source tests and validators
         id: source-checks
@@ -121,21 +121,59 @@ jobs:
         run: |
           set -Eeuo pipefail
           iso="candidate/ISO-X-0.4.0-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.iso"
-          if [[ "${{ steps.build-iso.outcome }}" != success || ! -s "$iso" || ! -s "$iso.sha256" ]]; then
+          report_validation_error() {
+            local check="$1" file="$2" contents
+            if [[ -r "$file" ]]; then
+              contents="$(cat "$file")"
+            else
+              contents="<missing or unreadable>"
+            fi
+            contents="${contents//'%'/'%25'}"
+            contents="${contents//$'\r'/'%0D'}"
+            contents="${contents//$'\n'/'%0A'}"
+            echo "::error title=Candidate validation::$check; file=$file; contents=$contents"
+          }
+          require_nonempty_file() {
+            local check="$1" file="$2"
+            if [[ ! -s "$file" ]]; then
+              report_validation_error "$check" "$file"
+              exit 1
+            fi
+          }
+          require_match() {
+            local check="$1" pattern="$2" file="$3"
+            if ! grep -Eiq "$pattern" "$file"; then
+              report_validation_error "$check" "$file"
+              exit 1
+            fi
+          }
+          if [[ "${{ steps.build-iso.outcome }}" != success ]]; then
+            report_validation_error "ISO build step did not succeed" evidence/isox-build.log
             echo "validated=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          (cd candidate && sha256sum --check "$(basename "$iso").sha256")
+          require_nonempty_file "candidate ISO must exist and be non-empty" "$iso"
+          require_nonempty_file "candidate SHA-256 sidecar must exist and be non-empty" "$iso.sha256"
+          if ! (cd candidate && sha256sum --check "$(basename "$iso").sha256"); then
+            report_validation_error "candidate SHA-256 sidecar must match the ISO" "$iso.sha256"
+            exit 1
+          fi
           actual="$(sha256sum "$iso" | awk '{print $1}')"
           size="$(stat -c '%s' "$iso")"
+          require_nonempty_file "CI nonce file must exist and be non-empty" candidate/ci-nonce.txt
           nonce="$(cat candidate/ci-nonce.txt)"
-          [[ "$nonce" =~ ^[a-f0-9]{32}$ ]]
-          test -s evidence/iso-pvd-info.txt
-          test -s evidence/build-tools.txt
-          test -s evidence/build-kernel.txt
-          grep -Eiq 'BIOS|Platform.*0x00' evidence/eltorito.txt
-          grep -Eiq 'UEFI|EFI|Platform.*0xef' evidence/eltorito.txt
-          grep -Eiq 'MBR|System area' evidence/system-area.txt
+          if [[ ! "$nonce" =~ ^[a-f0-9]{32}$ ]]; then
+            report_validation_error "CI nonce must be 32 lowercase hexadecimal characters" candidate/ci-nonce.txt
+            exit 1
+          fi
+          require_nonempty_file "ISO PVD evidence must exist and be non-empty" evidence/iso-pvd-info.txt
+          require_nonempty_file "build tools evidence must exist and be non-empty" evidence/build-tools.txt
+          require_nonempty_file "build kernel evidence must exist and be non-empty" evidence/build-kernel.txt
+          require_nonempty_file "El Torito evidence must exist and be non-empty" evidence/eltorito.txt
+          require_match "El Torito evidence must contain a BIOS boot entry" 'BIOS|Platform.*0x00' evidence/eltorito.txt
+          require_match "El Torito evidence must contain a UEFI boot entry" 'UEFI|EFI|Platform.*0xef' evidence/eltorito.txt
+          require_nonempty_file "system-area evidence must exist and be non-empty" evidence/system-area.txt
+          require_match "system-area evidence must contain MBR information" 'MBR|System area' evidence/system-area.txt
           python3 - "$iso" "$actual" "$size" "$nonce" <<'PY'
           import json, os, platform, sys
           from datetime import datetime, timezone
@@ -166,7 +204,7 @@ jobs:
               "ci_boot_diagnostic_variant": True,
               "release_eligible": False,
               "ci_nonce": nonce,
-              "persistence": {"status": "NOT_IMPLEMENTED", "reason": "USB persistence is not implemented and is intentionally not enabled."},
+              "persistence": {"status": "NOT_RUN", "reason": "The USB writer can create an MBR/ext4 persistence partition, but guest boot and reboot persistence acceptance has not been run."},
           }
           with open("candidate/build-metadata.json", "w", encoding="utf-8") as f:
               json.dump(metadata, f, indent=2)
@@ -273,7 +311,19 @@ jobs:
           retention-days: 30
       - name: Enforce BIOS gate
         if: steps.result.outputs.boot_status != 'PASS_BOOT'
-        run: exit 1
+        run: |
+          set -Eeuo pipefail
+          file=evidence/bios/qemu-bios-headless-result.json
+          if [[ -r "$file" ]]; then
+            result="$(cat "$file")"
+          else
+            result="<missing or unreadable>"
+          fi
+          result="${result//'%'/'%25'}"
+          result="${result//$'\r'/'%0D'}"
+          result="${result//$'\n'/'%0A'}"
+          echo "::error title=BIOS boot acceptance::status=${{ steps.result.outputs.boot_status }}; evidence=$file; contents=$result"
+          exit 1
 
   uefi:
     needs: build
@@ -333,7 +383,19 @@ jobs:
           retention-days: 30
       - name: Enforce UEFI gate
         if: steps.result.outputs.boot_status != 'PASS_BOOT'
-        run: exit 1
+        run: |
+          set -Eeuo pipefail
+          file=evidence/uefi/qemu-uefi-headless-result.json
+          if [[ -r "$file" ]]; then
+            result="$(cat "$file")"
+          else
+            result="<missing or unreadable>"
+          fi
+          result="${result//'%'/'%25'}"
+          result="${result//$'\r'/'%0D'}"
+          result="${result//$'\n'/'%0A'}"
+          echo "::error title=UEFI boot acceptance::status=${{ steps.result.outputs.boot_status }}; evidence=$file; contents=$result"
+          exit 1
 
   acceptance-summary:
     if: always()

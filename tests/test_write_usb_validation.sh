@@ -22,4 +22,36 @@ if validate_iso "$ISO" 2>"$TMP/error.log"; then
   exit 1
 fi
 grep -Fq 'فشل SHA-256' "$TMP/error.log"
-printf 'PASS: USB writer accepts a matching digest and rejects tampering before any device write.\n'
+
+cat > "$TMP/bin/findmnt" <<'FINDMNT'
+#!/bin/sh
+printf '/dev/test-root\n'
+FINDMNT
+cat > "$TMP/bin/lsblk" <<'LSBLK'
+#!/bin/sh
+printf '/dev/sdb disk\n'
+LSBLK
+chmod 0755 "$TMP/bin/findmnt" "$TMP/bin/lsblk"
+is_block_device() { [[ "$1" == /dev/test-root ]]; }
+if ! is_system_disk /dev/sdb; then
+  echo "FAIL: a disk backing the running system was not rejected." >&2
+  exit 1
+fi
+cat > "$TMP/bin/lsblk" <<'LSBLK'
+#!/bin/sh
+printf '/dev/sda disk\n'
+LSBLK
+chmod 0755 "$TMP/bin/lsblk"
+if is_system_disk /dev/sdb; then
+  echo "FAIL: an unrelated disk was marked as the system disk." >&2
+  exit 1
+fi
+is_block_device() { return 1; }
+if is_system_disk /dev/sdb; then
+  echo "FAIL: an unresolved system-disk topology was treated as safe." >&2
+  exit 1
+else
+  status=$?
+  [[ "$status" -eq 2 ]] || { echo "FAIL: expected unsafe-topology status 2, got $status." >&2; exit 1; }
+fi
+printf 'PASS: USB writer validates the ISO, rejects tampering, detects the system disk, and fails closed when topology is unknown.\n'

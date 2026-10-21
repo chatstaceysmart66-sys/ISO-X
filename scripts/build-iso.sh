@@ -15,8 +15,13 @@ OUTPUT_SHA256="${OUTPUT_ISO}.sha256"
 STAGED_KEY="${BUILD_DIR}/config/includes.chroot/var/lib/isox-build-secrets/isox-release.key"
 STAGED_CERT="${BUILD_DIR}/config/includes.chroot/var/lib/isox-build-secrets/isox-release.crt"
 CLEAN_STAGED=0
+BOOT_CONFIG_TMP=""
 
 cleanup() {
+  if [[ -n "$BOOT_CONFIG_TMP" && -d "$BOOT_CONFIG_TMP" ]]; then
+    rm -f -- "$BOOT_CONFIG_TMP/isolinux.cfg" "$BOOT_CONFIG_TMP/live.cfg" "$BOOT_CONFIG_TMP/grub.cfg"
+    rmdir -- "$BOOT_CONFIG_TMP" 2>/dev/null || true
+  fi
   # Only remove staged secrets if this invocation created/staged them. In
   # particular, an existing build directory is never modified by the error path.
   if [[ "$CLEAN_STAGED" -eq 1 ]]; then
@@ -134,6 +139,9 @@ df -h "$PROJECT_DIR"
 "$PROJECT_DIR/auto/config"
 
 mkdir -p config/package-lists \
+  config/bootloaders/isolinux \
+  config/bootloaders/syslinux_common \
+  config/bootloaders/grub-pc \
   config/includes.chroot/usr/share/iso-x/assets \
   config/includes.chroot/usr/share/iso-x/assets/sounds \
   config/includes.chroot/usr/share/doc/iso-x \
@@ -154,6 +162,9 @@ mkdir -p config/package-lists \
   config/includes.chroot/etc/NetworkManager
 
 install -m 0644 "$PROJECT_DIR/config/package-lists/iso-x.list.chroot" config/package-lists/iso-x.list.chroot
+install -m 0644 "$PROJECT_DIR/config/bootloaders/isolinux/isolinux.cfg" config/bootloaders/isolinux/isolinux.cfg
+install -m 0644 "$PROJECT_DIR/config/bootloaders/syslinux_common/live.cfg.in" config/bootloaders/syslinux_common/live.cfg.in
+install -m 0644 "$PROJECT_DIR/config/bootloaders/grub-pc/grub.cfg" config/bootloaders/grub-pc/grub.cfg
 if [[ "$WATERMARK_ENABLED" == 1 ]]; then
   mkdir -p config/includes.chroot/usr/src/isox-watermark-0.3.1 \
     config/includes.chroot/etc/initramfs-tools/hooks \
@@ -426,6 +437,14 @@ echo "Build log: ${BUILD_LOG}"
 lb build
 ISO_PATH="${BUILD_DIR}/live-image-amd64.hybrid.iso"
 [[ -s "$ISO_PATH" ]] || { echo "لم ينتج live-build ملف ISO متوقعًا؛ افحص سجل البناء." >&2; exit 9; }
+BOOT_CONFIG_TMP="$(mktemp -d "${TMPDIR:-/tmp}/isox-boot-config.XXXXXX")"
+xorriso -osirrox on -indev "$ISO_PATH" \
+  -extract /isolinux/isolinux.cfg "$BOOT_CONFIG_TMP/isolinux.cfg" \
+  -extract /isolinux/live.cfg "$BOOT_CONFIG_TMP/live.cfg" \
+  -extract /boot/grub/grub.cfg "$BOOT_CONFIG_TMP/grub.cfg"
+bash "$PROJECT_DIR/scripts/validate-iso-boot-config.sh" \
+  "$BOOT_CONFIG_TMP/isolinux.cfg" "$BOOT_CONFIG_TMP/live.cfg" "$BOOT_CONFIG_TMP/grub.cfg" \
+  "$CI_BOOT" "$CI_NONCE"
 xorriso -indev "$ISO_PATH" -pvd_info >/dev/null || { echo "فشل فحص بنية ISO الناتجة؛ لن تُنشر الصورة." >&2; exit 10; }
 mkdir -p "$(dirname -- "$OUTPUT_ISO")"
 cp -f "$ISO_PATH" "$OUTPUT_ISO"

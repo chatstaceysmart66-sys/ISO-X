@@ -34,6 +34,7 @@ def checks(junit_path: Path) -> list[tuple[str, list[str]]]:
         ("schema", [sys.executable, "tests/test_schema.py"]),
         ("upstream-integration", [sys.executable, "tests/test_upstream_integration.py"]),
         ("usb-validation", ["bash", "tests/test_write_usb_validation.sh"]),
+        ("usb-persistence-partition", ["bash", "tests/test_write_usb_persistence.sh"]),
         ("qemu-fake-validation", ["bash", "tests/test_qemu_headless_validation.sh"]),
         ("secureboot-validation", ["bash", "tests/test_secureboot_validation.sh"]),
         ("initramfs-watermark-validation", ["bash", "tests/test_initramfs_watermark_guard.sh"]),
@@ -78,6 +79,7 @@ def main() -> int:
         "shellcheck": ["shellcheck"],
         "desktop-files": ["desktop-file-validate"],
         "xml-svg": ["xmllint"],
+        "usb-persistence-partition": ["sfdisk"],
     }
 
     for name, command in checks(junit_path):

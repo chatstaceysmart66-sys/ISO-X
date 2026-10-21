@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Static regression checks; these do not imply successful ISO build or boot."""
 from pathlib import Path
+import json
 import re
 import os
 import subprocess
@@ -12,6 +13,8 @@ build = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
 packages_text = (ROOT / "config/package-lists/iso-x.list.chroot").read_text(encoding="utf-8")
 packages = {line.strip() for line in packages_text.splitlines() if line.strip() and not line.lstrip().startswith("#")}
 licenses = (ROOT / "docs/THIRD_PARTY_LICENSES.md").read_text(encoding="utf-8")
+assert {"fdisk", "e2fsprogs"} <= packages, "Persistence requires MBR tooling and ext4 utilities."
+assert "gdisk" not in packages, "The ISO hybrid GPT entries intentionally overlap; persistence uses the MBR."
 
 # BIOS-compatible SYSLINUX plus UEFI GRUB are explicit for deterministic output.
 assert '--binary-images iso-hybrid' in auto
@@ -19,6 +22,27 @@ assert '--bootloaders "syslinux grub-efi"' in auto
 assert 'if [ "${ISOX_CI_BOOT:-0}" = 1 ]; then' in auto
 assert 'BOOTAPPEND_LIVE="boot=live config components quiet splash username=user hostname=iso-x console=ttyS0,115200n8 systemd.show_status=yes systemd.log_target=console"' in auto
 assert 'loglevel=7 systemd.show_status=yes systemd.log_target=console isox.ci=1 isox.ci.nonce=' in auto
+isolinux_template = (ROOT / "config/bootloaders/isolinux/isolinux.cfg").read_text(encoding="utf-8")
+syslinux_template = (ROOT / "config/bootloaders/syslinux_common/live.cfg.in").read_text(encoding="utf-8")
+grub_template = (ROOT / "config/bootloaders/grub-pc/grub.cfg").read_text(encoding="utf-8")
+assert "timeout 100" in isolinux_template
+assert "live-@FLAVOUR@-persistence" in syslinux_template
+assert "append @APPEND_LIVE@ persistence" in syslinux_template
+assert "set timeout=10" in grub_template
+assert "with Persistence" in grub_template
+usb_writer = (ROOT / "scripts/write-usb.sh").read_text(encoding="utf-8")
+assert "sfdisk --append --no-reread --wipe never" in usb_writer
+assert 'expected an MBR (dos) table' in usb_writer
+assert "sgdisk" not in usb_writer
+assert "CREATE PERSISTENCE" in usb_writer
+assert '"status": "NOT_RUN"' in (ROOT / "scripts/create-ci-results.py").read_text(encoding="utf-8")
+for template in (
+    "config/bootloaders/isolinux/isolinux.cfg",
+    "config/bootloaders/syslinux_common/live.cfg.in",
+    "config/bootloaders/grub-pc/grub.cfg",
+):
+    assert f'"$PROJECT_DIR/{template}"' in build, f"Build staging omits bootloader template: {template}"
+assert "validate-iso-boot-config.sh" in build
 
 # All source SQL migration files must be installed into the image at their matching paths.
 migrations = sorted((ROOT / "db/migrations").glob("*.sql"))
@@ -181,6 +205,135 @@ def test_qemu_usb_tablet_has_an_explicit_controller():
     assert '-device "usb-tablet,bus=xhci.0"' in qemu_script
 
 
+def test_generated_boot_config_validator_rejects_stalls_and_ci_leaks():
+    validator = ROOT / "scripts/validate-iso-boot-config.sh"
+    with tempfile.TemporaryDirectory(prefix="isox-boot-config-") as temporary:
+        root = Path(temporary)
+        isolinux = root / "isolinux.cfg"
+        live = root / "live.cfg"
+        grub = root / "grub.cfg"
+        isolinux.write_text("include menu.cfg\ndefault vesamenu.c32\nprompt 0\ntimeout 100\n", encoding="utf-8")
+        live.write_text(
+            "label live-amd64\nmenu default\nappend boot=live quiet\n"
+            "label live-amd64-persistence\nappend boot=live quiet persistence\n",
+            encoding="utf-8",
+        )
+        grub.write_text(
+            "set timeout=10\n"
+            'menuentry "Live system (amd64)" {\n linux /live/vmlinuz boot=live quiet\n}\n'
+            'menuentry "Live system (amd64) with Persistence" {\n'
+            " linux /live/vmlinuz boot=live quiet persistence\n}\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            ["bash", str(validator), str(isolinux), str(live), str(grub), "0", ""],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "PASS:" in result.stdout
+
+        isolinux.write_text("include menu.cfg\ndefault vesamenu.c32\nprompt 0\ntimeout 0\n", encoding="utf-8")
+        result = subprocess.run(
+            ["bash", str(validator), str(isolinux), str(live), str(grub), "0", ""],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode != 0
+        assert "BIOS timeout must be finite and non-zero" in result.stderr
+        assert "timeout 0" in result.stderr
+
+        isolinux.write_text("include menu.cfg\ndefault vesamenu.c32\nprompt 0\ntimeout 100\n", encoding="utf-8")
+        live.write_text(
+            live.read_text(encoding="utf-8").replace("boot=live quiet\n", "boot=live quiet isox.ci=1\n"),
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            ["bash", str(validator), str(isolinux), str(live), str(grub), "0", ""],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode != 0
+        assert "release boot configuration contains CI-only parameters" in result.stderr
+
+        nonce = "0123456789abcdef0123456789abcdef"
+        live.write_text(
+            "label live-amd64\nmenu default\nappend boot=live quiet isox.ci=1 "
+            f"isox.ci.nonce={nonce}\n"
+            "label live-amd64-persistence\nappend boot=live quiet isox.ci=1 "
+            f"isox.ci.nonce={nonce} persistence\n",
+            encoding="utf-8",
+        )
+        grub.write_text(
+            "set timeout=10\n"
+            f'menuentry "Live system (amd64)" {{\n linux /live/vmlinuz boot=live quiet isox.ci=1 isox.ci.nonce={nonce}\n}}\n'
+            f'menuentry "Live system (amd64) with Persistence" {{\n'
+            f" linux /live/vmlinuz boot=live quiet isox.ci=1 isox.ci.nonce={nonce} persistence\n}}\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            ["bash", str(validator), str(isolinux), str(live), str(grub), "1", nonce],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        result = subprocess.run(
+            ["bash", str(validator), str(isolinux), str(live), str(grub), "1", "f" * 32],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode != 0
+        assert "CI nonce parameter is missing or incorrect" in result.stderr
+
+
+def test_usb_writer_accepts_only_expected_iso_hybrid_mbr_table():
+    writer = ROOT / "scripts/write-usb.sh"
+    with tempfile.TemporaryDirectory(prefix="isox-sfdisk-fixture-") as temporary:
+        temp = Path(temporary)
+        fake_sfdisk = temp / "sfdisk"
+        fake_sfdisk.write_text(
+            "#!/bin/sh\nprintf '%s\\n' \"$SFDISK_FIXTURE\"\n",
+            encoding="utf-8",
+        )
+        fake_sfdisk.chmod(0o755)
+        before = {
+            "partitiontable": {
+                "label": "dos",
+                "partitions": [
+                    {"node": "/dev/sdb1", "start": 64, "size": 5189696, "type": "0"},
+                    {"node": "/dev/sdb2", "start": 6860, "size": 6656, "type": "ef"},
+                ],
+            },
+        }
+        env = os.environ.copy()
+        env["PATH"] = f"{temp}:{env['PATH']}"
+        env["SFDISK_FIXTURE"] = json.dumps(before)
+        result = subprocess.run(
+            ["bash", "-c", f"source {str(writer)!r}; sfdisk_partition_node /dev/sdb before"],
+            env=env, capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "3"
+
+        after = json.loads(json.dumps(before))
+        after["partitiontable"]["partitions"].append(
+            {"node": "/dev/sdb3", "start": 5191680, "size": 3196928, "type": "83"}
+        )
+        env["SFDISK_FIXTURE"] = json.dumps(after)
+        result = subprocess.run(
+            [
+                "bash", "-c",
+                f"source {str(writer)!r}; sfdisk_partition_node /dev/sdb after 5191680 3196928",
+            ],
+            env=env, capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "/dev/sdb3"
+
+        after["partitiontable"]["label"] = "gpt"
+        env["SFDISK_FIXTURE"] = json.dumps(after)
+        result = subprocess.run(
+            ["bash", "-c", f"source {str(writer)!r}; sfdisk_partition_node /dev/sdb before"],
+            env=env, capture_output=True, text=True, check=False,
+        )
+        assert result.returncode != 0
+        assert "expected an MBR (dos) table" in result.stderr
+
 if __name__ == "__main__":
     test_browser_homepage_is_staged_and_configured()
     test_firefox_defaults_hook_applies_after_existing_packaged_prefs()
@@ -192,3 +345,5 @@ if __name__ == "__main__":
     test_build_script_rejects_unprivileged_invocation_without_staging_files()
     test_watermark_header_can_be_generated_without_mutating_the_source_tree()
     test_qemu_usb_tablet_has_an_explicit_controller()
+    test_generated_boot_config_validator_rejects_stalls_and_ci_leaks()
+    test_usb_writer_accepts_only_expected_iso_hybrid_mbr_table()

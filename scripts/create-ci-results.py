@@ -154,7 +154,7 @@ def main() -> int:
     for mode, record in (("BIOS", bios), ("UEFI", uefi)):
         if record["gate"] != "PASS":
             issues.append(f"{mode} acceptance: {record['status']} (job {record['job_result']}).")
-    issues.append("USB persistence is not implemented and was not tested.")
+    issues.append("USB persistence writing is implemented, but guest boot and reboot acceptance was not run.")
     report = {
         "project": args.project,
         "release": args.release,
@@ -190,8 +190,8 @@ def main() -> int:
         "bios": bios,
         "uefi": uefi,
         "persistence": {
-            "status": "NOT_IMPLEMENTED",
-            "reason": "The USB writer intentionally rejects persistence; no persistence acceptance test ran.",
+            "status": "NOT_RUN",
+            "reason": "The USB writer can create an MBR/ext4 persistence partition, but guest boot and reboot persistence acceptance has not been run.",
         },
         "test_summary": test_counts,
         "test_summary_unit": source_summary.get("unit", "source test results unavailable; one test group not run"),

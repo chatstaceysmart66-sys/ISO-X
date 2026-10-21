@@ -208,7 +208,7 @@
 - أضيف `scripts/ci-build-in-trixie.sh` لتجنب quoting متداخل داخل Docker، وليبقى إعداد فحوص Trixie وsystemd وxorriso قابلاً لإعادة التنفيذ. حسّنت `scripts/build-iso.sh` sidecar ليحفظ اسم ISO نسبياً وقابلاً للنقل، بعد اكتشاف أن الاسم المطلق من حاوية `/workspace` لا يصلح لفحص `sha256sum --check` على runner خارجها.
 - اختبار QEMU الوهمي يغطي علامة صحيحة مبكرة، nonce غير مطابق مع نص رسومي مضلل، serial فارغ، timeout، وخروج QEMU بخطأ فوري؛ وقد نجح. هذا يختبر منطق المشغّل فقط، وليس BIOS/UEFI أو QMP/VGA في QEMU حقيقي.
 - أُعيد تقسيم workflow إلى `source-check`, `build`, `bios`, `uefi`, و`acceptance-summary`. BIOS وUEFI يعتمدان على build فقط، لذا لا يمنع فشل BIOS بدء UEFI. المرشح المرفوع موسوم بوضوح `ci-diagnostic-candidate` وغير مؤهل للإصدار؛ لا يوجد artifact إصدار عادي حتى تنفيذ بناء واختبارات قبول للصورة غير التشخيصية.
-- يكتب `scripts/create-ci-results.py` تقرير `results.json` وفق `tests/ci-results.schema.json`. عدادات التقرير تعد بوابات workflow الأربع، لا حالات الاختبار المفردة؛ يوضّح ذلك `test_summary_unit`. Persistence مذكورة `NOT_IMPLEMENTED` ولا تُفعّل في CI.
+- يكتب `scripts/create-ci-results.py` تقرير `results.json` وفق `tests/ci-results.schema.json`. عدادات التقرير تعد بوابات workflow الأربع، لا حالات الاختبار المفردة؛ يوضّح ذلك `test_summary_unit`. كانت Persistence `NOT_IMPLEMENTED` في لقطة المصدر التي وثّقها هذا الملف؛ في worktree بتاريخ 2026-10-21 صار USB writer ينشئ قسم MBR/ext4، لكن قبول الإقلاع وإعادة التشغيل ما زال `NOT_RUN` ولا يُعرض كميزة متحققة.
 - ثُبّتت actions إلى commit SHAs غير متحركة: checkout v7.0.1، upload-artifact v7.0.2، download-artifact v8.0.2؛ معلومات إصدار Node 24 مأخوذة من تعليقات التثبيت ومراجعة release metadata العامة.
 
 ### تحقق هذه النسخة المحلية

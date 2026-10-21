@@ -73,6 +73,8 @@ def main():
         assert report["checks"]["source_checks"] == "PASS"
         assert report["checks"]["bios_boot"] == "FAIL"
         assert report["checks"]["uefi_boot"] == "NOT_RUN"
+        assert report["persistence"]["status"] == "NOT_RUN"
+        assert "reboot persistence acceptance has not been run" in report["persistence"]["reason"]
         assert report["test_summary"]["not_run"] == 1
 
         source_summary_path = Path(temporary) / "source-tests.json"

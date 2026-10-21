@@ -117,8 +117,10 @@ assert welcome_exec == "/usr/local/bin/isox-welcome"
 assert "config/includes.chroot/usr/local/bin/isox-welcome" in build
 for xml_path in (ROOT / "desktop/openbox-menu.xml", ROOT / "desktop/openbox-rc.xml"):
     xml_root = ET.parse(xml_path).getroot()
-    for command_node in xml_root.iter("command"):
-        executable = shlex.split(command_node.text or "")[0]
+    for command_node in xml_root.iter("{*}command"):
+        command = shlex.split(command_node.text or "")
+        assert command, f"Empty Openbox command in {xml_path}"
+        executable = command[0]
         if executable.startswith("/usr/local/bin/"):
             assert executable.removeprefix("/") in build, f"Unstaged Openbox command: {executable}"
         elif executable == "dm-tool":

@@ -17,11 +17,14 @@ bios = job("bios")
 uefi = job("uefi")
 summary = job("acceptance-summary")
 build_helper = (Path(__file__).resolve().parents[1] / "scripts/ci-build-in-trixie.sh").read_text()
+source_runner = (Path(__file__).resolve().parents[1] / "scripts/run-source-checks.py").read_text()
 ready_probe = (Path(__file__).resolve().parents[1] / "scripts/isox-ci-ready.sh").read_text()
 ready_service = (Path(__file__).resolve().parents[1] / "systemd/isox-ci-ready.service").read_text()
 
 assert "needs: build" in bios and "needs: build" in uefi
 assert "scripts/run-source-checks.py" in source
+assert "usb-persistence-partition" in source_runner
+assert "libxml2-utils fdisk" in source
 assert "source-tests.json" in summary
 assert "Reclaim unused hosted-runner toolchains" in build
 assert build.index("Reclaim unused hosted-runner toolchains") < build.index("Check runner capacity")
@@ -36,10 +39,28 @@ assert "steps.validate.outputs.validated == 'true'" in build
 assert "if: always()" in build and "isox-build-evidence-" in build
 assert "ISO-X-0.4.0-ci-diagnostic-candidate-" in build
 assert "steps.build-iso.outcome" in build and "sha256sum --check" in build
+assert "report_validation_error()" in build
+assert "::error title=Candidate validation::" in build
+assert "require_nonempty_file()" in build and "require_match()" in build
+assert '"status": "NOT_RUN"' in build
+assert "USB writer can create an MBR/ext4 persistence partition" in build
+assert "NOT_IMPLEMENTED" not in build
+for check_name in (
+    "candidate ISO must exist and be non-empty",
+    "candidate SHA-256 sidecar must exist and be non-empty",
+    "CI nonce must be 32 lowercase hexadecimal characters",
+    "El Torito evidence must contain a BIOS boot entry",
+    "El Torito evidence must contain a UEFI boot entry",
+    "system-area evidence must contain MBR information",
+):
+    assert check_name in build, f"missing named manifest check: {check_name}"
 assert "xorriso -indev" in build_helper and "iso-validated.ok" in build
 assert "qemu-acceptance.sh bios-headless" in bios
 assert "qemu-acceptance.sh uefi-headless" in uefi
 assert "boot_status != 'PASS_BOOT'" in bios and "boot_status != 'PASS_BOOT'" in uefi
+assert "::error title=BIOS boot acceptance::" in bios
+assert "::error title=UEFI boot acceptance::" in uefi
+assert "contents=$result" in bios and "contents=$result" in uefi
 assert "needs.bios.result == 'success'" in summary
 assert "needs.uefi.result == 'success'" in summary
 assert "not a release ISO" in summary

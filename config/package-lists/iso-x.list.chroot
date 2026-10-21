@@ -143,6 +143,8 @@ evince
 ristretto
 audacious
 gparted
+fdisk
+e2fsprogs
 gnome-system-monitor
 xfce4-power-manager
 xfce4-notifyd
