@@ -286,3 +286,14 @@
 - لا يوجد حالياً `build-live/`, `evidence/`, ISO/sidecar أو مجلدات cache معروفة داخل المستودع. إنشاء هذه النواتج لم يُجر.
 - لم يظهر من مراجعة المسارات تطابق ملفين متتبعين بوصفهما نسختين متطابقتين. وجود PNG وSVG للهوية نفسها مقصود كتنويعين، لا يثبت تكراراً بايتياً.
 - أمثلة ملفات مصدرية يتيمة/غير مضمّنة بحسب أوامر النسخ: `app/iso_x_shell.py` (واجهة Tkinter القديمة)، `scripts/collect-performance.sh`, `scripts/record-demo.sh`, `scripts/secureboot-enroll.sh`, و`kernel/isox-watermark/dkms.conf`. وكذلك `assets/iso-x-desktop-wallpaper.svg` يُنسخ لكن ملف wallpaper profile يختار PNG. هذه نتائج ربط source/build لا دليل على تعطل ميزة ضمن image.
+
+## ملحق تغطية وتغييرات الترويج — 2026-10-21
+
+الجدول أعلاه وعبارة 104 مسارات تصفان لقطة أقدم ولا تمثلان HEAD الحالي. عند بداية هذه المتابعة كان `HEAD=84e8b96b6e9ded0e966a68565a7f01167455d991` ويحوي 119 ملفاً متتبعاً؛ أضيف محلياً ملفا Python أدناه (قبل الالتزام فهما untracked)، فيصبح تعداد شجرة المشروع 121 مساراً، منها 111 ملفاً نصياً و10 أصول ثنائية كما في سجل التغطية [WORKLOG_AR.md](./WORKLOG_AR.md). لم يُحذف أي مصدر أو أصل متتبع.
+
+| المسار | الحجم / الأسطر | المهمة والاعتماديات/المستدعي | الاختبار والحالة |
+|---|---:|---|---|
+| `scripts/create-user-iso.py` | 7,182 بايت / 166 سطراً | يستقبل ISO CI وبصمتها والـnonce، يستخرج إعدادات Syslinux وGRUB، يحذف وسائط التشخيص فقط من مدخلي Live العادي وPersistence، يبقي مدخل fail-safe، ثم يعيد بناء ISO عبر xorriso مع إعادة تشغيل إعدادات El Torito/MBR والتحقق منها. يُستدعى في `promote` بعد نجاح بوابتي BIOS وUEFI. لا يُنسخ إلى rootfs أو ISO. | 4 اختبارات في `tests/test_user_iso.py`، بما فيها xorriso fixture؛ اجتازت. تحويل صورة ISO المشروع الفعلية `NOT_RUN` لأن الـworkflow السابق فشل قبل رفع المرشح. |
+| `tests/test_user_iso.py` | 8,890 بايت / 159 سطراً | اختبارات تطبيع مدخلي GRUB/Syslinux، رفض nonce/وسائط غير صحيحة، وبناء ISO fixture مؤقتة لفحص xorriso والـsidecar وبقاء El Torito وإزالة وسائط CI. | نُفذت محلياً مع xorriso، 4/4 PASS. الأصول في fixture اصطناعية ولا تثبت الإقلاع. |
+
+في النسخة الحالية، تعديلات الـworkflow تضيف `promote` لإنتاج Artifact باسم `ISO-X-0.4.0-live-amd64-candidate-*` من ISO CI بعد نجاح BIOS وUEFI. الـmetadata تصف النسخة الناتجة كإقلاع عادي، وتربط SHA بالـcommit وملف CI الأصلي، لكنها تبقي `release_eligible=false` حتى اختبار Persistence عبر reboot. لا تُنشئ هذه الخطوة GitHub Release. آخر build متاح عند هذا التحديث (`39644678919`, commit `84e8b96`) لم يبلغ Artifact؛ تعطل مدقق BIOS بسبب تجاهل الـleading whitespace. الإصلاح محلي وغير مدفوع بعد.

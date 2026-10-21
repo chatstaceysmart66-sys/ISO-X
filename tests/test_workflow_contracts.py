@@ -16,6 +16,7 @@ source = job("source-check")
 bios = job("bios")
 uefi = job("uefi")
 summary = job("acceptance-summary")
+promote = job("promote")
 build_helper = (Path(__file__).resolve().parents[1] / "scripts/ci-build-in-trixie.sh").read_text()
 source_runner = (Path(__file__).resolve().parents[1] / "scripts/run-source-checks.py").read_text()
 ready_probe = (Path(__file__).resolve().parents[1] / "scripts/isox-ci-ready.sh").read_text()
@@ -64,6 +65,14 @@ assert "contents=$result" in bios and "contents=$result" in uefi
 assert "needs.bios.result == 'success'" in summary
 assert "needs.uefi.result == 'success'" in summary
 assert "not a release ISO" in summary
+assert "needs: [build, bios, uefi]" in promote
+assert "needs.bios.result == 'success'" in promote and "needs.uefi.result == 'success'" in promote
+assert "scripts/create-user-iso.py" in promote
+assert "CI nonce removed" in promote
+assert "persistence=NOT_RUN" in promote
+assert "release_eligible=false" in promote
+assert "ISO-X-0.4.0-live-amd64-candidate-" in promote
+assert "needs: [source-check, build, bios, uefi, promote]" in workflow
 assert "scripts/create-ci-results.py" in summary
 assert "hashFiles(" not in workflow
 for ref in re.findall(r"uses: actions/[^\s@]+@([0-9a-f]{40})", workflow):

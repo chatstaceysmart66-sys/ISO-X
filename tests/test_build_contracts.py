@@ -214,8 +214,10 @@ def test_generated_boot_config_validator_rejects_stalls_and_ci_leaks():
         grub = root / "grub.cfg"
         isolinux.write_text("include menu.cfg\ndefault vesamenu.c32\nprompt 0\ntimeout 100\n", encoding="utf-8")
         live.write_text(
-            "label live-amd64\nmenu default\nappend boot=live quiet\n"
-            "label live-amd64-persistence\nappend boot=live quiet persistence\n",
+            "label live-amd64\n\tmenu label ^Live system (amd64)\n\tmenu default\n"
+            "\tlinux /live/vmlinuz\n\tinitrd /live/initrd.img\n\tappend boot=live quiet\n"
+            "label live-amd64-persistence\n\tmenu label Live system (amd64) with Persistence\n"
+            "\tlinux /live/vmlinuz\n\tinitrd /live/initrd.img\n\tappend boot=live quiet persistence\n",
             encoding="utf-8",
         )
         grub.write_text(

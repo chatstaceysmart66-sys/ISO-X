@@ -34,9 +34,9 @@ grep -Eq '^[[:space:]]*default[[:space:]]+vesamenu\.c32[[:space:]]*$' "$isolinux
   fail "BIOS default menu is missing" "$isolinux_cfg"
 
 awk '
-  /^label[[:space:]]/ { label = $2 }
-  /^menu default[[:space:]]*$/ && label ~ /^live-/ && label !~ /-persistence$/ { default_live = 1 }
-  /^append[[:space:]]/ && label ~ /^live-/ && label !~ /failsafe/ {
+  /^[[:space:]]*label[[:space:]]/ { label = $2 }
+  /^[[:space:]]*menu[[:space:]]+default[[:space:]]*$/ && label ~ /^live-/ && label !~ /-persistence$/ { default_live = 1 }
+  /^[[:space:]]*append[[:space:]]/ && label ~ /^live-/ && label !~ /failsafe/ {
     if (label ~ /-persistence$/) {
       if ($0 ~ /(^|[[:space:]])persistence([[:space:]]|$)/) persistence = 1
       else invalid = 1
