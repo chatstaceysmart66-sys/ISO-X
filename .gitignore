@@ -14,3 +14,7 @@ evidence/
 
 /ISO-X-0.4.0-live-amd64.iso
 /ISO-X-0.4.0-live-amd64.iso.sha256
+*.iso
+*.iso.sha256
+.venv/
+.pytest_cache/
