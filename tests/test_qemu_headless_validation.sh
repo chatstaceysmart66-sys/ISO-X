@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'if [[ "${KEEP_TMP:-0}" == 1 ]]; then printf "TEST_TMP=%s\n" "$TMP"; else rm -rf "$TMP"; fi' EXIT
 mkdir -p "$TMP/bin"
 printf 'not a bootable ISO; only tests the failure detector\n' > "$TMP/test.iso"
 cat > "$TMP/bin/qemu-system-x86_64" <<'QEMU'
@@ -42,7 +42,10 @@ def qmp_server():
                 words = shlex.split(request["arguments"]["command-line"])
                 if words[0] == "screendump":
                     screenshot_count += 1
-                    if kind == "no-screenshot":
+                    if kind == "small-boot-frame" and screenshot_count == 1:
+                      pixels = b"\x00\x00\x00" * (720 * 400)
+                      Path(words[1]).write_bytes(b"P6\n720 400\n255\n" + pixels)
+                    elif kind == "no-screenshot":
                         pass
                     elif kind == "malformed-screenshot":
                         Path(words[1]).write_bytes(b"P6\nnot-an-image")
@@ -82,7 +85,7 @@ if kind == "misleading":
     with open(serial, "a", encoding="utf-8") as stream:
         stream.write("Reached target Graphical Interface\n")
         stream.write("ISOX_CI_READY nonce=ffffffffffffffffffffffffffffffff\n")
-elif kind in ("success", "success-zero-on-term", "qmp-failure", "qmp-command-error"):
+elif kind in ("success", "success-zero-on-term", "small-boot-frame", "qmp-failure", "qmp-command-error"):
     time.sleep(1)
     with open(serial, "a", encoding="utf-8") as stream:
         stream.write(f"ISOX_CI_READY nonce={os.environ['FAKE_QEMU_NONCE']}\n")
@@ -131,6 +134,18 @@ from pathlib import Path
 r = json.loads(Path(sys.argv[1]).read_text())
 assert r["status"] == "PASS_BOOT" and r["qemu_exit_code"] == 0, r
 assert r["termination_requested"] is True and r["process_group_clean"] is True, r
+PY
+
+FAKE_QEMU_KIND=small-boot-frame FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=20 \
+  ISOX_QEMU_NONCE="$NONCE" PATH="$TMP/bin:$PATH" \
+  bash "$ROOT/tests/qemu-acceptance.sh" bios-headless "$TMP/test.iso" "$TMP/small-boot-frame" \
+  >"$TMP/small-boot-frame.log" 2>&1
+python3 - "$TMP/small-boot-frame/qemu-bios-headless-result.json" <<'PY'
+import json, sys
+from pathlib import Path
+r = json.loads(Path(sys.argv[1]).read_text())
+assert r["status"] == "PASS_BOOT" and r["final_screenshot_valid"] is True, r
+assert (Path(sys.argv[1]).parent / "qemu-bios-headless-early.ppm").read_bytes().startswith(b"P6\n720 400\n255\n")
 PY
 
 python3 - "$ROOT/tests/qemu-runner.py" <<'PY'

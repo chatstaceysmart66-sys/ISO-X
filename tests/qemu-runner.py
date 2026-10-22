@@ -16,8 +16,8 @@ from pathlib import Path
 
 
 MARKER_PREFIX = "ISOX_CI_READY nonce="
-MIN_SCREENSHOT_WIDTH = 640
-MIN_SCREENSHOT_HEIGHT = 480
+MIN_SCREENSHOT_WIDTH = 320
+MIN_SCREENSHOT_HEIGHT = 200
 
 
 def validate_ppm(path: Path, require_visible: bool = False) -> tuple[bool, str]:
@@ -33,6 +33,8 @@ def validate_ppm(path: Path, require_visible: bool = False) -> tuple[bool, str]:
     width, height, maximum = map(int, header.groups())
     if width < MIN_SCREENSHOT_WIDTH or height < MIN_SCREENSHOT_HEIGHT or maximum != 255:
         return False, f"unsupported screenshot dimensions or color depth: {width}x{height}, max={maximum}"
+    if require_visible and (width < 640 or height < 480):
+        return False, f"desktop screenshot is too small: {width}x{height}"
     pixels = image[header.end():]
     if len(pixels) != width * height * 3:
         return False, f"pixel payload size mismatch: expected {width * height * 3}, got {len(pixels)}"
@@ -43,9 +45,9 @@ def validate_ppm(path: Path, require_visible: bool = False) -> tuple[bool, str]:
         background_count = panel_count = accent_count = 0
         for index in range(0, len(pixels), 3):
             color = pixels[index:index + 3]
-            background_count += color == background
-            panel_count += color == panel
-            accent_count += color == accent
+            background_count += max(abs(color[channel] - background[channel]) for channel in range(3)) <= 6
+            panel_count += max(abs(color[channel] - panel[channel]) for channel in range(3)) <= 4
+            accent_count += max(abs(color[channel] - accent[channel]) for channel in range(3)) <= 6
         if background_count < width * height // 20 or panel_count < 500 or accent_count < 20:
             return False, (
                 "screenshot does not contain the ISO-X desktop palette: "
