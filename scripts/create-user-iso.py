@@ -103,12 +103,73 @@ def normalize_config(path: Path, nonce: str, kind: str) -> None:
     replace_config_atomically(path, "\n".join(rewritten) + "\n")
 
 
+def strip_ci_arguments_from_kernel_entries(path: Path, nonce: str, kind: str) -> int:
+    """Remove known CI-only arguments from every kernel entry, safely."""
+    if kind not in {"syslinux", "grub"}:
+        raise ValueError(f"unsupported boot configuration kind: {kind}")
+
+    nonce_token = f"isox.ci.nonce={nonce}"
+    known_ci_tokens = {"isox.ci=1", nonce_token}
+    diagnostic_tokens = {"console=tty0", "loglevel=7"}
+    rewritten = []
+    removed = 0
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        command = stripped.split(maxsplit=1)[0] if stripped else ""
+
+        if kind == "syslinux":
+            is_kernel_line = command == "append"
+            prefix_size = 1
+        else:
+            is_kernel_line = command in {"linux", "linuxefi", "linux16"}
+            prefix_size = 2
+
+        if not is_kernel_line:
+            rewritten.append(line)
+            continue
+
+        tokens = stripped.split()
+        prefix, args = tokens[:prefix_size], tokens[prefix_size:]
+        ci_tokens = [arg for arg in args if arg.startswith("isox.ci")]
+
+        if not ci_tokens:
+            rewritten.append(line)
+            continue
+
+        if args.count("isox.ci=1") != 1 or args.count(nonce_token) != 1:
+            raise ValueError(
+                f"{path}: CI arguments on a kernel line do not match the supplied nonce"
+            )
+
+        unexpected = [arg for arg in ci_tokens if arg not in known_ci_tokens]
+        if unexpected:
+            raise ValueError(f"{path}: unexpected ISO-X CI arguments: {unexpected!r}")
+
+        args = [
+            arg for arg in args
+            if arg not in known_ci_tokens and arg not in diagnostic_tokens
+        ]
+        rewritten.append(" ".join(prefix + args))
+        removed += 1
+
+    if removed:
+        replace_config_atomically(path, "\n".join(rewritten) + "\n")
+
+    return removed
+
+
 def run(*args: str) -> str:
-    result = subprocess.run(args, check=True, text=True, capture_output=True)
+    # Preserve the original command output so a failed validation is diagnosable.
+    result = subprocess.run(args, check=False, text=True, capture_output=True)
     if result.stdout:
-        print(result.stdout, end="")
+        print(result.stdout, end="", flush=True)
     if result.stderr:
-        print(result.stderr, end="", file=sys.stderr)
+        print(result.stderr, end="", file=sys.stderr, flush=True)
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode, args, output=result.stdout, stderr=result.stderr
+        )
     return result.stdout + result.stderr
 
 
@@ -158,6 +219,8 @@ def main() -> int:
         run("bash", str(VALIDATOR), str(isolinux), str(live), str(grub), "1", nonce)
         normalize_config(live, nonce, "syslinux")
         normalize_config(grub, nonce, "grub")
+        strip_ci_arguments_from_kernel_entries(grub, nonce, "grub")
+        strip_ci_arguments_from_kernel_entries(live, nonce, "syslinux")
         run("bash", str(VALIDATOR), str(isolinux), str(live), str(grub), "0", "")
         run(
             "xorriso", "-indev", str(source), "-outdev", str(stage),

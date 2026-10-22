@@ -23,6 +23,57 @@ NONCE = "0123456789abcdef0123456789abcdef"
 
 
 class UserIsoTests(unittest.TestCase):
+    def test_strips_ci_arguments_from_all_kernel_entries_not_only_live_entries(self):
+        syslinux = (
+            "label live-amd64-failsafe\n"
+            f"append boot=live components username=user console=tty0 "
+            f"console=ttyS0,115200n8 loglevel=7 isox.ci=1 "
+            f"isox.ci.nonce={NONCE} nomodeset\n"
+        )
+        grub = (
+            'menuentry "Verify integrity of the boot medium" {\n'
+            f" linux /live/vmlinuz boot=live components verify-checksums console=tty0 "
+            f"console=ttyS0,115200n8 loglevel=7 isox.ci=1 "
+            f"isox.ci.nonce={NONCE}\n}}\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            cases = (
+                ("live.cfg", syslinux, "syslinux", "append "),
+                ("grub.cfg", grub, "grub", "linux /live/vmlinuz "),
+            )
+            for name, content, kind, prefix in cases:
+                with self.subTest(kind=kind):
+                    path = Path(temporary) / name
+                    path.write_text(content, encoding="utf-8")
+                    changed = MODULE.strip_ci_arguments_from_kernel_entries(path, NONCE, kind)
+                    self.assertEqual(changed, 1)
+                    commands = [
+                        line.strip()
+                        for line in path.read_text(encoding="utf-8").splitlines()
+                        if line.lstrip().startswith(prefix)
+                    ]
+                    self.assertEqual(len(commands), 1)
+                    self.assertNotIn("isox.ci", commands[0])
+                    self.assertNotIn("console=tty0", commands[0])
+                    self.assertNotIn("loglevel=7", commands[0])
+                    self.assertIn("console=ttyS0,115200n8", commands[0])
+                    self.assertIn(
+                        "nomodeset" if kind == "syslinux" else "verify-checksums",
+                        commands[0],
+                    )
+
+    def test_ci_argument_scrubber_rejects_wrong_nonce_without_mutating_file(self):
+        content = (
+            "label live-amd64-failsafe\n"
+            f"append boot=live isox.ci=1 isox.ci.nonce={'f' * 32} nomodeset\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "live.cfg"
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "do not match the supplied nonce"):
+                MODULE.strip_ci_arguments_from_kernel_entries(path, NONCE, "syslinux")
+            self.assertEqual(path.read_text(encoding="utf-8"), content)
+
     def test_final_metadata_records_boot_evidence_and_stays_not_release_eligible(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
