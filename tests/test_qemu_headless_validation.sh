@@ -148,18 +148,38 @@ assert r["status"] == "PASS_BOOT" and r["final_screenshot_valid"] is True, r
 assert (Path(sys.argv[1]).parent / "qemu-bios-headless-early.ppm").read_bytes().startswith(b"P6\n720 400\n255\n")
 PY
 
+FAKE_QEMU_KIND=desktop ISOX_QEMU_TIMEOUT=5 ISOX_QEMU_RENDER_GRACE=0 \
+  PATH="$TMP/bin:$PATH" bash "$ROOT/tests/qemu-acceptance.sh" bios-desktop \
+  "$TMP/test.iso" "$TMP/desktop" >"$TMP/desktop.log" 2>&1
+python3 - "$TMP/desktop/qemu-bios-desktop-result.json" <<'PY'
+import json, sys
+from pathlib import Path
+r = json.loads(Path(sys.argv[1]).read_text())
+assert r["status"] == "PASS_BOOT" and r["marker_seen"] is False, r
+assert r["desktop_seen"] is True and r["shutdown_reason"] == "desktop_rendered", r
+assert r["termination_requested"] is True and r["final_screenshot_valid"] is True, r
+PY
+
+if FAKE_QEMU_KIND=black-screenshot ISOX_QEMU_TIMEOUT=2 ISOX_QEMU_RENDER_GRACE=0 \
+  PATH="$TMP/bin:$PATH" bash "$ROOT/tests/qemu-acceptance.sh" bios-desktop \
+  "$TMP/test.iso" "$TMP/desktop-black" >"$TMP/desktop-black.log" 2>&1; then
+  echo "FAIL: a black normal-boot desktop was accepted." >&2
+  exit 1
+fi
+
 python3 - "$ROOT/tests/qemu-runner.py" <<'PY'
 import importlib.util, signal, sys
 spec = importlib.util.spec_from_file_location("qemu_runner", sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 classify = module.classify
-assert classify("", False, 0, True, "readiness_marker", False, False, True) == "QEMU_INFRASTRUCTURE_FAILURE"
-assert classify("", False, -signal.SIGTERM, True, "readiness_marker", True, False, True) == "PASS_BOOT"
-assert classify("", False, -signal.SIGKILL, True, "readiness_marker", True, True, True) == "QEMU_INFRASTRUCTURE_FAILURE"
-assert classify("", False, 42, True, "readiness_marker", True, False, True) == "QEMU_INFRASTRUCTURE_FAILURE"
-assert classify("boot", True, 0, False, "timeout", True, False, True) == "BOOT_TIMEOUT"
-assert classify("", False, 0, True, "readiness_marker", True, False, False) == "QEMU_INFRASTRUCTURE_FAILURE"
+assert classify("", False, 0, True, "readiness_marker", False, False, False, True) == "QEMU_INFRASTRUCTURE_FAILURE"
+assert classify("", False, -signal.SIGTERM, True, "readiness_marker", True, False, False, True) == "PASS_BOOT"
+assert classify("", False, -signal.SIGKILL, True, "readiness_marker", True, True, False, True) == "QEMU_INFRASTRUCTURE_FAILURE"
+assert classify("", False, 42, True, "readiness_marker", True, False, False, True) == "QEMU_INFRASTRUCTURE_FAILURE"
+assert classify("boot", True, 0, False, "timeout", True, False, False, True) == "BOOT_TIMEOUT"
+assert classify("", False, 0, True, "readiness_marker", True, False, False, False) == "QEMU_INFRASTRUCTURE_FAILURE"
+assert classify("", False, 0, False, "desktop_rendered", True, False, True, True) == "PASS_BOOT"
 PY
 
 if FAKE_QEMU_KIND=marker-exit-error FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=5 \

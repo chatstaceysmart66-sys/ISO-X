@@ -17,6 +17,14 @@
 
 في run [39691070776](https://github.com/chatstaceysmart66-sys/ISO-X/actions/runs/39691070776) على commit `0c2a6ecbdbf87c5a7261b23c7098ab05f389ddb0`، نجح source-check وbuild واجتازت الصورة التحقق البنيوي. أظهرت لقطتا BIOS وUEFI النهائيتان نافذة GTK الفعلية لـISO-X، لكن الوظيفتين فشلتا: رفض runner لقطة BIOS المبكرة 720×400، كما لم يتعرف على ألوان الخلفية الملتقطة في الصورتين. صُحح حد الأبعاد المبكرة وتفاوت الألوان بعد هذا التشغيل؛ يجب انتظار run جديد على commit التصحيح قبل إعلان بوابتي BIOS/UEFI ناجحتين. لم تُشغّل persistence عبر reboot، والصورة تظل مرشح CI تشخيصيًا لا إصدارًا.
 
+في run [39742060324](https://github.com/chatstaceysmart66-sys/ISO-X/actions/runs/39742060324) على commit `778dc13cc634146ec2de7e93118331741cf3dc88`، اجتازت source-check وbuild وBIOS وUEFI، وظهرت واجهة سطح المكتب في النمطين. فشل `promote` فقط عند إعادة كتابة `/isolinux/live.cfg` المستخرج من ISO للقراءة فقط (`PermissionError`). لم يُرفع artifact normal-boot. التغيير الحالي يستخدم استبدالًا ذريًا، ويختبر integration إعادة إنشاء الصورة وملف metadata؛ نتيجة CI بعد هذا التغيير ما زالت مطلوبة.
+
+## اختبار صورة normal-boot بعد التحويل
+
+بعد نجاح بوابتي المرشح التشخيصي، ينشئ `promote` ISO عادية بإزالة nonce من مدخلي BIOS وUEFI، ثم يشغّل قبول QEMU مستقلًا على الناتج المحوّل (`bios-desktop` و`uefi-desktop`). لا يستخدم هذا المسار nonce: يطلب ظهور لوحة ISO-X ونافذتها في لقطة QMP، ثم يحفظ screenshot وJSON لكل firmware. هذا اختبار فعلي للصورة النهائية المحوّلة، ولا يستنتج التكافؤ من إقلاع المرشح التشخيصي.
+
+يظل `release_eligible=false` و`persistence=NOT_RUN` حتى يُختبر حفظ ملف عبر reboot لضيف USB. Artifact normal-boot هو مرشح اختبار فقط، وليس إصدارًا.
+
 ## تجهيز واختبار
 
 ```bash

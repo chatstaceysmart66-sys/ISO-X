@@ -20,6 +20,7 @@ promote = job("promote")
 build_helper = (Path(__file__).resolve().parents[1] / "scripts/ci-build-in-trixie.sh").read_text()
 nonce_reader = (Path(__file__).resolve().parents[1] / "scripts/read-ci-nonce.sh").read_text()
 source_runner = (Path(__file__).resolve().parents[1] / "scripts/run-source-checks.py").read_text()
+user_iso_metadata = (Path(__file__).resolve().parents[1] / "scripts/create-user-iso-metadata.py").read_text()
 ready_probe = (Path(__file__).resolve().parents[1] / "scripts/isox-ci-ready.sh").read_text()
 ready_service = (Path(__file__).resolve().parents[1] / "systemd/isox-ci-ready.service").read_text()
 
@@ -69,10 +70,28 @@ assert "not a release ISO" in summary
 assert "needs: [build, bios, uefi]" in promote
 assert "needs.bios.result == 'success'" in promote and "needs.uefi.result == 'success'" in promote
 assert "scripts/create-user-iso.py" in promote
-assert "CI nonce removed" in promote
-assert "persistence=NOT_RUN" in promote
-assert "release_eligible=false" in promote
+assert "read-ci-nonce.sh candidate/ci-nonce.txt" in promote
 assert "ISO-X-0.4.0-live-amd64-candidate-" in promote
+assert "qemu-acceptance.sh bios-desktop" in promote
+assert "qemu-acceptance.sh uefi-desktop" in promote
+assert "desktop_seen" in promote and "final_screenshot_valid" in promote
+assert "scripts/create-user-iso-metadata.py" in promote
+assert "--diagnostic-iso-path \"candidate/${{ needs.build.outputs.iso_name }}\"" in promote
+assert "normal-boot ISO SHA-256 sidecar is missing" in user_iso_metadata
+assert "USB persistence across a guest reboot has not been accepted." in user_iso_metadata
+assert "Enforce normal-boot BIOS and UEFI gates" in promote
+assert "id: user-iso" in promote
+assert "steps.user-iso.outcome == 'success'" in promote
+assert promote.index("Run BIOS acceptance on normal-boot ISO") < promote.index("Record normal-boot acceptance results")
+assert promote.index("Run UEFI acceptance on normal-boot ISO") < promote.index("Record normal-boot acceptance results")
+assert promote.index("Upload normal-boot ISO candidate") < promote.index("Enforce normal-boot BIOS and UEFI gates")
+assert 'metadata["release_eligible"] = False' in user_iso_metadata
+assert 'metadata["release_eligibility_reason"]' in user_iso_metadata
+assert 'metadata["persistence"] = {' in user_iso_metadata
+assert '"status": "NOT_RUN"' in user_iso_metadata
+assert '"release_eligible=false"' in user_iso_metadata
+assert "normal boot arguments; CI nonce removed" in user_iso_metadata
+assert 'does not match its SHA-256 sidecar' in user_iso_metadata
 assert "needs: [source-check, build, bios, uefi, promote]" in workflow
 assert 'printf \'%s\\n\' "$nonce" > candidate/ci-nonce.txt' in workflow
 assert 'candidate/ci-nonce.txt' not in build_helper

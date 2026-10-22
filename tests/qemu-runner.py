@@ -139,13 +139,15 @@ def classify(
     shutdown_reason: str,
     termination_requested: bool,
     termination_escalated: bool,
+    desktop_seen: bool,
     final_screenshot_valid: bool,
 ) -> str:
     if returncode not in (None, 0, -signal.SIGTERM, -signal.SIGKILL):
         return "QEMU_INFRASTRUCTURE_FAILURE"
-    if marker_seen:
+    if marker_seen or desktop_seen:
+        expected_shutdown = "readiness_marker" if marker_seen else "desktop_rendered"
         if (
-            shutdown_reason != "readiness_marker"
+            shutdown_reason != expected_shutdown
             or not termination_requested
             or termination_escalated
             or not final_screenshot_valid
@@ -233,15 +235,20 @@ def exit_on_term(signum: int, _frame: object) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", required=True, choices=("bios-headless", "uefi-headless"))
+    parser.add_argument(
+        "--mode",
+        required=True,
+        choices=("bios-headless", "uefi-headless", "bios-desktop", "uefi-desktop"),
+    )
     parser.add_argument("--evidence", required=True, type=Path)
-    parser.add_argument("--nonce", required=True)
+    parser.add_argument("--nonce", default="")
+    parser.add_argument("--readiness", choices=("nonce", "desktop"), default="nonce")
     parser.add_argument("--timeout", required=True, type=int)
     parser.add_argument("--render-grace", type=float, default=3.0)
     parser.add_argument("--accelerator", required=True)
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    if not re.fullmatch(r"[a-f0-9]{32}", args.nonce):
+    if args.readiness == "nonce" and not re.fullmatch(r"[a-f0-9]{32}", args.nonce):
         parser.error("nonce must be 32 lowercase hexadecimal characters")
     if args.timeout < 1:
         parser.error("timeout must be a positive integer")
@@ -283,8 +290,10 @@ def main() -> int:
     qmp_log = evidence / f"qemu-{args.mode}-qmp.log"
     result_path = evidence / f"qemu-{args.mode}-result.json"
     serial_path.write_bytes(b"")
-    nonce_marker = re.compile(
-        rb"(?m)^" + re.escape(MARKER_PREFIX.encode()) + re.escape(args.nonce.encode()) + rb"\r?$"
+    nonce_marker = (
+        re.compile(rb"(?m)^" + re.escape(MARKER_PREFIX.encode()) + re.escape(args.nonce.encode()) + rb"\r?$")
+        if args.readiness == "nonce"
+        else None
     )
 
     with tempfile.TemporaryDirectory(prefix="isox-qmp-") as temporary:
@@ -333,6 +342,7 @@ def main() -> int:
             qmp_available = False
             screenshots: list[str] = []
             marker_seen = False
+            desktop_seen = False
             timed_out = False
             shutdown_reason = "qemu_exit"
             termination_requested = False
@@ -348,15 +358,26 @@ def main() -> int:
                 else:
                     failure = "Unable to capture the early VGA screenshot through QMP."
                 second_snapshot_at = started + min(15, max(2, args.timeout // 3))
+                next_desktop_probe_at = started + 2
                 while process.poll() is None:
                     serial_bytes = serial_path.read_bytes()
-                    if nonce_marker.search(serial_bytes):
+                    if nonce_marker and nonce_marker.search(serial_bytes):
                         marker_seen = True
                         shutdown_reason = "readiness_marker"
                         if args.render_grace:
                             time.sleep(args.render_grace)
                         break
                     now = time.monotonic()
+                    if args.readiness == "desktop" and now >= next_desktop_probe_at and qmp_available:
+                        probe = evidence / f"qemu-{args.mode}-probe-{int(now * 1000)}.ppm"
+                        desktop_seen = qmp.screenshot(probe, require_visible=True)
+                        probe.unlink(missing_ok=True)
+                        if desktop_seen:
+                            shutdown_reason = "desktop_rendered"
+                            if args.render_grace:
+                                time.sleep(args.render_grace)
+                            break
+                        next_desktop_probe_at = now + 2
                     if now >= second_snapshot_at and qmp_available:
                         name = f"qemu-{args.mode}-later.ppm"
                         if qmp.screenshot(evidence / name):
@@ -375,11 +396,11 @@ def main() -> int:
                     name = f"qemu-{args.mode}-final.ppm"
                     final_screenshot_valid = qmp.screenshot(
                         evidence / name,
-                        require_visible=marker_seen,
+                        require_visible=marker_seen or desktop_seen,
                     )
                     if final_screenshot_valid:
                         screenshots.append(name)
-                    elif marker_seen or timed_out:
+                    elif marker_seen or desktop_seen or timed_out:
                         failure = failure or "Unable to capture valid final VGA evidence before QEMU cleanup."
                 qmp.close()
                 termination_requested, termination_escalated = terminate_group(process)
@@ -400,6 +421,7 @@ def main() -> int:
                 shutdown_reason,
                 termination_requested,
                 termination_escalated,
+                desktop_seen,
                 final_screenshot_valid,
             )
             if failure or not process_group_clean:
@@ -417,6 +439,7 @@ def main() -> int:
                 "duration_seconds": duration,
                 "serial_bytes": len(serial_content),
                 "marker_seen": marker_seen,
+                "desktop_seen": desktop_seen,
                 "serial_indicators": serial_indicators(serial_text),
                 "process_group_clean": process_group_clean,
                 "serial_log": str(serial_path),

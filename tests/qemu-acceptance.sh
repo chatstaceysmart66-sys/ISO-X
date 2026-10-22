@@ -21,6 +21,8 @@ Modes:
   uefi    Boot with OVMF UEFI, 2 vCPUs and 1024 MiB RAM.
   bios-headless Require the CI guest readiness nonce; capture VGA and serial evidence.
   uefi-headless Require the CI guest readiness nonce with OVMF; capture VGA and serial evidence.
+  bios-desktop Boot a normal-boot ISO until the ISO-X window renders; capture VGA and serial evidence.
+  uefi-desktop Boot a normal-boot ISO with OVMF until the ISO-X window renders.
   install Boot with a fresh 24 GiB qcow2 TEST disk (never a host disk) attached.
 
 BIOS/UEFI GUI checks are manual. Close QEMU to return. These modes do not
@@ -56,13 +58,13 @@ case "$MODE" in
     } 2>&1 | tee "$EVIDENCE/iso-preflight.txt"
     echo "Saved: $EVIDENCE/iso-preflight.txt"
     ;;
-  bios|uefi|install|bios-headless|uefi-headless)
+  bios|uefi|install|bios-headless|uefi-headless|bios-desktop|uefi-desktop)
     need qemu-system-x86_64
     if [[ "$MODE" == install ]]; then need qemu-img; fi
     require_iso
     mkdir -p "$EVIDENCE"
     HEADLESS=0
-    [[ "$MODE" == *-headless ]] && HEADLESS=1
+    [[ "$MODE" == *-headless || "$MODE" == *-desktop ]] && HEADLESS=1
     # QEMU's -nic options intentionally use commas within a single argument.
     # shellcheck disable=SC2054
     ARGS=(-m 1024 -smp 2 -boot order=d -cdrom "$ISO" -nic user,model=e1000)
@@ -81,12 +83,17 @@ case "$MODE" in
       [[ "$QEMU_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ISOX_QEMU_TIMEOUT must be a positive integer." >&2; exit 3; }
       QEMU_RENDER_GRACE="${ISOX_QEMU_RENDER_GRACE:-3}"
       [[ "$QEMU_RENDER_GRACE" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "ISOX_QEMU_RENDER_GRACE must be a non-negative number of seconds." >&2; exit 3; }
+      READINESS=nonce
       QEMU_NONCE="${ISOX_QEMU_NONCE:-}"
-      [[ "$QEMU_NONCE" =~ ^[a-f0-9]{32}$ ]] || { echo "Set ISOX_QEMU_NONCE to the nonce embedded in the CI-only ISO variant." >&2; exit 3; }
+      if [[ "$MODE" == *-desktop ]]; then
+        READINESS=desktop
+      else
+        [[ "$QEMU_NONCE" =~ ^[a-f0-9]{32}$ ]] || { echo "Set ISOX_QEMU_NONCE to the nonce embedded in the CI-only ISO variant." >&2; exit 3; }
+      fi
     elif [[ "$HEADLESS" -eq 0 ]]; then
       ARGS+=(-display gtk)
     fi
-    if [[ "$MODE" == uefi || "$MODE" == uefi-headless ]]; then
+    if [[ "$MODE" == uefi || "$MODE" == uefi-headless || "$MODE" == uefi-desktop ]]; then
       CODE=''
       VARS=''
       for candidate in /usr/share/OVMF/OVMF_CODE.fd /usr/share/ovmf/OVMF_CODE.fd /usr/share/OVMF/OVMF_CODE_4M.fd; do
@@ -120,6 +127,7 @@ case "$MODE" in
     if [[ "$HEADLESS" -eq 1 ]]; then
       python3 "$ROOT/tests/qemu-runner.py" \
         --mode "$MODE" \
+        --readiness "$READINESS" \
         --evidence "$EVIDENCE" \
         --nonce "$QEMU_NONCE" \
         --timeout "$QEMU_TIMEOUT" \

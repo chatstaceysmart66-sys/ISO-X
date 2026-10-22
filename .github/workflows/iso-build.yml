@@ -400,7 +400,7 @@ jobs:
     needs: [build, bios, uefi]
     if: needs.build.outputs.validated == 'true' && needs.build.outputs.candidate_uploaded == 'success' && needs.bios.result == 'success' && needs.uefi.result == 'success'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
@@ -412,6 +412,7 @@ jobs:
           name: ISO-X-0.4.0-ci-diagnostic-candidate-${{ github.run_id }}-${{ github.run_attempt }}
           path: candidate
       - name: Create and validate normal-boot ISO
+        id: user-iso
         run: |
           set -Eeuo pipefail
           mkdir -p user-iso
@@ -419,47 +420,69 @@ jobs:
             "candidate/${{ needs.build.outputs.iso_name }}" \
             "user-iso/ISO-X-0.4.0-live-amd64.iso" \
             "$(bash scripts/read-ci-nonce.sh candidate/ci-nonce.txt)"
-          actual="$(sha256sum user-iso/ISO-X-0.4.0-live-amd64.iso | awk '{print $1}')"
-          size="$(stat -c '%s' user-iso/ISO-X-0.4.0-live-amd64.iso)"
-          python3 - "$actual" "$size" <<'PY'
-          import json, sys
-          from pathlib import Path
-          metadata = json.loads(Path("candidate/build-metadata.json").read_text(encoding="utf-8"))
-          metadata["user_iso"] = {
-              "path": "ISO-X-0.4.0-live-amd64.iso",
-              "size_bytes": int(sys.argv[2]),
-              "sha256": sys.argv[1],
-              "boot_configuration": "normal release boot arguments; CI nonce removed",
-              "derived_from_ci_iso_sha256": metadata["iso_sha256"],
-          }
-          metadata["iso_path"] = "ISO-X-0.4.0-live-amd64.iso"
-          metadata["iso_size_bytes"] = int(sys.argv[2])
-          metadata["iso_sha256"] = sys.argv[1]
-          metadata["ci_boot_diagnostic_variant"] = False
-          metadata.pop("ci_nonce", None)
-          metadata["ci_readiness_probe"] = "included but inactive unless CI-only kernel arguments are present"
-          metadata["release_eligible"] = False
-          metadata["release_eligibility_reason"] = "Guest Persistence across reboot has not been accepted."
-          Path("user-iso/build-metadata.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
-          PY
-          {
-            echo "source_commit=${GITHUB_SHA}"
-            echo "diagnostic_iso=${{ needs.build.outputs.iso_name }}"
-            echo "user_iso=ISO-X-0.4.0-live-amd64.iso"
-            echo "sha256=$actual"
-            echo "size_bytes=$size"
-            echo "bios_boot=PASS on matching CI root filesystem"
-            echo "uefi_boot=PASS on matching CI root filesystem"
-            echo "persistence=NOT_RUN"
-            echo "release_eligible=false"
-          } > user-iso/validation-manifest.txt
+      - name: Install normal-boot QEMU and OVMF
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf
+      - name: Run BIOS acceptance on normal-boot ISO
+        id: user-bios
+        continue-on-error: true
+        env:
+          ISOX_QEMU_TIMEOUT: 600
+          ISOX_QEMU_RENDER_GRACE: 5
+        run: |
+          set -Eeuo pipefail
+          mkdir -p user-iso/evidence/bios
+          bash tests/qemu-acceptance.sh bios-desktop \
+            user-iso/ISO-X-0.4.0-live-amd64.iso user-iso/evidence/bios
+      - name: Run UEFI acceptance on normal-boot ISO
+        id: user-uefi
+        continue-on-error: true
+        env:
+          ISOX_QEMU_TIMEOUT: 600
+          ISOX_QEMU_RENDER_GRACE: 5
+        run: |
+          set -Eeuo pipefail
+          mkdir -p user-iso/evidence/uefi
+          bash tests/qemu-acceptance.sh uefi-desktop \
+            user-iso/ISO-X-0.4.0-live-amd64.iso user-iso/evidence/uefi
+      - name: Record normal-boot acceptance results
+        if: always()
+        run: |
+          python3 scripts/create-user-iso-metadata.py \
+            --iso user-iso/ISO-X-0.4.0-live-amd64.iso \
+            --diagnostic-metadata candidate/build-metadata.json \
+            --metadata user-iso/build-metadata.json \
+            --bios-result user-iso/evidence/bios/qemu-bios-desktop-result.json \
+            --uefi-result user-iso/evidence/uefi/qemu-uefi-desktop-result.json \
+            --manifest user-iso/validation-manifest.txt \
+            --diagnostic-iso "${{ needs.build.outputs.iso_name }}" \
+            --diagnostic-iso-path "candidate/${{ needs.build.outputs.iso_name }}"
       - name: Upload normal-boot ISO candidate (not a release)
+        if: always() && steps.user-iso.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
         with:
           name: ISO-X-0.4.0-live-amd64-candidate-${{ github.run_id }}-${{ github.run_attempt }}
           path: user-iso/
           if-no-files-found: error
           retention-days: 30
+      - name: Enforce normal-boot BIOS and UEFI gates
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          failures = []
+          for mode in ("bios", "uefi"):
+              path = Path(f"user-iso/evidence/{mode}/qemu-{mode}-desktop-result.json")
+              if not path.is_file():
+                  failures.append(f"{mode}: result is missing")
+                  continue
+              result = json.loads(path.read_text(encoding="utf-8"))
+              if result.get("status") != "PASS_BOOT" or not result.get("desktop_seen") or not result.get("final_screenshot_valid"):
+                  failures.append(f"{mode}: {result.get('status', 'NOT_RUN')}; desktop_seen={result.get('desktop_seen')}; final_screenshot_valid={result.get('final_screenshot_valid')}")
+          if failures:
+              raise SystemExit("Normal-boot ISO acceptance failed: " + "; ".join(failures))
+          print("PASS: normal-boot ISO rendered the ISO-X desktop under BIOS and UEFI.")
+          PY
 
   acceptance-summary:
     if: always()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,28 @@ EXPECTED_BASE = [
     "hostname=iso-x", "console=ttyS0,115200n8", "systemd.show_status=yes",
     "systemd.log_target=console",
 ]
+
+
+def replace_config_atomically(path: Path, content: str) -> None:
+    original = path.lstat()
+    if not stat.S_ISREG(original.st_mode):
+        raise ValueError(f"boot configuration is not a regular file: {path}")
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(file_descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, stat.S_IMODE(original.st_mode))
+        os.replace(temporary, path)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def normalize_config(path: Path, nonce: str, kind: str) -> None:
@@ -73,7 +96,7 @@ def normalize_config(path: Path, nonce: str, kind: str) -> None:
 
     if changed != 2:
         raise ValueError(f"{path}: expected two live kernel entries, normalized {changed}")
-    path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+    replace_config_atomically(path, "\n".join(rewritten) + "\n")
 
 
 def run(*args: str) -> str:
