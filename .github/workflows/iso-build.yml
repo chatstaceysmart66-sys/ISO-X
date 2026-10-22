@@ -445,7 +445,8 @@ jobs:
           bash tests/qemu-acceptance.sh uefi-desktop \
             user-iso/ISO-X-0.4.0-live-amd64.iso user-iso/evidence/uefi
       - name: Record normal-boot acceptance results
-        if: always()
+        id: user-metadata
+        if: always() && steps.user-iso.outcome == 'success'
         run: |
           python3 scripts/create-user-iso-metadata.py \
             --iso user-iso/ISO-X-0.4.0-live-amd64.iso \
@@ -457,7 +458,7 @@ jobs:
             --diagnostic-iso "${{ needs.build.outputs.iso_name }}" \
             --diagnostic-iso-path "candidate/${{ needs.build.outputs.iso_name }}"
       - name: Upload normal-boot ISO candidate (not a release)
-        if: always() && steps.user-iso.outcome == 'success'
+        if: always() && steps.user-iso.outcome == 'success' && steps.user-metadata.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
         with:
           name: ISO-X-0.4.0-live-amd64-candidate-${{ github.run_id }}-${{ github.run_attempt }}

@@ -81,7 +81,10 @@ assert "normal-boot ISO SHA-256 sidecar is missing" in user_iso_metadata
 assert "USB persistence across a guest reboot has not been accepted." in user_iso_metadata
 assert "Enforce normal-boot BIOS and UEFI gates" in promote
 assert "id: user-iso" in promote
+assert "id: user-metadata" in promote
 assert "steps.user-iso.outcome == 'success'" in promote
+assert "steps.user-metadata.outcome == 'success'" in promote
+assert "if: always() && steps.user-iso.outcome == 'success'" in promote
 assert promote.index("Run BIOS acceptance on normal-boot ISO") < promote.index("Record normal-boot acceptance results")
 assert promote.index("Run UEFI acceptance on normal-boot ISO") < promote.index("Record normal-boot acceptance results")
 assert promote.index("Upload normal-boot ISO candidate") < promote.index("Enforce normal-boot BIOS and UEFI gates")

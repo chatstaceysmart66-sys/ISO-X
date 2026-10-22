@@ -88,7 +88,11 @@ def normalize_config(path: Path, nonce: str, kind: str) -> None:
             args.insert(args.index("components") + 1, "quiet")
         if "splash" not in args:
             args.insert(args.index("quiet") + 1, "splash")
-        expected = EXPECTED_BASE + (["persistence"] if persistence else [])
+        expected = (
+            EXPECTED_BASE
+            + (["findiso=${iso_path}"] if kind == "grub" else [])
+            + (["persistence"] if persistence else [])
+        )
         if args != expected:
             raise ValueError(f"{path}: unexpected boot arguments for {current_entry}: {args!r}")
         rewritten.append(" ".join(prefix + args))

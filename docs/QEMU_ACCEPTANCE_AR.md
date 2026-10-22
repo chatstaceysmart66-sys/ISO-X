@@ -19,6 +19,8 @@
 
 في run [39742060324](https://github.com/chatstaceysmart66-sys/ISO-X/actions/runs/39742060324) على commit `778dc13cc634146ec2de7e93118331741cf3dc88`، اجتازت source-check وbuild وBIOS وUEFI، وظهرت واجهة سطح المكتب في النمطين. فشل `promote` فقط عند إعادة كتابة `/isolinux/live.cfg` المستخرج من ISO للقراءة فقط (`PermissionError`). لم يُرفع artifact normal-boot. التغيير الحالي يستخدم استبدالًا ذريًا، ويختبر integration إعادة إنشاء الصورة وملف metadata؛ نتيجة CI بعد هذا التغيير ما زالت مطلوبة.
 
+run [39806454958](https://github.com/chatstaceysmart66-sys/ISO-X/actions/runs/39806454958) على commit `5727354e4b585febe98ade29e52df13e504b755d` اجتاز البنية وBIOS/UEFI للمرشح التشخيصي، ثم كشف اختلافًا إضافيًا في GRUB الفعلي: live-build يضيف `findiso=${iso_path}`، وهو مطلوب للوصول إلى وسيط ISO. فشل `promote` لأن قائمة arguments المتوقعة لم تتضمن هذا token، كما فشل تسجيل metadata لعدم وجود ملف normal-boot بعد توقف الإنشاء. عُدّل normalizer لا يقبل إلا هذا token المحدد ويحافظ عليه، وأُصلحت شروط steps لمنع تشغيل metadata/رفع artifact عند فشل التحويل. لا توجد نتيجة CI بعد لهذه التغييرات.
+
 ## اختبار صورة normal-boot بعد التحويل
 
 بعد نجاح بوابتي المرشح التشخيصي، ينشئ `promote` ISO عادية بإزالة nonce من مدخلي BIOS وUEFI، ثم يشغّل قبول QEMU مستقلًا على الناتج المحوّل (`bios-desktop` و`uefi-desktop`). لا يستخدم هذا المسار nonce: يطلب ظهور لوحة ISO-X ونافذتها في لقطة QMP، ثم يحفظ screenshot وJSON لكل firmware. هذا اختبار فعلي للصورة النهائية المحوّلة، ولا يستنتج التكافؤ من إقلاع المرشح التشخيصي.

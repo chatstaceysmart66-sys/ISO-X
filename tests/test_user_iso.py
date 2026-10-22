@@ -140,12 +140,12 @@ class UserIsoTests(unittest.TestCase):
             f'menuentry "Live system (amd64)" {{\n linux /live/vmlinuz '
             f'{" ".join(MODULE.EXPECTED_BASE[:3] + MODULE.EXPECTED_BASE[5:7])} '
             f"console=tty0 console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE}\n}}\n"
+            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} findiso=${{iso_path}}\n}}\n"
             f'menuentry "Live system (amd64) with Persistence" {{\n'
             f" linux /live/vmlinuz "
             f"{' '.join(MODULE.EXPECTED_BASE[:3] + MODULE.EXPECTED_BASE[5:7])} console=tty0 "
             f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} persistence\n}}\n"
+            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} findiso=${{iso_path}} persistence\n}}\n"
         )
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "grub.cfg"
@@ -154,8 +154,8 @@ class UserIsoTests(unittest.TestCase):
             lines = path.read_text(encoding="utf-8").splitlines()
         linux_lines = [line.strip() for line in lines if line.lstrip().startswith("linux ")]
         self.assertEqual(len(linux_lines), 2)
-        self.assertIn(" ".join(MODULE.EXPECTED_BASE), linux_lines[0])
-        self.assertIn(" ".join(MODULE.EXPECTED_BASE + ["persistence"]), linux_lines[1])
+        self.assertIn(" ".join(MODULE.EXPECTED_BASE + ["findiso=${iso_path}"]), linux_lines[0])
+        self.assertIn(" ".join(MODULE.EXPECTED_BASE + ["findiso=${iso_path}", "persistence"]), linux_lines[1])
 
     def test_rejects_wrong_nonce_and_unexpected_arguments(self):
         content = (
@@ -190,11 +190,11 @@ class UserIsoTests(unittest.TestCase):
             'menuentry "Live system (amd64)" {\n'
             f" linux /live/vmlinuz boot=live config components username=user hostname=iso-x console=tty0 "
             f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE}\n}}\n"
+            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} findiso=${{iso_path}}\n}}\n"
             'menuentry "Live system (amd64) with Persistence" {\n'
             f" linux /live/vmlinuz boot=live config components username=user hostname=iso-x console=tty0 "
             f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} persistence\n}}\n"
+            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} findiso=${{iso_path}} persistence\n}}\n"
         )
         with tempfile.TemporaryDirectory() as temporary:
             for name, content, kind in (
@@ -214,15 +214,30 @@ class UserIsoTests(unittest.TestCase):
                     self.assertFalse(any("isox.ci" in line or "console=tty0" in line or "loglevel=7" in line for line in normalized))
                     commands = [line.strip() for line in normalized if line.lstrip().startswith(("append ", "linux "))]
                     expected_prefix = "append " if kind == "syslinux" else "linux /live/vmlinuz "
-                    self.assertIn(expected_prefix + " ".join(MODULE.EXPECTED_BASE), commands)
-                    self.assertIn(expected_prefix + " ".join(MODULE.EXPECTED_BASE + ["persistence"]), commands)
+                    expected = MODULE.EXPECTED_BASE + (["findiso=${iso_path}"] if kind == "grub" else [])
+                    self.assertIn(expected_prefix + " ".join(expected), commands)
+                    self.assertIn(expected_prefix + " ".join(expected + ["persistence"]), commands)
 
     def test_rejects_unexpected_grub_live_entry_changes(self):
         content = (
             f'menuentry "Live system (amd64)" {{\n linux /live/vmlinuz {" ".join(MODULE.EXPECTED_BASE)} '
-            f"isox.ci=1 isox.ci.nonce={NONCE}\n}}\n"
+            f"findiso=${{iso_path}} isox.ci=1 isox.ci.nonce={NONCE}\n}}\n"
             f'menuentry "Live system (amd64) with Persistence" {{\n linux /live/vmlinuz {" ".join(MODULE.EXPECTED_BASE)} '
-            f"isox.ci=1 isox.ci.nonce={NONCE} persistence unexpected=1\n}}\n"
+            f"findiso=${{iso_path}} isox.ci=1 isox.ci.nonce={NONCE} persistence unexpected=1\n}}\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "grub.cfg"
+            path.write_text(content, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unexpected boot arguments"):
+                MODULE.normalize_config(path, NONCE, "grub")
+            self.assertEqual(path.read_text(encoding="utf-8"), content)
+
+    def test_rejects_unexpected_grub_findiso_value(self):
+        content = (
+            f'menuentry "Live system (amd64)" {{\n linux /live/vmlinuz {" ".join(MODULE.EXPECTED_BASE)} '
+            f"findiso=/dev/sda isox.ci=1 isox.ci.nonce={NONCE}\n}}\n"
+            f'menuentry "Live system (amd64) with Persistence" {{\n linux /live/vmlinuz {" ".join(MODULE.EXPECTED_BASE)} '
+            f"findiso=${{iso_path}} isox.ci=1 isox.ci.nonce={NONCE} persistence\n}}\n"
         )
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "grub.cfg"
@@ -258,11 +273,11 @@ class UserIsoTests(unittest.TestCase):
                 'set timeout=10\nmenuentry "Live system (amd64)" {\n'
                 f" linux /live/vmlinuz boot=live config components username=user hostname=iso-x console=tty0 "
                 f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-                f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE}\n}}\n"
+                f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} findiso=${{iso_path}}\n}}\n"
                 'menuentry "Live system (amd64) with Persistence" {\n'
                 f" linux /live/vmlinuz boot=live config components username=user hostname=iso-x console=tty0 "
                 f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-                f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} persistence\n}}\n"
+                f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} findiso=${{iso_path}} persistence\n}}\n"
                 'menuentry "Live system (amd64 fail-safe mode)" {\n'
                 " linux /live/vmlinuz boot=live components username=user nomodeset\n}\n"
             )
@@ -323,8 +338,9 @@ class UserIsoTests(unittest.TestCase):
             released_grub = extracted_grub.read_text(encoding="utf-8").splitlines()
             self.assertFalse(any("isox.ci" in line or "console=tty0" in line or "loglevel=7" in line for line in released_grub))
             grub_commands = [line.strip() for line in released_grub if line.lstrip().startswith("linux ")]
-            self.assertIn("linux /live/vmlinuz " + " ".join(MODULE.EXPECTED_BASE), grub_commands)
-            self.assertIn("linux /live/vmlinuz " + " ".join(MODULE.EXPECTED_BASE + ["persistence"]), grub_commands)
+            grub_expected = MODULE.EXPECTED_BASE + ["findiso=${iso_path}"]
+            self.assertIn("linux /live/vmlinuz " + " ".join(grub_expected), grub_commands)
+            self.assertIn("linux /live/vmlinuz " + " ".join(grub_expected + ["persistence"]), grub_commands)
             boot = subprocess.run(
                 ["xorriso", "-indev", str(output), "-report_el_torito", "plain"],
                 check=True, capture_output=True, text=True,
