@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=ISO-X Cyber Dragon
+Description=Minimal black boot screen with the ISO-X neon dragon emblem
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/isox
+ScriptFile=/usr/share/plymouth/themes/isox/isox.script

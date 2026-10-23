@@ -1,0 +1,24 @@
+#!/bin/sh
+set -e
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "${1:-}" in prereqs) prereqs; exit 0 ;; esac
+. /usr/share/initramfs-tools/hook-functions
+MODULE="isox_watermark"
+warn() { echo "ISO-X initramfs: optional watermark skipped: $1" >&2; }
+ROOTFS="${ISOX_INITRAMFS_ROOT:-}"
+# Kernel packages can run update-initramfs before the release hook builds/signs
+# our module. Skip early invocations; the release hook regenerates the final image.
+for f in watermark-public.crt watermark-public.pem isox_watermark.ko.sig isox_watermark.sha256 watermark-fingerprint.txt; do
+    [ -s "${ROOTFS}/etc/isox/$f" ] || exit 0
+done
+modprobe --show-depends --set-version "${version:-$(uname -r)}" "$MODULE" >/dev/null 2>&1 || { warn "module cannot be resolved for this kernel"; exit 0; }
+manual_add_modules "$MODULE" || { warn "module could not be added"; exit 0; }
+copy_exec /usr/bin/openssl /usr/bin || { warn "OpenSSL could not be copied"; exit 0; }
+copy_exec /usr/bin/sha256sum /usr/bin || { warn "sha256sum could not be copied"; exit 0; }
+mkdir -p "${DESTDIR}/etc/isox" || { warn "metadata directory could not be created"; exit 0; }
+for f in watermark-public.crt watermark-public.pem isox_watermark.ko.sig isox_watermark.sha256 watermark-fingerprint.txt; do
+    [ -s "${ROOTFS}/etc/isox/$f" ] || { warn "metadata $f is missing"; exit 0; }
+    cp -p "${ROOTFS}/etc/isox/$f" "${DESTDIR}/etc/isox/$f" || { warn "metadata $f could not be copied"; exit 0; }
+done
+printf '%s\n' 'required_module=isox_watermark' 'developer=عبدالله لازم' 'verification=openssl-sha256+kernel-module-signature' > "${DESTDIR}/etc/isox/watermark-policy"

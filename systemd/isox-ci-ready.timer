@@ -1,0 +1,11 @@
+[Unit]
+Description=Start the ISO-X CI readiness probe after graphical startup
+ConditionKernelCommandLine=isox.ci=1
+
+[Timer]
+OnBootSec=15s
+AccuracySec=1s
+Unit=isox-ci-ready.service
+
+[Install]
+WantedBy=multi-user.target

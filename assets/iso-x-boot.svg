@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ISO-X cyber dragon boot symbol">
+  <defs>
+    <linearGradient id="n" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#7AFBFF"/><stop offset=".48" stop-color="#00D9FF"/><stop offset="1" stop-color="#1467FF"/></linearGradient>
+    <linearGradient id="a" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#102B48"/><stop offset="1" stop-color="#06101F"/></linearGradient>
+    <filter id="g" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="512" height="512" fill="#000"/>
+  <circle cx="264" cy="250" r="210" fill="#06385B" opacity=".22"/>
+  <g fill="none" stroke="#0D5C8B" stroke-width="3" opacity=".42"><path d="M45 130H112L138 156H166M47 350H104L128 326H163M393 112H440V159H477M410 338H464V377"/></g>
+  <path d="M240 242 190 141 260 194 292 127 324 195 375 157 366 227 400 249
+           367 281 341 312 312 345 280 371 250 352 226 370 229 329 192 351 202 316
+           150 320 184 287 132 264 197 266 159 212 222 246Z"
+        fill="url(#a)" stroke="url(#n)" stroke-width="7" stroke-linejoin="round" filter="url(#g)"/>
+  <path d="M220 256 C242 221 282 207 323 215 L352 226 378 242 410 247 447 250 473 267 458 283 427 288 410 303 391 321 368 327 351 349 327 343 308 326 286 317 263 306 239 291 224 277Z"
+        fill="#071625" stroke="url(#n)" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M321 243 354 247 378 257 351 267 326 261Z" fill="#05101D" stroke="#178AFF" stroke-width="3"/>
+  <path d="M338 254 364 257 349 265Z" fill="#98FFFF" filter="url(#g)"/>
+  <path d="M402 264 441 264 458 270 441 277 415 277" fill="none" stroke="#00D9FF" stroke-width="4" stroke-linecap="round"/>
+  <path d="M398 292 427 290 411 306 386 315 369 330 348 333 334 321 362 320 383 306Z" fill="#0C2740" stroke="#168CFF" stroke-width="3"/>
+  <path d="M389 294 395 305 402 294M376 306 382 316 389 304" fill="#B8FDFF"/>
+  <g fill="none" stroke="#21DDF8" stroke-width="3" stroke-linecap="round"><path d="M244 259 263 253 274 263 291 262M255 277 271 283 282 276M284 230 297 240 312 238M290 299 304 304 314 297"/></g>
+  <path d="M220 371 249 355 277 375 302 355 319 373 291 391 270 399 246 391Z" fill="#0B1E31" stroke="url(#n)" stroke-width="4"/>
+</svg>

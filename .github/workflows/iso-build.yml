@@ -1,0 +1,568 @@
+name: ISO-X Debian Trixie ISO
+
+on:
+  push:
+    branches:
+      - fix/isox-build-and-runtime
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: false
+
+jobs:
+  source-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - name: Install static-check tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pytest python3-gi gir1.2-gtk-3.0 openbox xvfb x11-utils xdotool wmctrl xterm x11-xkb-utils libx11-6 shellcheck desktop-file-utils libxml2-utils fdisk xorriso
+
+      - name: Run source tests and validators
+        id: source-checks
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence/source
+          exec > >(tee -a evidence/source/source-check.log) 2>&1
+          python3 scripts/run-source-checks.py evidence/source "$RUNNER_TEMP/isox-pycache"
+
+      - name: Upload source-check evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
+        with:
+          name: isox-source-check-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/source/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  build:
+    needs: source-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    outputs:
+      iso_sha256: ${{ steps.validate.outputs.iso_sha256 }}
+      iso_size: ${{ steps.validate.outputs.iso_size }}
+      iso_name: ${{ steps.validate.outputs.iso_name }}
+      validated: ${{ steps.validate.outputs.validated }}
+      candidate_uploaded: ${{ steps.candidate-artifact.outcome }}
+      build_exit_code: ${{ steps.build-iso.outputs.exit_code }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+
+      - name: Reclaim unused hosted-runner toolchains
+        run: |
+          set -Eeuo pipefail
+          # GitHub-hosted runners are disposable; these preinstalled SDKs are not
+          # used by ISO-X and the live-build workspace needs more than 14 GB.
+          for path in \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /usr/local/share/chromium \
+            /usr/local/share/powershell; do
+            if [[ -d "$path" && ! -L "$path" && "$(realpath -e "$path")" == "$path" ]]; then
+              sudo rm -rf -- "$path"
+            fi
+          done
+
+      - name: Check runner capacity and generate CI nonce
+        id: runner
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence candidate
+          df -h "$GITHUB_WORKSPACE"
+          free -h
+          available_kb="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 {print $4}')"
+          memory_kb="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
+          (( available_kb >= 20 * 1024 * 1024 )) || { echo "Need 20 GiB free; available ${available_kb} KiB" >&2; exit 20; }
+          (( memory_kb >= 4 * 1024 * 1024 )) || { echo "Need 4 GiB RAM; available ${memory_kb} KiB" >&2; exit 21; }
+          nonce="$(openssl rand -hex 16)"
+          printf '%s\n' "$nonce" > candidate/ci-nonce.txt
+          echo "nonce=$nonce" >> "$GITHUB_OUTPUT"
+          docker --version
+          docker info --format 'Docker server {{.ServerVersion}}'
+
+      - name: Build CI-only boot-diagnostic ISO in Debian Trixie
+        id: build-iso
+        env:
+          ISOX_CI_NONCE: ${{ steps.runner.outputs.nonce }}
+        run: |
+          set -Eeuo pipefail
+          set +e
+          docker pull debian:trixie
+          exit_code=$?
+          if (( exit_code == 0 )); then
+          docker run --rm --privileged \
+            -e ISOX_CI_BOOT=1 \
+            -e ISOX_CI_NONCE="$ISOX_CI_NONCE" \
+            -e ISOX_BUILD_DIR="/workspace/build-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            -e ISOX_BUILD_LOG="/workspace/evidence/isox-build.log" \
+            -e ISOX_OUTPUT_ISO="/workspace/candidate/ISO-X-0.4.0-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.iso" \
+            -e GITHUB_WORKSPACE=/workspace \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            debian:trixie bash -Eeuo pipefail /workspace/scripts/ci-build-in-trixie.sh
+          exit_code=$?
+          fi
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          exit "$exit_code"
+
+      - name: Validate candidate and write validation manifest
+        id: validate
+        if: always()
+        run: |
+          set -Eeuo pipefail
+          iso="candidate/ISO-X-0.4.0-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.iso"
+          report_validation_error() {
+            local check="$1" file="$2" contents
+            if [[ -r "$file" ]]; then
+              contents="$(cat "$file")"
+            else
+              contents="<missing or unreadable>"
+            fi
+            contents="${contents//'%'/'%25'}"
+            contents="${contents//$'\r'/'%0D'}"
+            contents="${contents//$'\n'/'%0A'}"
+            echo "::error title=Candidate validation::$check; file=$file; contents=$contents"
+          }
+          require_nonempty_file() {
+            local check="$1" file="$2"
+            if [[ ! -s "$file" ]]; then
+              report_validation_error "$check" "$file"
+              exit 1
+            fi
+          }
+          require_match() {
+            local check="$1" pattern="$2" file="$3"
+            if ! grep -Eiq "$pattern" "$file"; then
+              report_validation_error "$check" "$file"
+              exit 1
+            fi
+          }
+          if [[ "${{ steps.build-iso.outcome }}" != success ]]; then
+            report_validation_error "ISO build step did not succeed" evidence/isox-build.log
+            echo "validated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          require_nonempty_file "candidate ISO must exist and be non-empty" "$iso"
+          require_nonempty_file "candidate SHA-256 sidecar must exist and be non-empty" "$iso.sha256"
+          if ! (cd candidate && sha256sum --check "$(basename "$iso").sha256"); then
+            report_validation_error "candidate SHA-256 sidecar must match the ISO" "$iso.sha256"
+            exit 1
+          fi
+          actual="$(sha256sum "$iso" | awk '{print $1}')"
+          size="$(stat -c '%s' "$iso")"
+          require_nonempty_file "CI nonce file must exist and be non-empty" candidate/ci-nonce.txt
+          if ! nonce="$(bash scripts/read-ci-nonce.sh candidate/ci-nonce.txt)"; then
+            report_validation_error "CI nonce must be 32 lowercase hexadecimal characters with no prefix" candidate/ci-nonce.txt
+            exit 1
+          fi
+          require_nonempty_file "ISO PVD evidence must exist and be non-empty" evidence/iso-pvd-info.txt
+          require_nonempty_file "build tools evidence must exist and be non-empty" evidence/build-tools.txt
+          require_nonempty_file "build kernel evidence must exist and be non-empty" evidence/build-kernel.txt
+          require_nonempty_file "El Torito evidence must exist and be non-empty" evidence/eltorito.txt
+          require_match "El Torito evidence must contain a BIOS boot entry" 'BIOS|Platform.*0x00' evidence/eltorito.txt
+          require_match "El Torito evidence must contain a UEFI boot entry" 'UEFI|EFI|Platform.*0xef' evidence/eltorito.txt
+          require_nonempty_file "system-area evidence must exist and be non-empty" evidence/system-area.txt
+          require_match "system-area evidence must contain MBR information" 'MBR|System area' evidence/system-area.txt
+          python3 - "$iso" "$actual" "$size" "$nonce" <<'PY'
+          import json, os, platform, sys
+          from datetime import datetime, timezone
+          from pathlib import Path
+          iso, digest, size, nonce = sys.argv[1:]
+          versions = {}
+          for line in Path("evidence/build-tools.txt").read_text(encoding="utf-8").splitlines():
+              package, version = line.split("\t", 1)
+              versions[package] = version
+          kernel = Path("evidence/build-kernel.txt").read_text(encoding="utf-8").strip()
+          if not versions or not kernel:
+              raise SystemExit("Build environment metadata is incomplete.")
+          metadata = {
+              "project": "ISO-X",
+              "release": "0.4.0 TRIXIE",
+              "branch": os.environ["GITHUB_REF_NAME"],
+              "commit": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "created_at_utc": datetime.now(timezone.utc).isoformat(),
+              "architecture": platform.machine(),
+              "kernel": kernel,
+              "build_os": "Debian GNU/Linux 13 Trixie container",
+              "tool_versions": versions,
+              "iso_path": iso,
+              "iso_size_bytes": int(size),
+              "iso_sha256": digest,
+              "ci_boot_diagnostic_variant": True,
+              "release_eligible": False,
+              "ci_nonce": nonce,
+              "persistence": {"status": "NOT_RUN", "reason": "The USB writer can create an MBR/ext4 persistence partition, but guest boot and reboot persistence acceptance has not been run."},
+          }
+          with open("candidate/build-metadata.json", "w", encoding="utf-8") as f:
+              json.dump(metadata, f, indent=2)
+              f.write("\n")
+          PY
+          cat > evidence/iso-validated.ok <<EOF
+          commit=${GITHUB_SHA}
+          run_id=${GITHUB_RUN_ID}
+          run_attempt=${GITHUB_RUN_ATTEMPT}
+          created_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          size_bytes=${size}
+          sha256=${actual}
+          xorriso_pvd=PASS
+          el_torito_bios=PASS
+          el_torito_uefi=PASS
+          system_area=PASS
+          variant=CI_BOOT_DIAGNOSTIC_NOT_RELEASE
+          EOF
+          {
+            echo "iso_name=$(basename "$iso")"
+            echo "iso_sha256=$actual"
+            echo "iso_size=$size"
+            echo "validated=true"
+          } >> "$GITHUB_OUTPUT"
+          mkdir -p candidate-payload
+          cp "$iso" "$iso.sha256" candidate/ci-nonce.txt candidate/build-metadata.json candidate-payload/
+          cp evidence/iso-validated.ok candidate-payload/
+
+      - name: Upload validated, unverified CI diagnostic candidate
+        id: candidate-artifact
+        if: steps.validate.outputs.validated == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
+        with:
+          name: ISO-X-0.4.0-ci-diagnostic-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate-payload/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
+        with:
+          name: isox-build-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+  bios:
+    needs: build
+    if: always() && needs.build.outputs.validated == 'true' && needs.build.outputs.candidate_uploaded == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      boot_status: ${{ steps.result.outputs.boot_status }}
+      duration: ${{ steps.result.outputs.duration }}
+      accelerator: ${{ steps.result.outputs.accelerator }}
+    steps:
+      - name: Check out test harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - name: Install BIOS QEMU
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
+      - name: Download validated candidate
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        with:
+          name: ISO-X-0.4.0-ci-diagnostic-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate
+      - name: Run BIOS boot acceptance
+        id: boot
+        continue-on-error: true
+        env:
+          ISOX_QEMU_TIMEOUT: 600
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence/bios
+          nonce="$(bash scripts/read-ci-nonce.sh candidate/ci-nonce.txt)"
+          echo "value=$nonce" >> "$GITHUB_OUTPUT"
+          ISOX_QEMU_NONCE="$nonce" bash tests/qemu-acceptance.sh bios-headless \
+            "candidate/${{ needs.build.outputs.iso_name }}" evidence/bios
+      - name: Capture BIOS result
+        id: result
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          p = Path("evidence/bios/qemu-bios-headless-result.json")
+          if p.exists():
+              result = json.loads(p.read_text())
+              print(f"boot_status={result.get('status', 'BOOT_FAILURE_UNRESOLVED')}")
+              print(f"duration={result.get('duration_seconds', '')}")
+              print(f"accelerator={result.get('accelerator', '')}")
+          else:
+              print("boot_status=QEMU_INFRASTRUCTURE_FAILURE")
+              print("duration=")
+              print("accelerator=unknown")
+          PY
+      - name: Upload BIOS evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
+        with:
+          name: isox-bios-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/bios/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Enforce BIOS gate
+        if: steps.result.outputs.boot_status != 'PASS_BOOT'
+        run: |
+          set -Eeuo pipefail
+          file=evidence/bios/qemu-bios-headless-result.json
+          if [[ -r "$file" ]]; then
+            result="$(cat "$file")"
+          else
+            result="<missing or unreadable>"
+          fi
+          result="${result//'%'/'%25'}"
+          result="${result//$'\r'/'%0D'}"
+          result="${result//$'\n'/'%0A'}"
+          echo "::error title=BIOS boot acceptance::status=${{ steps.result.outputs.boot_status }}; evidence=$file; contents=$result"
+          exit 1
+
+  uefi:
+    needs: build
+    if: always() && needs.build.outputs.validated == 'true' && needs.build.outputs.candidate_uploaded == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      boot_status: ${{ steps.result.outputs.boot_status }}
+      duration: ${{ steps.result.outputs.duration }}
+      accelerator: ${{ steps.result.outputs.accelerator }}
+    steps:
+      - name: Check out test harness
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - name: Install UEFI QEMU and OVMF
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf
+      - name: Download validated candidate
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        with:
+          name: ISO-X-0.4.0-ci-diagnostic-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate
+      - name: Run UEFI boot acceptance
+        id: boot
+        continue-on-error: true
+        env:
+          ISOX_QEMU_TIMEOUT: 600
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence/uefi
+          nonce="$(bash scripts/read-ci-nonce.sh candidate/ci-nonce.txt)"
+          ISOX_QEMU_NONCE="$nonce" bash tests/qemu-acceptance.sh uefi-headless \
+            "candidate/${{ needs.build.outputs.iso_name }}" evidence/uefi
+      - name: Capture UEFI result
+        id: result
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          p = Path("evidence/uefi/qemu-uefi-headless-result.json")
+          if p.exists():
+              result = json.loads(p.read_text())
+              print(f"boot_status={result.get('status', 'BOOT_FAILURE_UNRESOLVED')}")
+              print(f"duration={result.get('duration_seconds', '')}")
+              print(f"accelerator={result.get('accelerator', '')}")
+          else:
+              print("boot_status=QEMU_INFRASTRUCTURE_FAILURE")
+              print("duration=")
+              print("accelerator=unknown")
+          PY
+      - name: Upload UEFI evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
+        with:
+          name: isox-uefi-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/uefi/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Enforce UEFI gate
+        if: steps.result.outputs.boot_status != 'PASS_BOOT'
+        run: |
+          set -Eeuo pipefail
+          file=evidence/uefi/qemu-uefi-headless-result.json
+          if [[ -r "$file" ]]; then
+            result="$(cat "$file")"
+          else
+            result="<missing or unreadable>"
+          fi
+          result="${result//'%'/'%25'}"
+          result="${result//$'\r'/'%0D'}"
+          result="${result//$'\n'/'%0A'}"
+          echo "::error title=UEFI boot acceptance::status=${{ steps.result.outputs.boot_status }}; evidence=$file; contents=$result"
+          exit 1
+
+  promote:
+    needs: [build, bios, uefi]
+    if: needs.build.outputs.validated == 'true' && needs.build.outputs.candidate_uploaded == 'success' && needs.bios.result == 'success' && needs.uefi.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - name: Install xorriso
+        run: sudo apt-get update && sudo apt-get install -y xorriso
+      - name: Download boot-tested CI image
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        with:
+          name: ISO-X-0.4.0-ci-diagnostic-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate
+      - name: Create and validate normal-boot ISO
+        id: user-iso
+        run: |
+          set -Eeuo pipefail
+          mkdir -p user-iso
+          python3 scripts/create-user-iso.py \
+            "candidate/${{ needs.build.outputs.iso_name }}" \
+            "user-iso/ISO-X-0.4.0-live-amd64.iso" \
+            "$(bash scripts/read-ci-nonce.sh candidate/ci-nonce.txt)"
+      - name: Install normal-boot QEMU and OVMF
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf
+      - name: Run BIOS acceptance on normal-boot ISO
+        id: user-bios
+        continue-on-error: true
+        env:
+          ISOX_QEMU_TIMEOUT: 600
+          ISOX_QEMU_RENDER_GRACE: 5
+        run: |
+          set -Eeuo pipefail
+          mkdir -p user-iso/evidence/bios
+          bash tests/qemu-acceptance.sh bios-desktop \
+            user-iso/ISO-X-0.4.0-live-amd64.iso user-iso/evidence/bios
+      - name: Run UEFI acceptance on normal-boot ISO
+        id: user-uefi
+        continue-on-error: true
+        env:
+          ISOX_QEMU_TIMEOUT: 600
+          ISOX_QEMU_RENDER_GRACE: 5
+        run: |
+          set -Eeuo pipefail
+          mkdir -p user-iso/evidence/uefi
+          bash tests/qemu-acceptance.sh uefi-desktop \
+            user-iso/ISO-X-0.4.0-live-amd64.iso user-iso/evidence/uefi
+      - name: Record normal-boot acceptance results
+        id: user-metadata
+        if: always() && steps.user-iso.outcome == 'success'
+        run: |
+          python3 scripts/create-user-iso-metadata.py \
+            --iso user-iso/ISO-X-0.4.0-live-amd64.iso \
+            --diagnostic-metadata candidate/build-metadata.json \
+            --metadata user-iso/build-metadata.json \
+            --bios-result user-iso/evidence/bios/qemu-bios-desktop-result.json \
+            --uefi-result user-iso/evidence/uefi/qemu-uefi-desktop-result.json \
+            --manifest user-iso/validation-manifest.txt \
+            --diagnostic-iso "${{ needs.build.outputs.iso_name }}" \
+            --diagnostic-iso-path "candidate/${{ needs.build.outputs.iso_name }}"
+      - name: Upload normal-boot ISO candidate (not a release)
+        if: always() && steps.user-iso.outcome == 'success' && steps.user-metadata.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
+        with:
+          name: ISO-X-0.4.0-live-amd64-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: user-iso/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Enforce normal-boot BIOS and UEFI gates
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          failures = []
+          for mode in ("bios", "uefi"):
+              path = Path(f"user-iso/evidence/{mode}/qemu-{mode}-desktop-result.json")
+              if not path.is_file():
+                  failures.append(f"{mode}: result is missing")
+                  continue
+              result = json.loads(path.read_text(encoding="utf-8"))
+              if result.get("status") != "PASS_BOOT" or not result.get("desktop_seen") or not result.get("final_screenshot_valid"):
+                  failures.append(f"{mode}: {result.get('status', 'NOT_RUN')}; desktop_seen={result.get('desktop_seen')}; final_screenshot_valid={result.get('final_screenshot_valid')}")
+          if failures:
+              raise SystemExit("Normal-boot ISO acceptance failed: " + "; ".join(failures))
+          print("PASS: normal-boot ISO rendered the ISO-X desktop under BIOS and UEFI.")
+          PY
+
+  acceptance-summary:
+    if: always()
+    needs: [source-check, build, bios, uefi, promote]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - name: Download source-check results
+        if: always() && needs.source-check.result != 'skipped'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        with:
+          name: isox-source-check-${{ github.run_id }}-${{ github.run_attempt }}
+          path: downloaded/source
+      - name: Download candidate metadata and boot evidence
+        if: always() && needs.build.outputs.candidate_uploaded == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        with:
+          name: ISO-X-0.4.0-ci-diagnostic-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: downloaded/candidate
+      - name: Download BIOS evidence
+        if: always() && needs.bios.result != 'skipped'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        with:
+          name: isox-bios-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: downloaded/bios
+      - name: Download UEFI evidence
+        if: always() && needs.uefi.result != 'skipped'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
+        with:
+          name: isox-uefi-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: downloaded/uefi
+      - name: Write machine-readable acceptance report
+        if: always()
+        env:
+          SOURCE_RESULT: ${{ needs.source-check.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          BUILD_EXIT_CODE: ${{ needs.build.outputs.build_exit_code }}
+          BIOS_JOB_RESULT: ${{ needs.bios.result }}
+          BIOS_STATUS: ${{ needs.bios.outputs.boot_status }}
+          BIOS_DURATION: ${{ needs.bios.outputs.duration }}
+          BIOS_ACCELERATOR: ${{ needs.bios.outputs.accelerator }}
+          UEFI_JOB_RESULT: ${{ needs.uefi.result }}
+          UEFI_STATUS: ${{ needs.uefi.outputs.boot_status }}
+          UEFI_DURATION: ${{ needs.uefi.outputs.duration }}
+          UEFI_ACCELERATOR: ${{ needs.uefi.outputs.accelerator }}
+          ISO_SHA256: ${{ needs.build.outputs.iso_sha256 }}
+          ISO_SIZE: ${{ needs.build.outputs.iso_size }}
+        run: |
+          mkdir -p evidence
+          python3 scripts/create-ci-results.py --output evidence/results.json \
+            --project ISO-X --release '0.4.0 TRIXIE' \
+            --branch "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --source-result "$SOURCE_RESULT" --build-result "$BUILD_RESULT" \
+            --build-exit-code "${BUILD_EXIT_CODE:-}" \
+            --source-summary downloaded/source/source-tests.json \
+            --bios-job-result "$BIOS_JOB_RESULT" --bios-status "${BIOS_STATUS:-NOT_RUN}" \
+            --bios-duration "${BIOS_DURATION:-}" --bios-accelerator "${BIOS_ACCELERATOR:-unknown}" \
+            --bios-result downloaded/bios/qemu-bios-headless-result.json \
+            --uefi-job-result "$UEFI_JOB_RESULT" --uefi-status "${UEFI_STATUS:-NOT_RUN}" \
+            --uefi-duration "${UEFI_DURATION:-}" --uefi-accelerator "${UEFI_ACCELERATOR:-unknown}" \
+            --uefi-result downloaded/uefi/qemu-uefi-headless-result.json \
+            --iso-sha256 "${ISO_SHA256:-}" --iso-size "${ISO_SIZE:-0}" \
+            --metadata downloaded/candidate/build-metadata.json
+          python3 tests/test_ci_results.py evidence/results.json
+      - name: Upload acceptance report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
+        with:
+          name: isox-acceptance-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/results.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Upload accepted CI diagnostic image (not a release ISO)
+        if: needs.source-check.result == 'success' && needs.build.result == 'success' && needs.bios.result == 'success' && needs.uefi.result == 'success' && needs.build.outputs.validated == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
+        with:
+          name: ISO-X-0.4.0-ci-boot-gates-passed-${{ github.run_id }}-${{ github.run_attempt }}
+          path: downloaded/candidate/
+          if-no-files-found: error
+          retention-days: 30

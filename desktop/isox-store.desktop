@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ISO-X Store
+Name[ar]=متجر ISO-X
+Comment=Discover and manage applications from enabled package sources
+Comment[ar]=اكتشاف التطبيقات وإدارتها من مصادر الحزم المفعّلة
+Exec=/usr/bin/python3 /usr/share/iso-x/isox_appcenter.py
+Icon=iso-x
+Terminal=false
+Categories=Settings;PackageManager;
+StartupNotify=true

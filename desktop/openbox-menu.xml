@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+  <menu id="root-menu" label="ISO-X">
+    <item label="ISO-X — Welcome / First Steps"><action name="Execute"><command>/usr/local/bin/isox-welcome</command></action></item>
+    <item label="ISO-X — Start"><action name="Execute"><command>/usr/local/bin/iso-x</command></action></item>
+    <item label="Install ISO-X to Disk"><action name="Execute"><command>debian-installer-launcher</command></action></item>
+    <separator/>
+    <item label="Firefox ESR"><action name="Execute"><command>firefox-esr</command></action></item>
+    <item label="Files"><action name="Execute"><command>thunar</command></action></item>
+    <item label="Terminal"><action name="Execute"><command>xfce4-terminal</command></action></item>
+    <item label="الشبكة / Network Connections"><action name="Execute"><command>nm-connection-editor</command></action></item>
+    <item label="تبديل لوحة المفاتيح AR / EN"><action name="Execute"><command>/usr/local/bin/isox-keyboard toggle</command></action></item>
+    <item label="ISO-X Store"><action name="Execute"><command>python3 /usr/share/iso-x/isox_appcenter.py</command></action></item>
+    <item label="Run Command"><action name="Execute"><command>/usr/local/bin/isox-run</command></action></item>
+    <item label="Toggle Airplane Mode"><action name="Execute"><command>/usr/local/bin/isox-toggle-airplane</command></action></item>
+    <item label="Secure Vault"><action name="Execute"><command>xterm -e /usr/local/bin/isox-vault</command></action></item>
+    <item label="Settings"><action name="Execute"><command>xfce4-settings-manager</command></action></item>
+    <separator/>
+    <item label="Lock Screen"><action name="Execute"><command>dm-tool lock</command></action></item>
+    <item label="Reload Openbox"><action name="Reconfigure"/></item>
+    <item label="Log Out"><action name="Exit"/></item>
+  </menu>
+</openbox_menu>

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ISO-X Cyber Dragon</title>
+  <desc id="desc">Original angular cyber-dragon profile in electric blue and cyan on a deep navy technical background.</desc>
+  <defs>
+    <linearGradient id="neon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7AFBFF"/><stop offset=".48" stop-color="#00D9FF"/><stop offset="1" stop-color="#1467FF"/>
+    </linearGradient>
+    <linearGradient id="armor" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#102B48"/><stop offset="1" stop-color="#06101F"/>
+    </linearGradient>
+    <radialGradient id="halo"><stop offset="0" stop-color="#06385B" stop-opacity=".78"/><stop offset="1" stop-color="#050811" stop-opacity="0"/></radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="12"/></filter>
+  </defs>
+  <rect width="512" height="512" rx="70" fill="#050811"/>
+  <ellipse cx="275" cy="248" rx="226" ry="210" fill="url(#halo)"/>
+  <g fill="none" stroke="#0879B5" stroke-opacity=".36" stroke-width="2">
+    <path d="M38 132H98L124 158H151M36 174H84L111 201H141M35 350H96L122 324H154M390 105H428V143H464M418 314H459V352H482M406 376H444"/>
+    <path d="M58 116v32m28-10v31m-30 169v28m359-263v24m22 205v24"/>
+  </g>
+  <g fill="#00D9FF" opacity=".75">
+    <circle cx="98" cy="132" r="3"/><circle cx="84" cy="174" r="3"/><circle cx="96" cy="350" r="3"/><circle cx="428" cy="105" r="3"/><circle cx="459" cy="314" r="3"/><circle cx="444" cy="376" r="3"/>
+  </g>
+  <!-- swept horns and the dragon's spined mane -->
+  <path d="M240 206 190 105 260 158 292 91 324 159 375 121 366 191 400 213
+           367 245 341 276 312 309 280 335 250 316 226 334 229 293 192 315 202 280
+           150 284 184 251 132 228 197 230 159 176 222 210Z"
+        fill="url(#armor)" stroke="url(#neon)" stroke-width="6" stroke-linejoin="round" filter="url(#glow)"/>
+  <!-- head silhouette, clearly facing right -->
+  <path d="M220 220
+           C242 185 282 171 323 179
+           L352 190 378 206 410 211 447 214 473 231
+           458 247 427 252 410 267 391 285 368 291
+           351 313 327 307 308 290 286 281 263 270
+           239 255 224 241Z"
+        fill="#071625" stroke="url(#neon)" stroke-width="6" stroke-linejoin="round"/>
+  <!-- armored brow and eye -->
+  <path d="M321 207 354 211 378 221 351 231 326 225Z" fill="#05101D" stroke="#178AFF" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M338 218 364 221 349 229Z" fill="#98FFFF" filter="url(#glow)"/>
+  <!-- muzzle, nostril and angular lower jaw -->
+  <path d="M402 228 441 228 458 234 441 241 415 241" fill="none" stroke="#00D9FF" stroke-width="4" stroke-linecap="round"/>
+  <path d="M427 220 437 222 433 228 425 227Z" fill="#9BFFFF"/>
+  <path d="M398 256 427 254 411 270 386 279 369 294 348 297 334 285 362 284 383 270Z"
+        fill="#0C2740" stroke="#168CFF" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M389 258 395 269 402 258M376 270 382 280 389 268" fill="#B8FDFF"/>
+  <!-- circuit seams and scales -->
+  <g fill="none" stroke="#21DDF8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity=".9">
+    <path d="M244 223 263 217 274 227 291 226M255 241 271 247 282 240M284 194 297 204 312 202"/>
+    <path d="M290 263 304 268 314 261M310 277 322 281 331 274M232 256 219 267 222 282"/>
+  </g>
+  <path d="M220 335 249 319 277 339 302 319 319 337 291 355 270 363 246 355Z" fill="#0B1E31" stroke="url(#neon)" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M241 349 259 357 278 349" fill="none" stroke="#00D9FF" stroke-width="3" stroke-linecap="round"/>
+  <text x="256" y="423" fill="#EAFBFF" font-family="DejaVu Sans, sans-serif" font-size="38" font-weight="700" letter-spacing="7" text-anchor="middle">ISO-X</text>
+  <path d="M174 443H338" stroke="url(#neon)" stroke-width="3" stroke-linecap="round"/>
+  <text x="256" y="467" fill="#65B9D5" font-family="DejaVu Sans, sans-serif" font-size="10" letter-spacing="3" text-anchor="middle">CYBER SYSTEM</text>
+</svg>
