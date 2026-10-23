@@ -176,9 +176,15 @@ def exercise_keyboard_layouts() -> None:
     assert re.search(r"^layout:\s+ara,us$", config, re.MULTILINE), config
     assert "grp:alt_shift_toggle" in config, config
     wait_for_layout("ara")
-    run(["xdotool", "key", "--clearmodifiers", "alt+shift"])
+    run(["xdotool", "keydown", "Alt_L"])
+    run(["xdotool", "keydown", "Shift_L"])
+    run(["xdotool", "keyup", "Shift_L"])
+    run(["xdotool", "keyup", "Alt_L"])
     wait_for_layout("us")
-    run(["xdotool", "key", "--clearmodifiers", "alt+shift"])
+    run(["xdotool", "keydown", "Alt_L"])
+    run(["xdotool", "keydown", "Shift_L"])
+    run(["xdotool", "keyup", "Shift_L"])
+    run(["xdotool", "keyup", "Alt_L"])
     wait_for_layout("ara")
 
 
