@@ -6,7 +6,7 @@ panel_margin = 0 0
 panel_dock = 0
 panel_layer = top
 panel_background_id = 1
-panel_items = LTBSC
+panel_items = LTBESC
 panel_shrink = 0
 panel_urgent_blink = 1
 panel_padding = 6 3 6
@@ -46,6 +46,18 @@ task_active_background_id = 2
 task_urgent_background_id = 2
 task_icon_asb = 100 0 0
 task_active_icon_asb = 100 0 8
+
+# Live XKB group indicator; left click switches AR/EN from the active X server.
+execp = new
+execp_command = /usr/local/bin/isox-keyboard status
+execp_interval = 1
+execp_tooltip = Active keyboard layout; click to switch Arabic/English
+execp_font = Sans 10
+execp_font_color = #e9f2ff 100
+execp_background_id = 0
+execp_centered = 1
+execp_padding = 8 0 0
+execp_lclick_command = /usr/local/bin/isox-keyboard toggle
 
 # System tray and clock
 systray_padding = 5 2 5

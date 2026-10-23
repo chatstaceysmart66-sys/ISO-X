@@ -114,14 +114,17 @@ for package in ("dmz-cursor-theme", "libnotify-bin", "xfce4-notifyd", "hardinfo"
 assert "fonts-kacst" not in packages and "pinta" not in packages
 assert "firmware-nvidia-graphics" not in packages, "A backports-only package would break the stable-only build"
 assert (ROOT / "desktop/tint2rc").read_text().count("panel_padding =") == 1
-assert "panel_items = LTBSC" in (ROOT / "desktop/tint2rc").read_text()
+assert "panel_items = LTBESC" in (ROOT / "desktop/tint2rc").read_text()
+assert "execp_command = /usr/local/bin/isox-keyboard status" in (ROOT / "desktop/tint2rc").read_text()
+assert "execp_lclick_command = /usr/local/bin/isox-keyboard toggle" in (ROOT / "desktop/tint2rc").read_text()
 assert "pcmanfm --desktop --profile=isox" in build, "Desktop icons and the wallpaper need a desktop manager"
 assert "isox-toggle-airplane" in build and "W-a" in (ROOT / "desktop/openbox-rc.xml").read_text()
-assert "gxkb" in packages and "gxkb >/tmp/isox-gxkb.log" in build
+assert "gxkb" not in packages and "isox-keyboard" in build
+assert '"$PROJECT_DIR/app/isox_keyboard.py" config/includes.chroot/usr/share/iso-x/isox_keyboard.py' in build
 assert "x11-xkb-utils" in packages
 assert "xkb-switch" not in (ROOT / ".github/workflows/iso-build.yml").read_text()
-assert 'setxkbmap -layout ara,us -option grp:alt_shift_toggle' in build
-assert 'XKBLAYOUT="ara,us"' in build and 'XKBOPTIONS="grp:alt_shift_toggle"' in build
+assert 'setxkbmap -layout ara,us -option grp:alt_shift_toggle_bidir' in build
+assert 'XKBLAYOUT="ara,us"' in build and 'XKBOPTIONS="grp:alt_shift_toggle_bidir"' in build
 assert "nm-applet >/tmp/isox-nm-applet.log" in build
 assert "nm-applet --indicator" not in build, "tint2 uses the XEmbed system tray"
 gtk_app = (ROOT / "app/iso_x_gtk.py").read_text(encoding="utf-8")
@@ -134,6 +137,8 @@ store_app = (ROOT / "app/isox_appcenter.py").read_text(encoding="utf-8")
 assert 'self.connect("delete-event", self._on_delete_event)' in store_app
 assert "window.connect(\"destroy\", window._on_destroy)" in store_app
 assert "Alt+Shift" in (ROOT / "README_AR.md").read_text(encoding="utf-8")
+assert 'تبديل AR / EN' in gtk_app
+assert 'isox-keyboard toggle' in (ROOT / "desktop/openbox-menu.xml").read_text(encoding="utf-8")
 
 desktop = configparser.ConfigParser(interpolation=None)
 desktop.optionxform = str

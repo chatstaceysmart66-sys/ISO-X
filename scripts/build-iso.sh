@@ -182,6 +182,7 @@ fi
 install -m 0644 "$PROJECT_DIR/app/iso_x_gtk.py" config/includes.chroot/usr/share/iso-x/iso_x_gtk.py
 install -m 0644 "$PROJECT_DIR/app/isox_appcenter.py" config/includes.chroot/usr/share/iso-x/isox_appcenter.py
 install -m 0644 "$PROJECT_DIR/app/isox_store_backend.py" config/includes.chroot/usr/share/iso-x/isox_store_backend.py
+install -m 0644 "$PROJECT_DIR/app/isox_keyboard.py" config/includes.chroot/usr/share/iso-x/isox_keyboard.py
 install -m 0644 "$PROJECT_DIR"/assets/sounds/*.wav config/includes.chroot/usr/share/iso-x/assets/sounds/
 install -m 0644 "$PROJECT_DIR/app/isox_welcome.py" config/includes.chroot/usr/share/iso-x/isox_welcome.py
 install -m 0644 "$PROJECT_DIR/assets/iso-x-start.html" config/includes.chroot/usr/share/iso-x/start.html
@@ -289,7 +290,7 @@ cat > config/includes.chroot/etc/default/keyboard <<'KEYBOARD'
 XKBMODEL="pc105"
 XKBLAYOUT="ara,us"
 XKBVARIANT=","
-XKBOPTIONS="grp:alt_shift_toggle"
+XKBOPTIONS="grp:alt_shift_toggle_bidir"
 BACKSPACE="guess"
 KEYBOARD
 cat > config/includes.chroot/etc/environment <<'ENVIRONMENT'
@@ -302,6 +303,11 @@ cat > config/includes.chroot/usr/local/bin/iso-x <<'LAUNCH'
 exec /usr/bin/python3 /usr/share/iso-x/iso_x_gtk.py "$@"
 LAUNCH
 chmod 0755 config/includes.chroot/usr/local/bin/iso-x
+cat > config/includes.chroot/usr/local/bin/isox-keyboard <<'KEYBOARD_LAUNCH'
+#!/bin/sh
+exec /usr/bin/python3 /usr/share/iso-x/isox_keyboard.py "$@"
+KEYBOARD_LAUNCH
+chmod 0755 config/includes.chroot/usr/local/bin/isox-keyboard
 install -m 0644 "$PROJECT_DIR/desktop/isox-welcome.desktop" config/includes.chroot/usr/share/applications/isox-welcome.desktop
 install -m 0644 "$PROJECT_DIR/desktop/isox-store.desktop" config/includes.chroot/usr/share/applications/isox-store.desktop
 cat > config/includes.chroot/usr/share/applications/iso-x.desktop <<'DESKTOP'
@@ -415,11 +421,8 @@ if command -v nm-applet >/dev/null 2>&1; then
   nm-applet >/tmp/isox-nm-applet.log 2>&1 &
 fi
 if command -v setxkbmap >/dev/null 2>&1; then
-  setxkbmap -layout ara,us -option grp:alt_shift_toggle >/tmp/isox-keyboard.log 2>&1 ||
+  setxkbmap -layout ara,us -option grp:alt_shift_toggle_bidir >/tmp/isox-keyboard.log 2>&1 ||
     printf '%s\n' 'Failed to apply the Arabic/English XKB layouts.' >>/tmp/isox-keyboard.log
-fi
-if command -v gxkb >/dev/null 2>&1; then
-  gxkb >/tmp/isox-gxkb.log 2>&1 &
 fi
 if command -v blueman-applet >/dev/null 2>&1; then
   blueman-applet >/tmp/isox-blueman.log 2>&1 &

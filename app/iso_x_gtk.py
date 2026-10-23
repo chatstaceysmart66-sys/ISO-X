@@ -7,6 +7,7 @@ from pathlib import Path
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GLib, Pango
+from isox_keyboard import current_layout, toggle_layout
 try:
     gi.require_version("Vte", "2.91")
     from gi.repository import Vte
@@ -131,6 +132,7 @@ class ISOXGtk(Gtk.Window):
         self.last_ctrl = 0.0
         self.performance_mode = False
         self.active_file_operations = 0
+        self.keyboard_toggle_active = False
         self.left_path = HOME
         self.right_path = HOME
         self.connect("delete-event", self.on_delete_event)
@@ -581,7 +583,49 @@ class ISOXGtk(Gtk.Window):
             self.notify("التحميل المسبق سيعمل محليًا فقط عند تحقق شروط الذاكرة والحمل." if value == "enabled" else "تم تعطيل التحميل المسبق.")
         preload.connect("toggled", update_preload); page.pack_start(preload, False, False, 0)
         zram = Gtk.Label(label="ZRAM يُدار عبر خدمة systemd مستقلة؛ تأكد من حالة الخدمة بعد الإقلاع.", xalign=0); zram.get_style_context().add_class("iso-muted"); page.pack_start(zram, False, False, 0)
+        keyboard_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.keyboard_layout_label = Gtk.Label(label="لوحة المفاتيح: جارٍ الفحص…", xalign=0)
+        keyboard_row.pack_start(self.keyboard_layout_label, True, True, 0)
+        self.keyboard_toggle_button = Gtk.Button(label="تبديل AR / EN")
+        self.keyboard_toggle_button.connect("clicked", self.toggle_keyboard_layout)
+        keyboard_row.pack_end(self.keyboard_toggle_button, False, False, 0)
+        page.pack_start(keyboard_row, False, False, 0)
+        GLib.timeout_add_seconds(1, self.update_keyboard_layout)
+        self.update_keyboard_layout()
         return page
+
+    def update_keyboard_layout(self):
+        try:
+            layout = current_layout()
+            self.keyboard_layout_label.set_text(f"لوحة المفاتيح: {layout}")
+        except (OSError, RuntimeError) as exc:
+            self.keyboard_layout_label.set_text(f"تعذرت قراءة تخطيط لوحة المفاتيح: {exc}")
+        return True
+
+    def toggle_keyboard_layout(self, button):
+        if self.keyboard_toggle_active:
+            return
+        self.keyboard_toggle_active = True
+        button.set_sensitive(False)
+
+        def worker():
+            error = ""
+            try:
+                layout = toggle_layout()
+            except (OSError, RuntimeError) as exc:
+                layout, error = "", str(exc)
+            GLib.idle_add(self._keyboard_layout_toggled, button, layout, error)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _keyboard_layout_toggled(self, button, layout, error):
+        self.keyboard_toggle_active = False
+        button.set_sensitive(True)
+        if error:
+            self.notify(f"تعذر تبديل لغة لوحة المفاتيح: {error}")
+        else:
+            self.keyboard_layout_label.set_text(f"لوحة المفاتيح: {layout}")
+        return False
 
     def switch_page(self, index):
         self.page_index = index

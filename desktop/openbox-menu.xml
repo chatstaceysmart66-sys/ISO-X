@@ -9,6 +9,7 @@
     <item label="Files"><action name="Execute"><command>thunar</command></action></item>
     <item label="Terminal"><action name="Execute"><command>xfce4-terminal</command></action></item>
     <item label="الشبكة / Network Connections"><action name="Execute"><command>nm-connection-editor</command></action></item>
+    <item label="تبديل لوحة المفاتيح AR / EN"><action name="Execute"><command>/usr/local/bin/isox-keyboard toggle</command></action></item>
     <item label="ISO-X Store"><action name="Execute"><command>python3 /usr/share/iso-x/isox_appcenter.py</command></action></item>
     <item label="Run Command"><action name="Execute"><command>/usr/local/bin/isox-run</command></action></item>
     <item label="Toggle Airplane Mode"><action name="Execute"><command>/usr/local/bin/isox-toggle-airplane</command></action></item>

@@ -22,7 +22,7 @@ jobs:
       - name: Install static-check tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-pytest python3-gi gir1.2-gtk-3.0 openbox xvfb xdotool wmctrl x11-xkb-utils libx11-6 shellcheck desktop-file-utils libxml2-utils fdisk xorriso
+          sudo apt-get install -y python3-pytest python3-gi gir1.2-gtk-3.0 openbox xvfb x11-utils xdotool wmctrl xterm x11-xkb-utils libx11-6 shellcheck desktop-file-utils libxml2-utils fdisk xorriso
 
       - name: Run source tests and validators
         id: source-checks
