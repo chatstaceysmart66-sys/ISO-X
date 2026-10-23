@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ISO-X GTK3 desktop shell, 0.4.0. All telemetry is local-only and opt-in."""
 from __future__ import annotations
-import os, sys, time, json, shutil, subprocess, platform, sqlite3, hashlib, threading, tempfile
+import logging, os, sys, time, json, shutil, subprocess, platform, sqlite3, hashlib, threading, tempfile
 from pathlib import Path
 
 import gi
@@ -121,15 +121,19 @@ class Store:
 class ISOXGtk(Gtk.Window):
     def __init__(self):
         super().__init__(title="ISO-X — نظام عبدالله لازم")
-        self.set_default_size(1160, 740)
+        self.set_default_size(1024, 680)
+        self.set_size_request(800, 560)
+        self.set_resizable(True)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_icon_name("iso-x")
         self.store = Store()
         self.page_index = 0
         self.last_ctrl = 0.0
         self.performance_mode = False
+        self.active_file_operations = 0
         self.left_path = HOME
         self.right_path = HOME
+        self.connect("delete-event", self.on_delete_event)
         self.connect("destroy", self.on_destroy)
         self.connect("key-press-event", self.on_key_press)
         provider = Gtk.CssProvider()
@@ -139,10 +143,27 @@ class ISOXGtk(Gtk.Window):
         self.switch_page(0)
         GLib.timeout_add_seconds(3, self.update_status)
 
+    def on_delete_event(self, *_):
+        if self.active_file_operations:
+            self.status.set_text("انتظر اكتمال عملية الملفات قبل إغلاق ISO-X.")
+            return True
+        return False
+
     def on_destroy(self, *_):
         try: self.store.close()
-        except Exception: pass
+        except sqlite3.Error:
+            logging.exception("Failed to close the ISO-X database cleanly")
+        finally:
+            if Gtk.main_level() > 0:
+                GLib.idle_add(self._quit_main_loops)
+
+    @staticmethod
+    def _quit_main_loops():
+        level = Gtk.main_level()
+        if level == 0:
+            return False
         Gtk.main_quit()
+        return level > 1
 
     def on_key_press(self, _widget, event):
         key = Gdk.keyval_name(event.keyval) or ""
@@ -181,6 +202,7 @@ class ISOXGtk(Gtk.Window):
         controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         controls.set_margin_start(18); controls.set_margin_end(18); controls.set_margin_bottom(10)
         self.search_entry = Gtk.Entry(); self.search_entry.set_placeholder_text("بحث سريع في الأدوات والملفات… اضغط Enter")
+        self.search_entry.set_direction(Gtk.TextDirection.LTR)
         self.search_entry.connect("activate", lambda *_: self.run_search(self.search_entry.get_text()))
         controls.pack_start(self.search_entry, True, True, 0)
         b = Gtk.Button(label="بحث عالمي"); b.connect("clicked", lambda *_: self.open_search()); controls.pack_start(b, False, False, 0)
@@ -329,6 +351,7 @@ class ISOXGtk(Gtk.Window):
             response = confirm.run(); confirm.destroy()
             if response != Gtk.ResponseType.YES: return
             self.status.set_text(f"جارٍ نسخ {source.name}…")
+            self.active_file_operations += 1
             threading.Thread(target=self._copy_worker, args=(source, destination), daemon=True).start()
         except Exception as exc: self.notify(f"تعذر النسخ: {exc}")
 
@@ -342,6 +365,7 @@ class ISOXGtk(Gtk.Window):
         GLib.idle_add(self._copy_finished, destination, error)
 
     def _copy_finished(self, destination, error):
+        self.active_file_operations = max(0, self.active_file_operations - 1)
         self.refresh_files()
         if error:
             self.notify(f"تعذر النسخ: {error}")
@@ -387,6 +411,7 @@ class ISOXGtk(Gtk.Window):
             if response != Gtk.ResponseType.YES:
                 return
             self.status.set_text(f"جارٍ نقل {source.name}…")
+            self.active_file_operations += 1
             threading.Thread(target=self._file_operation_worker,
                              args=("move", source, destination), daemon=True).start()
         except Exception as exc:
@@ -406,6 +431,7 @@ class ISOXGtk(Gtk.Window):
             if response != Gtk.ResponseType.YES:
                 return
             self.status.set_text(f"جارٍ حذف {source.name}…")
+            self.active_file_operations += 1
             threading.Thread(target=self._file_operation_worker,
                              args=("delete", source, None), daemon=True).start()
         except Exception as exc:
@@ -425,6 +451,7 @@ class ISOXGtk(Gtk.Window):
         GLib.idle_add(self._file_operation_finished, operation, source, destination, error)
 
     def _file_operation_finished(self, operation, source, destination, error):
+        self.active_file_operations = max(0, self.active_file_operations - 1)
         self.refresh_files()
         if error:
             self.notify(f"تعذر {('النقل' if operation == 'move' else 'الحذف')}: {error}")
@@ -445,6 +472,7 @@ class ISOXGtk(Gtk.Window):
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
         row = Gtk.Box(spacing=8)
         self.editor_path = Gtk.Entry(); self.editor_path.set_placeholder_text("المسار الكامل للملف المراد تحريره")
+        self.editor_path.set_direction(Gtk.TextDirection.LTR)
         open_btn = Gtk.Button(label="فتح"); open_btn.connect("clicked", self.editor_open)
         save_btn = Gtk.Button(label="حفظ"); save_btn.connect("clicked", self.editor_save)
         row.pack_start(self.editor_path, True, True, 0); row.pack_start(open_btn, False, False, 0); row.pack_start(save_btn, False, False, 0)
@@ -539,6 +567,9 @@ class ISOXGtk(Gtk.Window):
         page.set_margin_start(24); page.set_margin_top(22)
         title = Gtk.Label(label="ISO-Control · الإعدادات", xalign=0); title.get_style_context().add_class("iso-title"); page.pack_start(title, False, False, 0)
         info = Gtk.Label(label="النظام الأساسي: Debian Linux\nواجهة ISO-X: GTK3 + Openbox\nالمتصفحات: Firefox ESR وNetSurf\nالتحليلات البعيدة: معطلة\nاسم المطور المعروض: عبدالله لازم", xalign=0); info.set_line_wrap(True); page.pack_start(info, False, False, 0)
+        network = Gtk.Button(label="إعدادات الشبكة")
+        network.connect("clicked", lambda *_: self.launch_app("network", ["nm-connection-editor"]))
+        page.pack_start(network, False, False, 0)
         btn = Gtk.Button(label="تبديل وضع الأداء الأقصى"); btn.connect("clicked", self.toggle_performance); page.pack_start(btn, False, False, 0)
         preload = Gtk.CheckButton(label="السماح بالتحميل المسبق الذكي (محلي فقط، اختياري)")
         current = self.store.db.execute("SELECT setting_value FROM privacy_settings WHERE setting_key='preload_enabled'").fetchone()
@@ -568,6 +599,7 @@ class ISOXGtk(Gtk.Window):
         dialog = Gtk.Dialog(title="ISO-X · البحث العالمي", transient_for=self, flags=Gtk.DialogFlags.MODAL)
         dialog.add_button("إغلاق", Gtk.ResponseType.CLOSE); dialog.add_button("بحث", Gtk.ResponseType.ACCEPT)
         entry = Gtk.Entry(); entry.set_placeholder_text("اسم تطبيق أو ملف ضمن مجلد المنزل")
+        entry.set_direction(Gtk.TextDirection.LTR)
         area = dialog.get_content_area(); area.set_spacing(8); area.set_margin_top(12); area.set_margin_bottom(12); area.set_margin_start(12); area.set_margin_end(12); area.pack_start(entry, False, False, 0); entry.show()
         entry.connect("activate", lambda *_: dialog.response(Gtk.ResponseType.ACCEPT))
         dialog.show_all()
@@ -614,10 +646,31 @@ class ISOXGtk(Gtk.Window):
         dlg.add_button("إغلاق", Gtk.ResponseType.CLOSE)
         box = dlg.get_content_area(); box.set_spacing(8); box.set_margin_top(12); box.set_margin_start(12); box.set_margin_end(12)
         text = Gtk.TextView(); text.set_editable(False); text.set_monospace(True)
-        buf = text.get_buffer(); buf.set_text("اجمع القياسات عند الطلب فقط. لا يتم إرسالها إلى الإنترنت.\n\n" + self.collect_stats())
+        buf = text.get_buffer(); buf.set_text("جارٍ جمع القياسات المحلية…")
         sc = Gtk.ScrolledWindow(); sc.set_min_content_height(300); sc.add(text); box.pack_start(sc, True, True, 0)
-        refresh = Gtk.Button(label="تحديث القياسات المحلية"); refresh.connect("clicked", lambda *_: buf.set_text(self.collect_stats())); box.pack_start(refresh, False, False, 0)
-        dlg.show_all(); dlg.run(); dlg.destroy()
+        refresh = Gtk.Button(label="تحديث القياسات المحلية")
+        refresh.connect("clicked", self.refresh_stats, dlg, buf)
+        box.pack_start(refresh, False, False, 0)
+        dlg.show_all()
+        self.refresh_stats(refresh, dlg, buf)
+        dlg.run(); dlg.destroy()
+
+    def refresh_stats(self, button, dialog, buffer):
+        button.set_sensitive(False)
+        threading.Thread(
+            target=self._collect_stats_worker,
+            args=(dialog, buffer, button),
+            daemon=True,
+        ).start()
+
+    def _collect_stats_worker(self, dialog, buffer, button):
+        GLib.idle_add(self._stats_loaded, dialog, buffer, button, self.collect_stats())
+
+    def _stats_loaded(self, dialog, buffer, button, stats):
+        if dialog.get_visible():
+            buffer.set_text("اجمع القياسات عند الطلب فقط. لا يتم إرسالها إلى الإنترنت.\n\n" + stats)
+            button.set_sensitive(True)
+        return False
 
     def collect_stats(self):
         lines = [f"system={platform.platform()}", f"kernel={platform.release()}", f"cores={os.cpu_count()}"]
@@ -676,7 +729,6 @@ def main():
     Gtk.Widget.set_default_direction(Gtk.TextDirection.RTL)
     win = ISOXGtk()
     win.show_all()
-    win.maximize()
     # This is a user session shell, not a PAM login greeter. LightDM performs authentication.
     Gtk.main()
 

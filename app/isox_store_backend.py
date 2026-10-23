@@ -691,21 +691,37 @@ class StoreBackend:
         updates: list[str] = []
         try:
             apt = self.runner(["apt-get", "-s", "upgrade"], timeout=30)
-            if apt.returncode == 0:
-                updates.extend(
-                    line.split()[1].split(":", 1)[0]
-                    for line in apt.stdout.splitlines()
-                    if line.startswith("Inst ")
-                )
-        except (OSError, subprocess.SubprocessError):
-            pass
+        except (OSError, subprocess.SubprocessError) as error:
+            raise RuntimeError(f"APT update check failed: {error}") from error
+        if apt.returncode:
+            detail = (apt.stderr or apt.stdout or f"exit status {apt.returncode}").strip()
+            raise RuntimeError(f"APT update check failed: {detail[-1000:]}")
+        updates.extend(
+            line.split()[1].split(":", 1)[0]
+            for line in apt.stdout.splitlines()
+            if line.startswith("Inst ")
+        )
         if shutil.which("flatpak"):
             try:
-                result = self.runner(["flatpak", "remote-ls", "--user", "--updates", "--columns=application"], timeout=45)
-                if result.returncode == 0:
-                    updates.extend(f"flatpak:{line.strip()}" for line in result.stdout.splitlines() if FLATPAK_ID_RE.fullmatch(line.strip()))
-            except (OSError, subprocess.SubprocessError):
-                pass
+                remotes = self.runner(["flatpak", "remotes", "--user", "--columns=name"], timeout=15)
+            except (OSError, subprocess.SubprocessError) as error:
+                raise RuntimeError(f"Flatpak update check failed: {error}") from error
+            if remotes.returncode:
+                detail = (remotes.stderr or remotes.stdout or f"exit status {remotes.returncode}").strip()
+                raise RuntimeError(f"Flatpak remote check failed: {detail[-1000:]}")
+            if remotes.stdout.strip():
+                try:
+                    result = self.runner(["flatpak", "remote-ls", "--user", "--updates", "--columns=application"], timeout=45)
+                except (OSError, subprocess.SubprocessError) as error:
+                    raise RuntimeError(f"Flatpak update check failed: {error}") from error
+                if result.returncode:
+                    detail = (result.stderr or result.stdout or f"exit status {result.returncode}").strip()
+                    raise RuntimeError(f"Flatpak update check failed: {detail[-1000:]}")
+                updates.extend(
+                    f"flatpak:{line.strip()}"
+                    for line in result.stdout.splitlines()
+                    if FLATPAK_ID_RE.fullmatch(line.strip())
+                )
         return list(dict.fromkeys(updates))
 
     def package_candidate(self, package: str) -> str:

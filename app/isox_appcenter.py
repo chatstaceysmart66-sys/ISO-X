@@ -126,9 +126,10 @@ class StoreWindow(Gtk.Window):
         self.settings = _load_settings()
         global LANGUAGE_OVERRIDE
         LANGUAGE_OVERRIDE = str(self.settings["language"])
-        self.set_default_size(1180, 780)
+        self.set_default_size(1120, 660)
         self.set_size_request(780, 560)
         self.set_position(Gtk.WindowPosition.CENTER)
+        self.connect("delete-event", self._on_delete_event)
         logo_path = Path("/usr/share/iso-x/assets/iso-x-dragon.png")
         if logo_path.is_file():
             try:
@@ -142,6 +143,7 @@ class StoreWindow(Gtk.Window):
         self._install_css()
 
         self.busy = False
+        self.package_operation_active = False
         self.generation = 0
         self.current_page = "home"
         self.current_category = "All"
@@ -152,6 +154,27 @@ class StoreWindow(Gtk.Window):
         self.operation_history: list[tuple[str, str, str]] = []
         self._build_ui()
         self._refresh_catalog()
+
+    def _on_delete_event(self, *_args) -> bool:
+        if self.package_operation_active:
+            self.status.set_text(_text(
+                "انتظر اكتمال عملية الحزم قبل إغلاق المتجر.",
+                "Wait for the package operation to finish before closing the store.",
+            ))
+            return True
+        return False
+
+    @staticmethod
+    def _quit_main_loops() -> bool:
+        level = Gtk.main_level()
+        if level == 0:
+            return False
+        Gtk.main_quit()
+        return level > 1
+
+    def _on_destroy(self, *_args) -> None:
+        if Gtk.main_level() > 0:
+            GLib.idle_add(self._quit_main_loops)
 
     def _install_css(self) -> None:
         provider = Gtk.CssProvider()
@@ -198,6 +221,7 @@ class StoreWindow(Gtk.Window):
         shell.pack_start(content, True, True, 0)
         controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.search = Gtk.SearchEntry()
+        self.search.set_direction(Gtk.TextDirection.LTR)
         self.search.set_placeholder_text(_text("ابحث عن تطبيق أو حزمة", "Search apps and packages"))
         self.search.connect("search-changed", self._search_changed)
         controls.pack_start(self.search, True, True, 0)
@@ -621,6 +645,7 @@ class StoreWindow(Gtk.Window):
         if self.busy:
             return
         self.busy = True
+        self.package_operation_active = True
         self.generation += 1
         self._set_controls_sensitive(False)
         self.spinner.start()
@@ -639,6 +664,7 @@ class StoreWindow(Gtk.Window):
 
     def _operation_finished(self, title: str, result: OperationResult, success_sound: str) -> bool:
         self.busy = False
+        self.package_operation_active = False
         self.spinner.stop()
         self._set_controls_sensitive(True)
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -926,6 +952,6 @@ class StoreWindow(Gtk.Window):
 
 if __name__ == "__main__":
     window = StoreWindow()
-    window.connect("destroy", Gtk.main_quit)
+    window.connect("destroy", window._on_destroy)
     window.show_all()
     Gtk.main()

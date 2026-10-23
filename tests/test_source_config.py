@@ -117,6 +117,23 @@ assert (ROOT / "desktop/tint2rc").read_text().count("panel_padding =") == 1
 assert "panel_items = LTBSC" in (ROOT / "desktop/tint2rc").read_text()
 assert "pcmanfm --desktop --profile=isox" in build, "Desktop icons and the wallpaper need a desktop manager"
 assert "isox-toggle-airplane" in build and "W-a" in (ROOT / "desktop/openbox-rc.xml").read_text()
+assert "gxkb" in packages and "gxkb >/tmp/isox-gxkb.log" in build
+assert "x11-xkb-utils" in packages
+assert "xkb-switch" not in (ROOT / ".github/workflows/iso-build.yml").read_text()
+assert 'setxkbmap -layout ara,us -option grp:alt_shift_toggle' in build
+assert 'XKBLAYOUT="ara,us"' in build and 'XKBOPTIONS="grp:alt_shift_toggle"' in build
+assert "nm-applet >/tmp/isox-nm-applet.log" in build
+assert "nm-applet --indicator" not in build, "tint2 uses the XEmbed system tray"
+gtk_app = (ROOT / "app/iso_x_gtk.py").read_text(encoding="utf-8")
+assert gtk_app.count("set_direction(Gtk.TextDirection.LTR)") >= 5
+assert "threading.Thread(\n            target=self._collect_stats_worker" in gtk_app
+assert "GLib.idle_add(self._stats_loaded" in gtk_app
+assert "if self.active_file_operations:" in gtk_app
+assert "GLib.idle_add(self._quit_main_loops)" in gtk_app
+store_app = (ROOT / "app/isox_appcenter.py").read_text(encoding="utf-8")
+assert 'self.connect("delete-event", self._on_delete_event)' in store_app
+assert "window.connect(\"destroy\", window._on_destroy)" in store_app
+assert "Alt+Shift" in (ROOT / "README_AR.md").read_text(encoding="utf-8")
 
 desktop = configparser.ConfigParser(interpolation=None)
 desktop.optionxform = str
@@ -134,6 +151,8 @@ for xml_path in (ROOT / "desktop/openbox-menu.xml", ROOT / "desktop/openbox-rc.x
             assert executable.removeprefix("/") in build, f"Unstaged Openbox command: {executable}"
         elif executable == "dm-tool":
             assert "lightdm" in packages
+        elif executable == "nm-connection-editor":
+            assert "network-manager-gnome" in packages
         else:
             assert executable in packages, f"Openbox command has no package: {executable}"
 

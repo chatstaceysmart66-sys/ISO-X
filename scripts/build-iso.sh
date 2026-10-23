@@ -287,7 +287,7 @@ ln -sfn /usr/share/zoneinfo/Asia/Baghdad config/includes.chroot/etc/localtime
 printf '%s\n' 'Asia/Baghdad' > config/includes.chroot/etc/timezone
 cat > config/includes.chroot/etc/default/keyboard <<'KEYBOARD'
 XKBMODEL="pc105"
-XKBLAYOUT="us,ara"
+XKBLAYOUT="ara,us"
 XKBVARIANT=","
 XKBOPTIONS="grp:alt_shift_toggle"
 BACKSPACE="guess"
@@ -412,7 +412,14 @@ if command -v tint2 >/dev/null 2>&1; then
   tint2 -c /etc/iso-x/tint2rc >/tmp/isox-tint2.log 2>&1 &
 fi
 if command -v nm-applet >/dev/null 2>&1; then
-  nm-applet --indicator >/tmp/isox-nm-applet.log 2>&1 &
+  nm-applet >/tmp/isox-nm-applet.log 2>&1 &
+fi
+if command -v setxkbmap >/dev/null 2>&1; then
+  setxkbmap -layout ara,us -option grp:alt_shift_toggle >/tmp/isox-keyboard.log 2>&1 ||
+    printf '%s\n' 'Failed to apply the Arabic/English XKB layouts.' >>/tmp/isox-keyboard.log
+fi
+if command -v gxkb >/dev/null 2>&1; then
+  gxkb >/tmp/isox-gxkb.log 2>&1 &
 fi
 if command -v blueman-applet >/dev/null 2>&1; then
   blueman-applet >/tmp/isox-blueman.log 2>&1 &

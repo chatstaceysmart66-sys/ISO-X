@@ -32,12 +32,14 @@ pulseaudio-utils
 gir1.2-gtk-3.0
 gir1.2-vte-2.91
 gir1.2-gtksource-3.0
+x11-xkb-utils
 netsurf-gtk
 firefox-esr
 firefox-esr-l10n-ar
 sqlite3
 network-manager
 network-manager-gnome
+gxkb
 wpasupplicant
 iw
 wireless-tools

@@ -282,6 +282,24 @@ ProjectLicense: GPL-3.0-or-later
         self.assertEqual(result.returncode, 100)
         self.assertIn("repository unavailable", result.message)
 
+    def test_update_check_does_not_report_network_failure_as_no_updates(self):
+        runner = FakeRunner()
+        runner.responses[("apt-get", "-s", "upgrade")] = completed(
+            [], returncode=100, stderr="Temporary failure resolving deb.debian.org"
+        )
+        backend = StoreBackend(runner=runner)
+        with patch("isox_store_backend.shutil.which", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "Temporary failure resolving"):
+                backend.updates()
+
+    def test_update_check_skips_flatpak_without_enabled_user_remote(self):
+        runner = FakeRunner()
+        runner.responses[("flatpak", "remotes", "--user", "--columns=name")] = completed([])
+        backend = StoreBackend(runner=runner)
+        with patch("isox_store_backend.shutil.which", return_value="/usr/bin/flatpak"):
+            self.assertEqual(backend.updates(), [])
+        self.assertFalse(any(call[:2] == ["flatpak", "remote-ls"] for call in runner.calls))
+
     def test_sound_generator_creates_five_distinct_audible_wav_files(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "sounds"

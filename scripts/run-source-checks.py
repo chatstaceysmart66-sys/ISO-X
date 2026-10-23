@@ -37,6 +37,7 @@ def checks(junit_path: Path) -> list[tuple[str, list[str]]]:
         ("usb-persistence-partition", ["bash", "tests/test_write_usb_persistence.sh"]),
         ("qemu-fake-validation", ["bash", "tests/test_qemu_headless_validation.sh"]),
         ("desktop-readiness", ["bash", "tests/test_desktop_readiness.sh"]),
+        ("gtk-window-runtime", ["xvfb-run", "-a", "-s", "-screen 0 1366x768x24", sys.executable, "tests/test_gtk_window_runtime.py"]),
         ("secureboot-validation", ["bash", "tests/test_secureboot_validation.sh"]),
         ("initramfs-watermark-validation", ["bash", "tests/test_initramfs_watermark_guard.sh"]),
         ("watermark-integrity", ["bash", "tests/test_watermark_integrity.sh"]),
@@ -81,6 +82,7 @@ def main() -> int:
         "desktop-files": ["desktop-file-validate"],
         "xml-svg": ["xmllint"],
         "usb-persistence-partition": ["sfdisk"],
+        "gtk-window-runtime": ["xvfb-run", "xdotool", "wmctrl", "openbox"],
     }
 
     for name, command in checks(junit_path):
