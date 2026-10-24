@@ -123,6 +123,33 @@ def exercise_window_management() -> None:
             f"ISO-X unexpectedly starts maximized: {initial_width}x{initial_height}"
         )
 
+        def click_titlebar_button(right_offset: int) -> None:
+            output = run(["xwininfo", "-id", window_id])
+            x = int(re.search(r"Absolute upper-left X:\s+(\d+)", output)[1])
+            y = int(re.search(r"Absolute upper-left Y:\s+(\d+)", output)[1])
+            width = int(re.search(r"Width:\s+(\d+)", output)[1])
+            extents = run(["xprop", "-id", window_id, "_NET_FRAME_EXTENTS"])
+            top = int(re.search(r"=\s*\d+,\s*\d+,\s*(\d+)", extents)[1])
+            run(["xdotool", "mousemove", str(x + width - right_offset), str(y - top // 2), "click", "1"])
+            time.sleep(0.25)
+
+        click_titlebar_button(28)
+        assert "MAXIMIZED_VERT" in run(["xprop", "-id", window_id, "_NET_WM_STATE"]), (
+            "native maximize button did not maximize the ISO-X window"
+        )
+        click_titlebar_button(28)
+        assert "MAXIMIZED_VERT" not in run(["xprop", "-id", window_id, "_NET_WM_STATE"]), (
+            "native maximize button did not restore the ISO-X window"
+        )
+
+        click_titlebar_button(52)
+        assert "HIDDEN" in run(["xprop", "-id", window_id, "_NET_WM_STATE"]), (
+            "native minimize button did not iconify the ISO-X window"
+        )
+        assert process.poll() is None, "native minimize button terminated the ISO-X application"
+        run(["wmctrl", "-ia", window_id])
+        assert run(["xdotool", "getwindowfocus"]) == window_id, "minimized ISO-X window did not restore"
+
         run(["wmctrl", "-ir", window_id, "-e", "0,80,60,900,600"])
         width, height = geometry(window_id)
         assert abs(width - 900) <= 40 and abs(height - 600) <= 40, (
@@ -143,6 +170,66 @@ def exercise_window_management() -> None:
         )
     finally:
         stop_window(process, home, window_id, "wm-close")
+
+
+def exercise_titlebar_double_click() -> None:
+    process, home, window_id = launch_window()
+    try:
+        output = run(["xwininfo", "-id", window_id])
+        x = int(re.search(r"Absolute upper-left X:\s+(\d+)", output)[1])
+        y = int(re.search(r"Absolute upper-left Y:\s+(\d+)", output)[1])
+        width = int(re.search(r"Width:\s+(\d+)", output)[1])
+        extents = run(["xprop", "-id", window_id, "_NET_FRAME_EXTENTS"])
+        top = int(re.search(r"=\s*\d+,\s*\d+,\s*(\d+)", extents)[1])
+
+        def double_click_titlebar() -> None:
+            run(["xdotool", "mousemove", str(x + width // 2), str(y - top // 2),
+                 "click", "--repeat", "2", "--delay", "100", "1"])
+
+        double_click_titlebar()
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            if "MAXIMIZED_VERT" in run(["xprop", "-id", window_id, "_NET_WM_STATE"]):
+                break
+            time.sleep(0.05)
+        else:
+            raise AssertionError("titlebar double-click did not maximize the ISO-X window")
+
+        output = run(["xwininfo", "-id", window_id])
+        x = int(re.search(r"Absolute upper-left X:\s+(\d+)", output)[1])
+        y = int(re.search(r"Absolute upper-left Y:\s+(\d+)", output)[1])
+        width = int(re.search(r"Width:\s+(\d+)", output)[1])
+        double_click_titlebar()
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            if "MAXIMIZED_VERT" not in run(["xprop", "-id", window_id, "_NET_WM_STATE"]):
+                return
+            time.sleep(0.05)
+        raise AssertionError("titlebar double-click did not restore the ISO-X window")
+    finally:
+        stop_window(process, home, window_id, "wm-close")
+
+
+def exercise_close_button() -> None:
+    process, home, window_id = launch_window()
+    try:
+        output = run(["xwininfo", "-id", window_id])
+        x = int(re.search(r"Absolute upper-left X:\s+(\d+)", output)[1])
+        y = int(re.search(r"Absolute upper-left Y:\s+(\d+)", output)[1])
+        width = int(re.search(r"Width:\s+(\d+)", output)[1])
+        extents = run(["xprop", "-id", window_id, "_NET_FRAME_EXTENTS"])
+        top = int(re.search(r"=\s*\d+,\s*\d+,\s*(\d+)", extents)[1])
+        run(["xdotool", "mousemove", str(x + width - 12), str(y - top // 2), "click", "1"])
+        try:
+            returncode = process.wait(timeout=5)
+        except subprocess.TimeoutExpired as error:
+            raise AssertionError("Openbox close button did not close the ISO-X window") from error
+        assert returncode == 0, f"ISO-X exited {returncode} after clicking its close button"
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=5)
+        home.cleanup()
 
 
 def exercise_alt_f4() -> None:
@@ -239,6 +326,66 @@ def exercise_gtk_text_input() -> None:
                     raise AssertionError(f"GTK input probe failed: {stderr}")
 
 
+def exercise_alt_tab_focus_routing() -> None:
+    source = textwrap.dedent("""
+        import os
+        import gi
+        gi.require_version("Gtk", "3.0")
+        from gi.repository import Gtk
+        from pathlib import Path
+        window = Gtk.Window(title=os.environ["ISOX_PROBE_TITLE"])
+        entry = Gtk.Entry()
+        entry.connect("changed", lambda widget: Path(os.environ["ISOX_INPUT_RESULT"]).write_text(widget.get_text(), encoding="utf-8"))
+        window.add(entry)
+        window.connect("destroy", Gtk.main_quit)
+        window.show_all()
+        entry.grab_focus()
+        Gtk.main()
+    """)
+    with tempfile.TemporaryDirectory(prefix="isox-focus-routing-") as directory:
+        processes: list[subprocess.Popen[str]] = []
+        windows: dict[str, str] = {}
+        results = {name: Path(directory) / f"{name}.txt" for name in ("first", "second")}
+        try:
+            for name in ("first", "second"):
+                env = os.environ.copy()
+                env["ISOX_PROBE_TITLE"] = f"ISO-X focus probe {name}"
+                env["ISOX_INPUT_RESULT"] = str(results[name])
+                process = subprocess.Popen(
+                    [sys.executable, "-c", source], env=env,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+                )
+                processes.append(process)
+                windows[name] = run(
+                    ["xdotool", "search", "--sync", "--onlyvisible", "--name", env["ISOX_PROBE_TITLE"]],
+                    timeout=10,
+                ).splitlines()[0]
+
+            run(["xdotool", "windowactivate", "--sync", windows["first"]])
+            run(["xdotool", "type", "--clearmodifiers", "first"])
+            _wait_for_text(results["first"], "first")
+            run(["xdotool", "windowactivate", "--sync", windows["second"]])
+            run(["xdotool", "type", "--clearmodifiers", "second"])
+            _wait_for_text(results["second"], "second")
+            assert results["first"].read_text(encoding="utf-8") == "first", "background GTK window received input"
+
+            run(["xdotool", "key", "--clearmodifiers", "alt+Tab"])
+            assert run(["xdotool", "getwindowfocus"]) == windows["first"], "Alt+Tab did not focus the other GTK window"
+            run(["xdotool", "type", "--clearmodifiers", "!"])
+            _wait_for_text(results["first"], "first!")
+            assert results["second"].read_text(encoding="utf-8") == "second", "Alt+Tab sent input to the wrong GTK window"
+        finally:
+            for window_id in windows.values():
+                subprocess.run(["wmctrl", "-ic", window_id], check=False, capture_output=True, timeout=5)
+            for process in processes:
+                if process.poll() is None:
+                    try:
+                        process.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        process.terminate()
+                        process.wait(timeout=5)
+
+
 def exercise_terminal_text_input() -> None:
     if not shutil.which("xterm"):
         print("NOT_RUN: xterm input probe requires xterm")
@@ -277,14 +424,18 @@ def exercise_terminal_text_input() -> None:
 
 def main() -> int:
     openbox = subprocess.Popen(
-        ["openbox", "--sm-disable"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
+        ["openbox", "--sm-disable", "--config-file", str(ROOT / "desktop/openbox-rc.xml")],
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
     )
     try:
         wait_for_openbox()
         exercise_keyboard_layouts()
         exercise_gtk_text_input()
+        exercise_alt_tab_focus_routing()
         exercise_terminal_text_input()
         exercise_window_management()
+        exercise_titlebar_double_click()
+        exercise_close_button()
         exercise_alt_f4()
         exercise_close_while_modal_dialog_is_open()
     finally:

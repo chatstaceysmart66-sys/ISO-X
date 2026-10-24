@@ -91,6 +91,55 @@ for xml in (ROOT / "desktop/openbox-menu.xml", ROOT / "desktop/openbox-rc.xml",
     if xml.suffix == ".xml" or xml.suffix == ".svg":
         ET.parse(xml)
 
+openbox_root = ET.parse(ROOT / "desktop/openbox-rc.xml").getroot()
+openbox_ns = {"ob": "http://openbox.org/3.4/rc"}
+mouse_contexts = {
+    name: context
+    for context in openbox_root.findall("ob:mouse/ob:context", openbox_ns)
+    for name in context.attrib["name"].split()
+}
+
+def has_mouse_action(context_name, button, gesture, action, edge=None):
+    context = mouse_contexts[context_name]
+    for binding in context.findall("ob:mousebind", openbox_ns):
+        if binding.attrib != {"button": button, "action": gesture}:
+            continue
+        for requested in binding.findall("ob:action", openbox_ns):
+            if requested.attrib.get("name") != action:
+                continue
+            requested_edge = requested.find("ob:edge", openbox_ns)
+            if edge is None and requested_edge is None:
+                return True
+            if requested_edge is not None and requested_edge.text == edge:
+                return True
+    return False
+
+assert has_mouse_action("Titlebar", "Left", "Drag", "Move"), "Titlebar must drag-move native windows."
+assert has_mouse_action("Titlebar", "Left", "DoubleClick", "ToggleMaximize"), "Titlebar double-click must toggle maximize."
+for edge_name in ("Top", "Bottom", "Left", "Right"):
+    assert has_mouse_action(edge_name, "Left", "Drag", "Resize", edge_name.lower()), (
+        f"{edge_name} edge must resize a native window on left-button drag."
+    )
+for corner_name in ("TLCorner", "TRCorner", "BLCorner", "BRCorner"):
+    assert has_mouse_action(corner_name, "Left", "Drag", "Resize"), (
+        f"{corner_name} corner must resize a native window on left-button drag."
+    )
+assert has_mouse_action("Iconify", "Left", "Click", "Iconify"), "The native minimize button must iconify its window."
+assert has_mouse_action("Maximize", "Left", "Click", "ToggleMaximize"), "The native maximize button must toggle state."
+assert has_mouse_action("Close", "Left", "Click", "Close"), "The native close button must close only its window."
+assert has_mouse_action("Frame", "A-Left", "Drag", "Move"), "Keep the existing Alt+left move binding."
+assert any(
+    binding.attrib == {"button": "A-Right", "action": "Resize"}
+    for binding in mouse_contexts["Frame"].findall("ob:mousebind", openbox_ns)
+), "Keep the existing Alt+right resize binding."
+keybinds = {
+    keybind.attrib["key"]: keybind
+    for keybind in openbox_root.findall("ob:keyboard/ob:keybind", openbox_ns)
+}
+assert any(action.attrib.get("name") == "Close" for action in keybinds["A-F4"].findall("ob:action", openbox_ns))
+assert any(action.attrib.get("name") == "NextWindow" for action in keybinds["A-Tab"].findall("ob:action", openbox_ns))
+assert any(action.attrib.get("name") == "PreviousWindow" for action in keybinds["A-S-Tab"].findall("ob:action", openbox_ns))
+
 watermark = (ROOT / "kernel/isox-watermark/isox_watermark.c").read_text(encoding="utf-8")
 assert "^ ISOX_WM_XOR_MASK" in watermark, "Watermark decoding must match the generator's XOR mask"
 assert "PENDING_BUILD_DIGEST" not in watermark
