@@ -24,4 +24,5 @@ mkdir -p "$OUT_DIR"
   mokutil --sb-state 2>&1 || true
 } | tee "$OUT_DIR/performance.txt"
 echo "Saved: $OUT_DIR/performance.txt"
-echo "Do not label these numbers as acceptance results unless collected on the stated 2-core / 1GB test target after a fresh boot."
+echo "Acceptance targets: after a fresh target-ISO boot, record at least 4 logical CPUs at 6 GiB RAM (primary) and 5 GiB RAM (additional); 8 GiB or more is optional, and 2-4 GiB is diagnostic only."
+echo "This system snapshot alone does not establish six-window acceptance; record the actual VM/device, applications, interactions, response times, CPU, memory, and failures."

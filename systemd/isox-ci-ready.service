@@ -7,6 +7,3 @@ After=graphical.target lightdm.service
 Type=oneshot
 TimeoutStartSec=130s
 ExecStart=/usr/local/sbin/isox-ci-ready
-
-[Install]
-WantedBy=graphical.target

@@ -364,6 +364,19 @@ def test_usb_writer_accepts_only_expected_iso_hybrid_mbr_table():
         assert result.returncode != 0
         assert "expected an MBR (dos) table" in result.stderr
 
+
+def test_performance_capture_uses_current_acceptance_matrix():
+    guidance = (ROOT / "scripts/collect-performance.sh").read_text(encoding="utf-8")
+    for requirement in (
+        "4 logical CPUs",
+        "6 GiB RAM (primary)",
+        "5 GiB RAM (additional)",
+        "8 GiB or more is optional",
+        "2-4 GiB is diagnostic only",
+        "does not establish six-window acceptance",
+    ):
+        assert requirement in guidance, f"Performance guidance omits {requirement!r}"
+
 if __name__ == "__main__":
     test_browser_homepage_is_staged_and_configured()
     test_firefox_defaults_hook_applies_after_existing_packaged_prefs()
@@ -377,3 +390,4 @@ if __name__ == "__main__":
     test_qemu_usb_tablet_has_an_explicit_controller()
     test_generated_boot_config_validator_rejects_stalls_and_ci_leaks()
     test_usb_writer_accepts_only_expected_iso_hybrid_mbr_table()
+    test_performance_capture_uses_current_acceptance_matrix()

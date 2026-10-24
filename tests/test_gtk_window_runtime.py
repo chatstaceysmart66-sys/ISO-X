@@ -57,6 +57,33 @@ def geometry(window_id: str) -> tuple[int, int]:
     return int(values["WIDTH"]), int(values["HEIGHT"])
 
 
+def screen_geometry(window_id: str) -> tuple[int, int, int, int]:
+    output = run(["xwininfo", "-id", window_id])
+    coordinates = [
+        re.search(pattern, output)
+        for pattern in (
+            r"Absolute upper-left X:\s+(\d+)",
+            r"Absolute upper-left Y:\s+(\d+)",
+            r"Width:\s+(\d+)",
+            r"Height:\s+(\d+)",
+        )
+    ]
+    assert all(coordinates), f"Could not read X11 window geometry:\n{output}"
+    return tuple(int(match[1]) for match in coordinates)
+
+
+def pointer_drag(x: int, y: int, dx: int, dy: int) -> None:
+    steps = max(4, (max(abs(dx), abs(dy)) + 7) // 8)
+    command = ["xdotool", "mousemove", str(x), str(y), "mousedown", "1", "sleep", "0.2"]
+    for step in range(1, steps + 1):
+        next_x = x + round(dx * step / steps)
+        next_y = y + round(dy * step / steps)
+        command.extend(("mousemove", str(next_x), str(next_y), "sleep", "0.025"))
+    command.extend(("mouseup", "1"))
+    run(command)
+    time.sleep(0.25)
+
+
 def launch_window() -> tuple[subprocess.Popen[str], tempfile.TemporaryDirectory[str], str]:
     home = tempfile.TemporaryDirectory(prefix="isox-gtk-home-")
     env = os.environ.copy()
@@ -168,6 +195,50 @@ def exercise_window_management() -> None:
         assert abs(width - 900) <= 40 and abs(height - 600) <= 40, (
             f"restore/resize failed within window-frame extents: {width}x{height}"
         )
+    finally:
+        stop_window(process, home, window_id, "wm-close")
+
+
+def exercise_pointer_move_and_resize() -> None:
+    process, home, window_id = launch_window()
+    try:
+        resize_extents = run(["xprop", "-id", window_id, "_NET_FRAME_EXTENTS"])
+        extents_match = re.search(r"=\s*(\d+),\s*(\d+),\s*(\d+),\s*(\d+)", resize_extents)
+        assert extents_match, f"Could not read Openbox frame extents: {resize_extents}"
+        left, right, top, bottom = map(int, extents_match.groups())
+        gestures = (
+            ("top", lambda x, y, width, height: (x + width // 2, y - top), (0, -20), "height"),
+            ("bottom", lambda x, y, width, height: (x + width // 2, y + height + bottom - 1), (0, 20), "height"),
+            ("left", lambda x, y, width, height: (x - left, y + height // 2), (-20, 0), "width"),
+            ("right", lambda x, y, width, height: (x + width + right - 1, y + height // 2), (20, 0), "width"),
+            ("top-left", lambda x, y, width, height: (x - left, y - top), (-20, -20), "both"),
+            ("top-right", lambda x, y, width, height: (x + width + right - 1, y - top), (20, -20), "both"),
+            ("bottom-left", lambda x, y, width, height: (x - left, y + height + bottom - 1), (-20, 20), "both"),
+            ("bottom-right", lambda x, y, width, height: (x + width + right - 1, y + height + bottom - 1), (20, 20), "both"),
+        )
+
+        run(["wmctrl", "-ir", window_id, "-e", "0,180,30,900,620"])
+        time.sleep(0.2)
+        x, y, width, height = screen_geometry(window_id)
+        pointer_drag(x + width // 2, y - top // 2, 28, 20)
+        moved = screen_geometry(window_id)
+        assert abs(moved[0] - x - 28) <= 4 and abs(moved[1] - y - 20) <= 4, (
+            f"titlebar drag did not move the window: {(x, y)} => {moved[:2]}"
+        )
+
+        for name, point, delta, dimensions in gestures:
+            run(["wmctrl", "-ir", window_id, "-e", "0,180,30,900,620"])
+            time.sleep(0.15)
+            before = screen_geometry(window_id)
+            pointer_drag(*point(*before), *delta)
+            after = screen_geometry(window_id)
+            changed_width = before[2] != after[2]
+            changed_height = before[3] != after[3]
+            assert (
+                changed_width and changed_height if dimensions == "both"
+                else changed_width if dimensions == "width"
+                else changed_height
+            ), f"{name} pointer drag did not resize the expected dimension: {before} => {after}"
     finally:
         stop_window(process, home, window_id, "wm-close")
 
@@ -434,6 +505,7 @@ def main() -> int:
         exercise_alt_tab_focus_routing()
         exercise_terminal_text_input()
         exercise_window_management()
+        exercise_pointer_move_and_resize()
         exercise_titlebar_double_click()
         exercise_close_button()
         exercise_alt_f4()
@@ -441,7 +513,7 @@ def main() -> int:
     finally:
         openbox.terminate()
         openbox.wait(timeout=5)
-    print("PASS: XKB session map toggle switches AR↔EN; GTK Entry and xterm receive Arabic/English input; ISO-X window lifecycle checks pass.")
+    print("PASS: Openbox window controls, titlebar movement, all eight resize zones, Alt+Tab focus routing, and GTK/xterm AR↔EN input checks pass.")
     return 0
 
 

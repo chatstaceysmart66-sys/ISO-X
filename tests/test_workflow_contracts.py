@@ -23,6 +23,7 @@ source_runner = (Path(__file__).resolve().parents[1] / "scripts/run-source-check
 user_iso_metadata = (Path(__file__).resolve().parents[1] / "scripts/create-user-iso-metadata.py").read_text()
 ready_probe = (Path(__file__).resolve().parents[1] / "scripts/isox-ci-ready.sh").read_text()
 ready_service = (Path(__file__).resolve().parents[1] / "systemd/isox-ci-ready.service").read_text()
+ready_timer = (Path(__file__).resolve().parents[1] / "systemd/isox-ci-ready.timer").read_text()
 
 assert "needs: build" in bios and "needs: build" in uefi
 assert "scripts/run-source-checks.py" in source
@@ -107,4 +108,8 @@ for ref in re.findall(r"uses: actions/[^\s@]+@([0-9a-f]{40})", workflow):
 assert workflow.count("Node.js 24") >= 3
 assert "deadline=$(( $(date +%s) + 120 ))" in ready_probe
 assert "TimeoutStartSec=130s" in ready_service
+assert "After=graphical.target lightdm.service" in ready_service
+assert "WantedBy=graphical.target" not in ready_service
+assert "Unit=isox-ci-ready.service" in ready_timer
+assert "WantedBy=multi-user.target" in ready_timer
 print("PASS: workflow keeps boot gates independent and protects candidate/final artifact conditions.")
