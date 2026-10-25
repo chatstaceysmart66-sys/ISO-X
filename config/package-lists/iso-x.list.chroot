@@ -33,6 +33,7 @@ gir1.2-gtk-3.0
 gir1.2-vte-2.91
 gir1.2-gtksource-3.0
 x11-xkb-utils
+x11-xserver-utils
 netsurf-gtk
 firefox-esr
 firefox-esr-l10n-ar
@@ -95,6 +96,7 @@ xdg-user-dirs-gtk
 xdg-desktop-portal
 xdg-desktop-portal-gtk
 polkitd
+pkexec
 lxpolkit
 sudo
 htop

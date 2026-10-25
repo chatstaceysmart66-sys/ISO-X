@@ -2,14 +2,37 @@
 """Integration tests for the local encrypted archive helper; requires OpenSSL."""
 from __future__ import annotations
 import importlib.util
+import contextlib
+import io
 from pathlib import Path
+from types import SimpleNamespace
 import tempfile
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("secure_vault", ROOT / "scripts/secure-vault.py")
 assert spec and spec.loader
 vault = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vault)
+
+answers = iter(("1", "/tmp/source folder", "/tmp/vault output.enc"))
+assert vault.prompt_vault_arguments(read=lambda _prompt: next(answers)) == (
+    "enc", "/tmp/source folder", "/tmp/vault output.enc"
+)
+answers = iter(("2", "/tmp/vault input.enc", "/tmp/restore folder"))
+assert vault.prompt_vault_arguments(read=lambda _prompt: next(answers)) == (
+    "dec", "/tmp/vault input.enc", "/tmp/restore folder"
+)
+
+with patch.object(vault.sys, "stdin", SimpleNamespace(isatty=lambda: True)):
+    with patch.object(vault, "prompt_vault_arguments", return_value=("enc", "/tmp/source", "/tmp/archive.enc")):
+        with patch.object(vault, "ask_secret", return_value=b"test-only passphrase"):
+            with patch.object(vault, "encrypt") as encrypt_call:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    assert vault.main(["isox-vault"]) == 0
+                encrypt_call.assert_called_once_with(
+                    Path("/tmp/source"), Path("/tmp/archive.enc"), b"test-only passphrase"
+                )
 
 with tempfile.TemporaryDirectory(prefix="isox-vault-test-") as temporary:
     base = Path(temporary)

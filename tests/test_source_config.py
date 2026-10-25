@@ -69,7 +69,9 @@ for asset in (
     assert (ROOT / asset).is_file(), f"Missing feature/integration asset: {asset}"
 
 assert {"appstream", "python3-yaml", "flatpak", "pulseaudio-utils"} <= packages
+assert "x11-xserver-utils" in packages, "Openbox snap shortcuts require xrandr from x11-xserver-utils."
 assert "user-setup" in packages, "live-config needs user-setup to create the configured live account."
+assert "pkexec" in packages, "The store backend requires the pkexec package for privileged APT operations."
 assert "isox-desktop-window-ready.sh" in build, "CI readiness must verify the ISO-X application window."
 for store_asset, image_path in (
     ("$PROJECT_DIR/app/isox_store_backend.py", "config/includes.chroot/usr/share/iso-x/isox_store_backend.py"),
@@ -168,6 +170,8 @@ assert "execp_command = /usr/local/bin/isox-keyboard status" in (ROOT / "desktop
 assert "execp_lclick_command = /usr/local/bin/isox-keyboard toggle" in (ROOT / "desktop/tint2rc").read_text()
 assert "pcmanfm --desktop --profile=isox" in build, "Desktop icons and the wallpaper need a desktop manager"
 assert "isox-toggle-airplane" in build and "W-a" in (ROOT / "desktop/openbox-rc.xml").read_text()
+snap_window = (ROOT / "scripts/isox-snap-window.sh").read_text(encoding="utf-8")
+assert "xrandr --current" in snap_window and "isox-snap-window" in build
 assert "gxkb" not in packages and "isox-keyboard" in build
 assert '"$PROJECT_DIR/app/isox_keyboard.py" config/includes.chroot/usr/share/iso-x/isox_keyboard.py' in build
 assert "x11-xkb-utils" in packages
@@ -183,6 +187,8 @@ assert "GLib.idle_add(self._stats_loaded" in gtk_app
 assert "if self.active_file_operations:" in gtk_app
 assert "GLib.idle_add(self._quit_main_loops)" in gtk_app
 store_app = (ROOT / "app/isox_appcenter.py").read_text(encoding="utf-8")
+store_backend = (ROOT / "app/isox_store_backend.py").read_text(encoding="utf-8")
+assert 'shutil.which("pkexec")' in store_backend and '["pkexec", "/usr/bin/apt-get", *arguments]' in store_backend
 assert 'self.connect("delete-event", self._on_delete_event)' in store_app
 assert "window.connect(\"destroy\", window._on_destroy)" in store_app
 assert "Alt+Shift" in (ROOT / "README_AR.md").read_text(encoding="utf-8")

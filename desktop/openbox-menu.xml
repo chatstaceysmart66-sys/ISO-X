@@ -13,7 +13,7 @@
     <item label="ISO-X Store"><action name="Execute"><command>python3 /usr/share/iso-x/isox_appcenter.py</command></action></item>
     <item label="Run Command"><action name="Execute"><command>/usr/local/bin/isox-run</command></action></item>
     <item label="Toggle Airplane Mode"><action name="Execute"><command>/usr/local/bin/isox-toggle-airplane</command></action></item>
-    <item label="Secure Vault"><action name="Execute"><command>xterm -e /usr/local/bin/isox-vault</command></action></item>
+    <item label="Secure Vault (encrypt / restore)"><action name="Execute"><command>xterm -e /usr/local/bin/isox-vault</command></action></item>
     <item label="Settings"><action name="Execute"><command>xfce4-settings-manager</command></action></item>
     <separator/>
     <item label="Lock Screen"><action name="Execute"><command>dm-tool lock</command></action></item>

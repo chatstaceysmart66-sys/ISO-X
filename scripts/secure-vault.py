@@ -177,21 +177,59 @@ def decrypt(source: Path, destination: Path, secret: bytes) -> None:
             shutil.rmtree(destination, ignore_errors=True)
             raise
 
+def prompt_vault_arguments(read=input, write=print) -> tuple[str, str, str]:
+    write("1) تشفير مجلد إلى ملف خزنة")
+    write("2) استعادة ملف خزنة إلى مجلد")
+    choice = read("اختر 1 أو 2: ").strip().lower()
+    if choice in ("1", "enc", "encrypt", "تشفير"):
+        mode = "enc"
+        first_prompt = "مسار المجلد المراد تشفيره: "
+        second_prompt = "مسار ملف الخزنة الناتج: "
+    elif choice in ("2", "dec", "decrypt", "استعادة"):
+        mode = "dec"
+        first_prompt = "مسار ملف الخزنة: "
+        second_prompt = "مسار مجلد الاستعادة: "
+    else:
+        raise VaultError("اختيار غير صالح؛ أُلغيت العملية.")
+
+    first = read(first_prompt)
+    second = read(second_prompt)
+    if not first.strip() or not second.strip():
+        raise VaultError("المسارات مطلوبة؛ أُلغيت العملية.")
+    return mode, first, second
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) != 4 or argv[1] not in ("enc", "dec"):
+    if len(argv) == 1:
+        if not sys.stdin.isatty():
+            print("الاستخدام: secure-vault.sh enc <مجلد_المصدر> <ملف.enc>\n"
+                  "        secure-vault.sh dec <ملف.enc> <مجلد_الاستعادة>", file=sys.stderr)
+            return 2
+        try:
+            mode, first, second = prompt_vault_arguments()
+        except (EOFError, KeyboardInterrupt):
+            print("أُلغيت العملية.", file=sys.stderr)
+            return 1
+        except VaultError as exc:
+            print(f"خطأ: {exc}", file=sys.stderr)
+            return 1
+    elif len(argv) == 4 and argv[1] in ("enc", "dec"):
+        mode = argv[1]
+        first, second = argv[2], argv[3]
+    else:
         print("الاستخدام: secure-vault.sh enc <مجلد_المصدر> <ملف.enc>\n"
               "        secure-vault.sh dec <ملف.enc> <مجلد_الاستعادة>", file=sys.stderr)
         return 2
-    mode = argv[1]
-    first, second = Path(argv[2]), Path(argv[3])
+
+    first_path, second_path = Path(first), Path(second)
     try:
         secret = ask_secret(confirm=(mode == "enc"))
         if mode == "enc":
-            encrypt(first, second, secret)
-            print(f"تم إنشاء ملف مشفّر ومتحقق من سلامته: {second}")
+            encrypt(first_path, second_path, secret)
+            print(f"تم إنشاء ملف مشفّر ومتحقق من سلامته: {second_path}")
         else:
-            decrypt(first, second, secret)
-            print(f"تم فك الأرشيف بعد التحقق من سلامته: {second}")
+            decrypt(first_path, second_path, secret)
+            print(f"تم فك الأرشيف بعد التحقق من سلامته: {second_path}")
         return 0
     except (VaultError, OSError, tarfile.TarError, subprocess.SubprocessError) as exc:
         print(f"خطأ: {exc}", file=sys.stderr)
