@@ -25,6 +25,9 @@ Modes:
   uefi-desktop Boot a normal-boot ISO with OVMF until the ISO-X window renders.
   install Boot with a fresh 24 GiB qcow2 TEST disk (never a host disk) attached.
 
+Boot modes default to 1024 MiB RAM and 2 vCPUs. Set ISOX_QEMU_MEMORY_MIB
+and ISOX_QEMU_CPUS to run controlled resource profiles.
+
 BIOS/UEFI GUI checks are manual. Close QEMU to return. These modes do not
 prove Wi-Fi, Bluetooth, Secure Boot, post-install boot, or performance by themselves.
 EOF
@@ -63,11 +66,21 @@ case "$MODE" in
     if [[ "$MODE" == install ]]; then need qemu-img; fi
     require_iso
     mkdir -p "$EVIDENCE"
+    QEMU_MEMORY_MIB="${ISOX_QEMU_MEMORY_MIB:-1024}"
+    QEMU_CPUS="${ISOX_QEMU_CPUS:-2}"
+    [[ "$QEMU_MEMORY_MIB" =~ ^[1-9][0-9]*$ ]] || {
+      echo "ISOX_QEMU_MEMORY_MIB must be a positive integer." >&2
+      exit 3
+    }
+    [[ "$QEMU_CPUS" =~ ^[1-9][0-9]*$ ]] || {
+      echo "ISOX_QEMU_CPUS must be a positive integer." >&2
+      exit 3
+    }
     HEADLESS=0
     [[ "$MODE" == *-headless || "$MODE" == *-desktop ]] && HEADLESS=1
     # QEMU's -nic options intentionally use commas within a single argument.
     # shellcheck disable=SC2054
-    ARGS=(-m 1024 -smp 2 -boot order=d -cdrom "$ISO" -nic user,model=e1000)
+    ARGS=(-m "$QEMU_MEMORY_MIB" -smp "$QEMU_CPUS" -boot order=d -cdrom "$ISO" -nic user,model=e1000)
     if [[ "$HEADLESS" -eq 0 ]]; then
       ARGS+=(-device "qemu-xhci,id=xhci" -device "usb-tablet,bus=xhci.0")
     fi
@@ -114,7 +127,7 @@ case "$MODE" in
     fi
     {
       echo "Launching mode=$MODE; ISO=$ISO"
-      echo "Expected test target: QEMU, 2 vCPUs, 1024 MiB RAM; accelerator=$QEMU_ACCEL."
+      echo "Expected test target: QEMU, $QEMU_CPUS vCPUs, $QEMU_MEMORY_MIB MiB RAM; accelerator=$QEMU_ACCEL."
       qemu-system-x86_64 -version
       if command -v dpkg-query >/dev/null 2>&1; then
         dpkg-query -W qemu-system-x86 ovmf 2>&1 || true

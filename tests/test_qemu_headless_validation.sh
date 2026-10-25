@@ -21,6 +21,9 @@ if sys.argv[1:] == ["-version"]:
     print("QEMU emulator version 9.2.0 (fake test binary)")
     raise SystemExit(0)
 
+if os.environ.get("FAKE_QEMU_ARGS_FILE"):
+    Path(os.environ["FAKE_QEMU_ARGS_FILE"]).write_text(json.dumps(sys.argv[1:]))
+
 serial = next(sys.argv[i + 1][5:] for i, arg in enumerate(sys.argv[:-1]) if arg == "-serial")
 qmp_arg = next(sys.argv[i + 1] for i, arg in enumerate(sys.argv[:-1]) if arg == "-qmp")
 qmp_path = qmp_arg.removeprefix("unix:").split(",", 1)[0]
@@ -105,6 +108,7 @@ NONCE=0123456789abcdef0123456789abcdef
 export ISOX_QEMU_RENDER_GRACE=0
 
 FAKE_QEMU_KIND=success FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=20 \
+  ISOX_QEMU_MEMORY_MIB=6144 ISOX_QEMU_CPUS=4 FAKE_QEMU_ARGS_FILE="$TMP/success-args.json" \
   ISOX_QEMU_NONCE="$NONCE" PATH="$TMP/bin:$PATH" \
   bash "$ROOT/tests/qemu-acceptance.sh" bios-headless "$TMP/test.iso" "$TMP/success" \
   >"$TMP/success.log" 2>&1
@@ -119,12 +123,16 @@ assert r["final_screenshot_valid"] is True, r
 assert r["duration_seconds"] < 5, r
 assert r["serial_bytes"] > 0, r
 assert r["screenshots"] == ["qemu-bios-headless-early.ppm", "qemu-bios-headless-final.ppm"], r
+args = json.loads(Path(sys.argv[1]).parent.parent.joinpath("success-args.json").read_text())
+assert args[args.index("-m") + 1] == "6144", args
+assert args[args.index("-smp") + 1] == "4", args
 for screenshot in r["screenshots"]:
     image = Path(sys.argv[1]).parent / screenshot
     assert image.read_bytes().startswith(b"P6\n640 480\n255\n"), image
 PY
 
 FAKE_QEMU_KIND=success-zero-on-term FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=20 \
+  FAKE_QEMU_ARGS_FILE="$TMP/default-args.json" \
   ISOX_QEMU_NONCE="$NONCE" PATH="$TMP/bin:$PATH" \
   bash "$ROOT/tests/qemu-acceptance.sh" bios-headless "$TMP/test.iso" "$TMP/success-zero" \
   >"$TMP/success-zero.log" 2>&1
@@ -134,7 +142,23 @@ from pathlib import Path
 r = json.loads(Path(sys.argv[1]).read_text())
 assert r["status"] == "PASS_BOOT" and r["qemu_exit_code"] == 0, r
 assert r["termination_requested"] is True and r["process_group_clean"] is True, r
+args = json.loads(Path(sys.argv[1]).parent.parent.joinpath("default-args.json").read_text())
+assert args[args.index("-m") + 1] == "1024", args
+assert args[args.index("-smp") + 1] == "2", args
 PY
+
+for setting in ISOX_QEMU_MEMORY_MIB ISOX_QEMU_CPUS; do
+  for invalid in 0 bad; do
+    if env "$setting=$invalid" PATH="$TMP/bin:$PATH" \
+      bash "$ROOT/tests/qemu-acceptance.sh" bios-headless \
+      "$TMP/test.iso" "$TMP/invalid-$setting-$invalid" \
+      >"$TMP/invalid-$setting-$invalid.log" 2>&1; then
+      echo "FAIL: invalid $setting=$invalid was accepted." >&2
+      exit 1
+    fi
+    grep -Fq "$setting must be a positive integer." "$TMP/invalid-$setting-$invalid.log"
+  done
+done
 
 FAKE_QEMU_KIND=small-boot-frame FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=20 \
   ISOX_QEMU_NONCE="$NONCE" PATH="$TMP/bin:$PATH" \

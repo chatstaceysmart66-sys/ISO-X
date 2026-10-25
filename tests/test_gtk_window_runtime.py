@@ -18,6 +18,10 @@ sys.path.insert(0, str(ROOT / "app"))
 from isox_keyboard import current_group, current_layout, toggle_layout
 
 
+MAXIMIZE_BUTTON_RIGHT_OFFSET = 52
+MINIMIZE_BUTTON_RIGHT_OFFSET = 76
+
+
 def run(argv: list[str], *, timeout: float = 10) -> str:
     result = subprocess.run(argv, check=True, capture_output=True, text=True, timeout=timeout)
     return result.stdout.strip()
@@ -160,16 +164,16 @@ def exercise_window_management() -> None:
             run(["xdotool", "mousemove", str(x + width - right_offset), str(y - top // 2), "click", "1"])
             time.sleep(0.25)
 
-        click_titlebar_button(28)
+        click_titlebar_button(MAXIMIZE_BUTTON_RIGHT_OFFSET)
         assert "MAXIMIZED_VERT" in run(["xprop", "-id", window_id, "_NET_WM_STATE"]), (
             "native maximize button did not maximize the ISO-X window"
         )
-        click_titlebar_button(28)
+        click_titlebar_button(MAXIMIZE_BUTTON_RIGHT_OFFSET)
         assert "MAXIMIZED_VERT" not in run(["xprop", "-id", window_id, "_NET_WM_STATE"]), (
             "native maximize button did not restore the ISO-X window"
         )
 
-        click_titlebar_button(52)
+        click_titlebar_button(MINIMIZE_BUTTON_RIGHT_OFFSET)
         assert "HIDDEN" in run(["xprop", "-id", window_id, "_NET_WM_STATE"]), (
             "native minimize button did not iconify the ISO-X window"
         )
@@ -177,10 +181,10 @@ def exercise_window_management() -> None:
         run(["wmctrl", "-ia", window_id])
         assert run(["xdotool", "getwindowfocus"]) == window_id, "minimized ISO-X window did not restore"
 
-        run(["wmctrl", "-ir", window_id, "-e", "0,80,60,900,600"])
+        run(["wmctrl", "-ir", window_id, "-e", "0,80,60,900,660"])
         width, height = geometry(window_id)
-        assert abs(width - 900) <= 40 and abs(height - 600) <= 40, (
-            f"resize was not applied within window-frame extents: {width}x{height}"
+        assert abs(width - 900) <= 40 and abs(height - 660) <= 20, (
+            f"resize target 900x660 was not applied: {width}x{height}"
         )
 
         run(["xdotool", "windowminimize", window_id])
@@ -190,10 +194,10 @@ def exercise_window_management() -> None:
         width, height = geometry(window_id)
         assert width >= 1200 and height >= 650, f"maximize was not applied: {width}x{height}"
         run(["wmctrl", "-ir", window_id, "-b", "remove,maximized_vert,maximized_horz"])
-        run(["wmctrl", "-ir", window_id, "-e", "0,80,60,900,600"])
+        run(["wmctrl", "-ir", window_id, "-e", "0,80,60,900,660"])
         width, height = geometry(window_id)
-        assert abs(width - 900) <= 40 and abs(height - 600) <= 40, (
-            f"restore/resize failed within window-frame extents: {width}x{height}"
+        assert abs(width - 900) <= 40 and abs(height - 660) <= 20, (
+            f"restore/resize target 900x660 failed: {width}x{height}"
         )
     finally:
         stop_window(process, home, window_id, "wm-close")
