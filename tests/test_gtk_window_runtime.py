@@ -128,6 +128,16 @@ def wait_for_openbox() -> None:
     raise AssertionError("Openbox did not become the active window manager")
 
 
+def wait_for_window_focus(window_id: str, timeout: float = 3) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if run(["xdotool", "getwindowfocus"]) == window_id:
+            return
+        time.sleep(0.05)
+    actual = run(["xdotool", "getwindowfocus"])
+    raise AssertionError(f"window focus did not move to {window_id}; actual focus is {actual}")
+
+
 def stop_window(process: subprocess.Popen[str], home: tempfile.TemporaryDirectory[str], window_id: str, mode: str) -> None:
     try:
         if mode == "wm-close":
@@ -179,7 +189,7 @@ def exercise_window_management() -> None:
         )
         assert process.poll() is None, "native minimize button terminated the ISO-X application"
         run(["wmctrl", "-ia", window_id])
-        assert run(["xdotool", "getwindowfocus"]) == window_id, "minimized ISO-X window did not restore"
+        wait_for_window_focus(window_id)
 
         run(["wmctrl", "-ir", window_id, "-e", "0,80,60,900,660"])
         width, height = geometry(window_id)

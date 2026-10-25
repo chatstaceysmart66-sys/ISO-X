@@ -26,6 +26,9 @@ ready_service = (Path(__file__).resolve().parents[1] / "systemd/isox-ci-ready.se
 ready_timer = (Path(__file__).resolve().parents[1] / "systemd/isox-ci-ready.timer").read_text()
 
 assert "needs: build" in bios and "needs: build" in uefi
+assert not re.search(r"(?m)^    needs:", build), (
+    "ISO build evidence must run independently from source-check failures"
+)
 assert "scripts/run-source-checks.py" in source
 assert "usb-persistence-partition" in source_runner
 assert "libxml2-utils fdisk" in source
@@ -68,7 +71,8 @@ assert "contents=$result" in bios and "contents=$result" in uefi
 assert "needs.bios.result == 'success'" in summary
 assert "needs.uefi.result == 'success'" in summary
 assert "not a release ISO" in summary
-assert "needs: [build, bios, uefi]" in promote
+assert "needs: [source-check, build, bios, uefi]" in promote
+assert "needs.source-check.result == 'success'" in promote
 assert "needs.bios.result == 'success'" in promote and "needs.uefi.result == 'success'" in promote
 assert "scripts/create-user-iso.py" in promote
 assert "read-ci-nonce.sh candidate/ci-nonce.txt" in promote

@@ -42,7 +42,6 @@ jobs:
           retention-days: 30
 
   build:
-    needs: source-check
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     outputs:
@@ -397,8 +396,8 @@ jobs:
           exit 1
 
   promote:
-    needs: [build, bios, uefi]
-    if: needs.build.outputs.validated == 'true' && needs.build.outputs.candidate_uploaded == 'success' && needs.bios.result == 'success' && needs.uefi.result == 'success'
+    needs: [source-check, build, bios, uefi]
+    if: needs.source-check.result == 'success' && needs.build.outputs.validated == 'true' && needs.build.outputs.candidate_uploaded == 'success' && needs.bios.result == 'success' && needs.uefi.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:

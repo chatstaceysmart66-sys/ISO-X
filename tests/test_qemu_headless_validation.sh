@@ -48,7 +48,7 @@ def qmp_server():
                     if kind == "small-boot-frame" and screenshot_count == 1:
                       pixels = b"\x00\x00\x00" * (720 * 400)
                       Path(words[1]).write_bytes(b"P6\n720 400\n255\n" + pixels)
-                    elif kind == "no-screenshot":
+                    elif kind in ("no-screenshot", "timeout-no-screenshot"):
                         pass
                     elif kind == "malformed-screenshot":
                         Path(words[1]).write_bytes(b"P6\nnot-an-image")
@@ -97,7 +97,7 @@ elif kind == "marker-exit-error":
         stream.write(f"ISOX_CI_READY nonce={os.environ['FAKE_QEMU_NONCE']}\n")
     time.sleep(0.2)
     raise SystemExit(42)
-elif kind == "timeout":
+elif kind in ("timeout", "timeout-no-screenshot"):
   with open(serial, "a", encoding="utf-8") as stream:
     stream.write("Boot remains in progress\n")
 while True:
@@ -201,7 +201,7 @@ assert classify("", False, 0, True, "readiness_marker", False, False, False, Tru
 assert classify("", False, -signal.SIGTERM, True, "readiness_marker", True, False, False, True) == "PASS_BOOT"
 assert classify("", False, -signal.SIGKILL, True, "readiness_marker", True, True, False, True) == "QEMU_INFRASTRUCTURE_FAILURE"
 assert classify("", False, 42, True, "readiness_marker", True, False, False, True) == "QEMU_INFRASTRUCTURE_FAILURE"
-assert classify("boot", True, 0, False, "timeout", True, False, False, True) == "BOOT_TIMEOUT"
+assert classify("boot", True, 0, False, "timeout", True, False, False, False) == "BOOT_TIMEOUT"
 assert classify("", False, 0, True, "readiness_marker", True, False, False, False) == "QEMU_INFRASTRUCTURE_FAILURE"
 assert classify("", False, 0, False, "desktop_rendered", True, False, True, True) == "PASS_BOOT"
 PY
@@ -264,6 +264,21 @@ from pathlib import Path
 r = json.loads(Path(sys.argv[1]).read_text())
 assert r["status"] == "BOOT_TIMEOUT", r
 assert r["timed_out"] is True and r["marker_seen"] is False, r
+PY
+
+if FAKE_QEMU_KIND=timeout-no-screenshot ISOX_QEMU_TIMEOUT=2 ISOX_QEMU_NONCE="$NONCE" \
+  PATH="$TMP/bin:$PATH" bash "$ROOT/tests/qemu-acceptance.sh" bios-headless \
+  "$TMP/test.iso" "$TMP/timeout-no-screenshot" >"$TMP/timeout-no-screenshot.log" 2>&1; then
+  echo "FAIL: a boot timeout without VGA evidence was accepted." >&2
+  exit 1
+fi
+python3 - "$TMP/timeout-no-screenshot/qemu-bios-headless-result.json" <<'PY'
+import json, sys
+from pathlib import Path
+r = json.loads(Path(sys.argv[1]).read_text())
+assert r["status"] == "BOOT_TIMEOUT", r
+assert r["timed_out"] is True and r["marker_seen"] is False, r
+assert r["evidence_errors"] and "final VGA evidence" in r["evidence_errors"][-1], r
 PY
 
 mkdir -p "$TMP/stale"

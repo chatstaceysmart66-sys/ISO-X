@@ -349,14 +349,15 @@ def main() -> int:
             termination_escalated = False
             final_screenshot_valid = False
             failure = None
+            evidence_errors: list[str] = []
             try:
                 qmp_available = qmp.connect(process, min(started + 1, started + args.timeout))
                 if not qmp_available:
-                    failure = "QMP monitor did not become available; VGA evidence cannot be captured."
+                    evidence_errors.append("QMP monitor did not become available; VGA evidence cannot be captured.")
                 elif qmp.screenshot(evidence / f"qemu-{args.mode}-early.ppm"):
                     screenshots.append(f"qemu-{args.mode}-early.ppm")
                 else:
-                    failure = "Unable to capture the early VGA screenshot through QMP."
+                    evidence_errors.append("Unable to capture the early VGA screenshot through QMP.")
                 second_snapshot_at = started + min(15, max(2, args.timeout // 3))
                 next_desktop_probe_at = started + 2
                 while process.poll() is None:
@@ -382,6 +383,8 @@ def main() -> int:
                         name = f"qemu-{args.mode}-later.ppm"
                         if qmp.screenshot(evidence / name):
                             screenshots.append(name)
+                        else:
+                            evidence_errors.append("Unable to capture the later VGA screenshot through QMP.")
                         second_snapshot_at = float("inf")
                     if now - started >= args.timeout:
                         timed_out = True
@@ -400,8 +403,8 @@ def main() -> int:
                     )
                     if final_screenshot_valid:
                         screenshots.append(name)
-                    elif marker_seen or desktop_seen or timed_out:
-                        failure = failure or "Unable to capture valid final VGA evidence before QEMU cleanup."
+                    else:
+                        evidence_errors.append("Unable to capture valid final VGA evidence before QEMU cleanup.")
                 qmp.close()
                 termination_requested, termination_escalated = terminate_group(process)
             process_group_clean = not group_has_live_processes(process.pid)
@@ -424,7 +427,12 @@ def main() -> int:
                 desktop_seen,
                 final_screenshot_valid,
             )
-            if failure or not process_group_clean:
+            timed_out_without_boot_proof = timed_out and not marker_seen and not desktop_seen
+            if (
+                failure
+                or not process_group_clean
+                or (evidence_errors and not timed_out_without_boot_proof)
+            ):
                 status = "QEMU_INFRASTRUCTURE_FAILURE"
             result = {
                 "mode": args.mode,
@@ -455,6 +463,8 @@ def main() -> int:
             }
             if failure:
                 result["error"] = failure
+            if evidence_errors:
+                result["evidence_errors"] = evidence_errors
             result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
             print(json.dumps(result, indent=2))
             return 0 if status == "PASS_BOOT" else 10
