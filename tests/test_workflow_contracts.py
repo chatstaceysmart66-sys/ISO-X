@@ -108,6 +108,10 @@ for ref in re.findall(r"uses: actions/[^\s@]+@([0-9a-f]{40})", workflow):
 assert workflow.count("Node.js 24") >= 3
 assert "deadline=$(( $(date +%s) + 120 ))" in ready_probe
 assert "TimeoutStartSec=130s" in ready_service
+gtk_screen = re.search(r"-screen 0 1366x(\d+)x24", source_runner)
+assert gtk_screen and int(gtk_screen.group(1)) >= 900, (
+    "GTK runtime Xvfb must leave room for the window minimum height and Openbox bottom margin"
+)
 assert "After=graphical.target lightdm.service" in ready_service
 assert "WantedBy=graphical.target" not in ready_service
 assert "Unit=isox-ci-ready.service" in ready_timer
