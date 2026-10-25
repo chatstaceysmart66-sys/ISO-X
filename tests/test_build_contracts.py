@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Static regression checks; these do not imply successful ISO build or boot."""
 from pathlib import Path
+import configparser
 import json
 import re
 import os
@@ -161,6 +162,65 @@ def test_ibus_has_one_openbox_autostart_entry():
     build = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
     assert build.count("ibus-daemon -drx") == 1
     assert "ibus-daemon.desktop" not in build
+
+
+def test_user_click_and_menu_contrast_settings_are_applied_and_built():
+    build = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
+    look_script = ROOT / "scripts/apply-windows-look.sh"
+    theme_hook = ROOT / "config/hooks/live/0500-isox-menu-contrast.hook.chroot"
+    assert 'config/hooks/live/0500-isox-menu-contrast.hook.chroot' in build
+    assert '<name>Clearlooks</name>' in (ROOT / "desktop/openbox-rc.xml").read_text(encoding="utf-8")
+
+    with tempfile.TemporaryDirectory(prefix="isox-click-theme-") as temporary:
+        home = Path(temporary) / "home"
+        home.mkdir()
+        subprocess.run([str(look_script), str(home)], check=True, capture_output=True, text=True)
+
+        libfm = configparser.ConfigParser(interpolation=None)
+        libfm.read(home / ".config/libfm/libfm.conf", encoding="utf-8")
+        assert libfm.getboolean("config", "single_click") is True
+        assert libfm.getboolean("config", "confirm_del") is True
+        assert libfm.getboolean("config", "confirm_trash") is True
+
+        gtkrc = (home / ".gtkrc-2.0").read_text(encoding="utf-8")
+        gtk_css = (home / ".config/gtk-3.0/gtk.css").read_text(encoding="utf-8")
+        for content in (gtkrc, gtk_css):
+            assert "#050812" in content and "#ffffff" in content
+
+        rootfs = Path(temporary) / "rootfs"
+        theme_file = rootfs / "usr/share/themes/Clearlooks/openbox-3/themerc"
+        theme_file.parent.mkdir(parents=True)
+        theme_file.write_text(
+            "\n".join((
+                "menu.items.bg: Flat Solid",
+                "menu.items.bg.color: #ffffff",
+                "menu.items.text.color: #111111",
+                "menu.items.disabled.text.color: #aaaaaa",
+                "menu.items.active.bg: Flat Gradient splitvertical border",
+                "menu.items.active.bg.color: #97b8e2",
+                "menu.items.active.text.color: #ffffff",
+                "menu.title.bg: Flat Solid",
+                "menu.title.bg.color: #E6E7E6",
+                "menu.title.text.color: #111111",
+                "menu.border.color: #aaaaaa",
+                "menu.separator.color: #aaaaaa",
+                "window.active.title.bg: Raised Gradient",
+            )) + "\n",
+            encoding="utf-8",
+        )
+        environment = os.environ.copy()
+        environment["ISOX_HOOK_ROOT"] = str(rootfs)
+        subprocess.run(["/bin/sh", str(theme_hook)], env=environment, check=True,
+                       capture_output=True, text=True)
+        result = theme_file.read_text(encoding="utf-8")
+        assert "menu.items.bg.color: #050812" in result
+        assert "menu.items.text.color: #ffffff" in result
+        assert "menu.items.active.bg.color: #0078d4" in result
+        assert "menu.items.active.text.color: #ffffff" in result
+        assert "window.active.title.bg: Raised Gradient" in result
+        subprocess.run(["/bin/sh", str(theme_hook)], env=environment, check=True,
+                       capture_output=True, text=True)
+        assert theme_file.read_text(encoding="utf-8") == result
 
 
 def test_legacy_tk_shell_is_not_staged_as_a_second_desktop():

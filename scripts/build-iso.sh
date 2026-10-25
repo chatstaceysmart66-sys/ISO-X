@@ -251,6 +251,7 @@ fi
 install -m 0755 "$PROJECT_DIR/config/hooks/live/0200-isox-plymouth.hook.chroot" config/hooks/live/0200-isox-plymouth.hook.chroot
 install -m 0755 "$PROJECT_DIR/config/hooks/live/0300-isox-services.hook.chroot" config/hooks/live/0300-isox-services.hook.chroot
 install -m 0755 "$PROJECT_DIR/config/hooks/live/0400-isox-firefox-defaults.hook.chroot" config/hooks/live/0400-isox-firefox-defaults.hook.chroot
+install -m 0755 "$PROJECT_DIR/config/hooks/live/0500-isox-menu-contrast.hook.chroot" config/hooks/live/0500-isox-menu-contrast.hook.chroot
 install -m 0644 "$PROJECT_DIR/desktop/tint2rc" config/includes.chroot/etc/skel/.config/tint2/tint2rc
 install -m 0644 "$PROJECT_DIR/desktop/openbox-menu.xml" config/includes.chroot/etc/skel/.config/openbox/menu.xml
 install -m 0644 "$PROJECT_DIR/desktop/openbox-menu.xml" config/includes.chroot/etc/xdg/openbox/menu.xml

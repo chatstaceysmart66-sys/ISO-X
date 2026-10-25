@@ -8,6 +8,7 @@ TARGET_HOME="$(realpath -m "$TARGET_HOME")"
 mkdir -p \
   "$TARGET_HOME/.config/gtk-3.0" \
   "$TARGET_HOME/.config/pcmanfm/isox" \
+  "$TARGET_HOME/.config/libfm" \
   "$TARGET_HOME/.config/openbox" \
   "$TARGET_HOME/سطح المكتب" \
   "$TARGET_HOME/التنزيلات" \
@@ -45,6 +46,40 @@ window, dialog { background-color: @theme_bg_color; color: @theme_fg_color; }
 button:focus, entry:focus, treeview.view:focus { outline-color: @accent_color; }
 button:hover { border-color: @accent_color; }
 selection, *:selected { background-color: @theme_selected_bg_color; color: @theme_selected_fg_color; }
+menu, menuitem, popover, popover.background {
+  background-color: #050812;
+  color: #ffffff;
+}
+menuitem:hover, menuitem:selected {
+  background-color: #0078d4;
+  color: #ffffff;
+}
+menuitem:disabled { color: #aab4c4; }
+EOF
+
+cat > "$TARGET_HOME/.gtkrc-2.0" <<'EOF'
+style "isox-menu" {
+  bg[NORMAL] = "#050812"
+  fg[NORMAL] = "#ffffff"
+  bg[PRELIGHT] = "#0078d4"
+  fg[PRELIGHT] = "#ffffff"
+  bg[SELECTED] = "#0078d4"
+  fg[SELECTED] = "#ffffff"
+  bg[ACTIVE] = "#101725"
+  fg[ACTIVE] = "#ffffff"
+  bg[INSENSITIVE] = "#050812"
+  fg[INSENSITIVE] = "#aab4c4"
+}
+widget_class "*Menu*" style "isox-menu"
+widget_class "*MenuItem*" style "isox-menu"
+EOF
+
+cat > "$TARGET_HOME/.config/libfm/libfm.conf" <<'EOF'
+[config]
+single_click=1
+use_trash=1
+confirm_del=1
+confirm_trash=1
 EOF
 
 cat > "$TARGET_HOME/.config/pcmanfm/isox/desktop-items-0.conf" <<'EOF'
@@ -79,7 +114,9 @@ printf '%s\n' 'ar_IQ' > "$TARGET_HOME/.config/user-dirs.locale"
 if [[ "$TARGET_HOME" == /etc/skel* ]]; then
   chmod 0644 "$TARGET_HOME/.config/gtk-3.0/settings.ini" \
     "$TARGET_HOME/.config/gtk-3.0/gtk.css" \
+    "$TARGET_HOME/.gtkrc-2.0" \
     "$TARGET_HOME/.config/pcmanfm/isox/desktop-items-0.conf" \
+    "$TARGET_HOME/.config/libfm/libfm.conf" \
     "$TARGET_HOME/.config/user-dirs.dirs" "$TARGET_HOME/.config/user-dirs.locale"
 fi
 printf 'ISO-X look settings written to: %s\n' "$TARGET_HOME"
