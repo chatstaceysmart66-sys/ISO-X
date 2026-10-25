@@ -1,0 +1,13 @@
+[Unit]
+Description=ISO-X ZRAM swap (50% RAM, zstd, swappiness=10)
+After=systemd-modules-load.service local-fs.target
+Before=display-manager.service
+ConditionPathExists=/sys/block
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/isox-zram-setup
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

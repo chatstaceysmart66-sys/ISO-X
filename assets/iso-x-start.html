@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ابدأ مع ISO-X</title>
+<style>
+:root{color-scheme:dark;--bg:#080d18;--panel:#101a2c;--line:#203858;--blue:#42b8ff;--text:#f2f7ff;--muted:#a9bdd6}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 15% 10%,#143458 0,transparent 42%),linear-gradient(145deg,#070b13,#0a1423);color:var(--text);font-family:"Noto Sans Arabic","Noto Sans",sans-serif;display:grid;place-items:center;padding:28px}
+main{width:min(920px,100%)}header{display:flex;align-items:center;gap:20px;margin-bottom:26px}header img{width:92px;height:92px;object-fit:contain}h1{font-size:clamp(2rem,5vw,3.5rem);line-height:1.1;margin:0}p{color:var(--muted);line-height:1.85}.eyebrow{color:var(--blue);font-size:.86rem;letter-spacing:.08em;margin-bottom:8px}
+.panel{background:rgba(16,26,44,.92);border:1px solid var(--line);border-radius:22px;padding:clamp(20px,4vw,36px);box-shadow:0 24px 90px #0005}
+form{display:flex;gap:10px;margin-top:22px}input[type=search]{min-width:0;flex:1;background:#08101d;border:1px solid #365272;border-radius:12px;color:var(--text);font:inherit;padding:13px 16px;direction:rtl}button{background:linear-gradient(100deg,#087fc4,#36b6ff);color:#06111d;border:0;border-radius:12px;padding:12px 24px;font:inherit;font-weight:700;cursor:pointer}nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:22px}nav a{display:block;text-decoration:none;color:var(--text);border:1px solid var(--line);border-radius:14px;padding:16px;background:#0a1423}nav a:hover,nav a:focus{border-color:var(--blue);outline:2px solid #42b8ff30}nav strong{display:block;margin-bottom:5px}nav small{color:var(--muted);line-height:1.6}.footer{font-size:.83rem;text-align:center;margin-top:18px;color:#819ab8}
+@media(max-width:520px){header{align-items:flex-start}header img{width:64px;height:64px}form{flex-direction:column}button{width:100%}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<img src="file:///usr/share/iso-x/assets/iso-x-dragon.svg" alt="شعار ISO-X">
+<div><div class="eyebrow">نظام سطح مكتب مبني على Debian</div><h1>أهلاً بك في ISO-X</h1><p>واجهة عربية بسيطة للانطلاق إلى الويب وأدوات النظام.</p></div>
+</header>
+<section class="panel" aria-labelledby="search-title">
+<h2 id="search-title">ابحث في الويب</h2>
+<p>اكتب عبارة البحث ثم اضغط Enter. لن يُرسل أي بحث قبل أن تبدأه بنفسك.</p>
+<form action="https://duckduckgo.com/" method="get">
+<input type="search" name="q" aria-label="عبارة البحث" placeholder="شنو تريد تبحث عنه؟" autofocus>
+<button type="submit">بحث</button>
+</form>
+<nav aria-label="روابط مفيدة">
+<a href="https://www.debian.org/"><strong>Debian</strong><small>معلومات النظام والتوثيق الرسمي</small></a>
+<a href="https://support.mozilla.org/"><strong>مساعدة المتصفح</strong><small>دليل استخدام Firefox</small></a>
+<a href="file:///usr/share/doc/iso-x/README_AR.md"><strong>دليل ISO-X</strong><small>قراءة ملف التعليمات المحلي</small></a>
+</nav>
+</section>
+<div class="footer">ISO-X 0.4.0 · لا تُجمع بيانات استخدام ولا يبدأ أي اتصال بحث تلقائيًا.</div>
+</main>
+</body>
+</html>

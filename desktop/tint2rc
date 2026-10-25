@@ -1,0 +1,84 @@
+# ISO-X 0.4.0 taskbar — bottom-aligned, dark glass/blue accent.
+panel_monitor = all
+panel_position = bottom center horizontal
+panel_size = 100% 42
+panel_margin = 0 0
+panel_dock = 0
+panel_layer = top
+panel_background_id = 1
+panel_items = LTBESC
+panel_shrink = 0
+panel_urgent_blink = 1
+panel_padding = 6 3 6
+font_shadow = 0
+mouse_effects = 1
+mouse_hover_icon_asb = 100 0 10
+mouse_pressed_icon_asb = 100 0 20
+
+# Launcher section: ISO-X is the app/start launcher, plus browser and files.
+launcher_padding = 6 3 6
+launcher_background_id = 0
+launcher_icon_size = 26
+launcher_item_app = /usr/share/applications/iso-x.desktop
+launcher_item_app = /usr/share/applications/isox-installer.desktop
+launcher_item_app = /usr/share/applications/firefox-esr.desktop
+launcher_item_app = /usr/share/applications/pcmanfm.desktop
+
+# Task list
+taskbar_mode = multi_desktop
+taskbar_padding = 4 2 4
+taskbar_background_id = 0
+taskbar_active_background_id = 2
+taskbar_name = 0
+taskbar_hide_if_empty = 0
+taskbar_hide_inactive_tasks = 0
+task_icon_size = 24
+task_text = 1
+task_centered = 0
+task_width = 180
+task_tooltip = 1
+task_font = Sans 9
+task_font_color = #dce9ff 100
+task_active_font_color = #00e5ff 100
+task_urgent_font_color = #ff8a80 100
+task_background_id = 0
+task_active_background_id = 2
+task_urgent_background_id = 2
+task_icon_asb = 100 0 0
+task_active_icon_asb = 100 0 8
+
+# Live XKB group indicator; left click switches AR/EN from the active X server.
+execp = new
+execp_command = /usr/local/bin/isox-keyboard status
+execp_interval = 1
+execp_tooltip = Active keyboard layout; click to switch Arabic/English
+execp_font = Sans 10
+execp_font_color = #e9f2ff 100
+execp_background_id = 0
+execp_centered = 1
+execp_padding = 8 0 0
+execp_lclick_command = /usr/local/bin/isox-keyboard toggle
+
+# System tray and clock
+systray_padding = 5 2 5
+systray_background_id = 0
+systray_icon_size = 22
+systray_icon_asb = 100 0 0
+clock_padding = 8 0
+clock_background_id = 0
+clock_font = Sans 10
+clock_font_color = #e9f2ff 100
+clock_format = %a %d %b  %H:%M
+clock_tooltip = %A %d %B %Y
+clock_timezone = Asia/Baghdad
+
+# Backgrounds
+rounded = 12
+border_width = 1
+background_color = #10121c 96
+border_color = #00c8ff 45
+
+rounded = 10
+border_width = 1
+background_color = #182439 98
+border_color = #00e5ff 65
