@@ -18,8 +18,8 @@ sys.path.insert(0, str(ROOT / "app"))
 from isox_keyboard import current_group, current_layout, toggle_layout
 
 
-MAXIMIZE_BUTTON_RIGHT_OFFSET = 52
-MINIMIZE_BUTTON_RIGHT_OFFSET = 76
+MAXIMIZE_BUTTON_RIGHT_OFFSET = 28
+MINIMIZE_BUTTON_RIGHT_OFFSET = 52
 
 
 def run(argv: list[str], *, timeout: float = 10) -> str:
@@ -138,6 +138,19 @@ def wait_for_window_focus(window_id: str, timeout: float = 3) -> None:
     raise AssertionError(f"window focus did not move to {window_id}; actual focus is {actual}")
 
 
+def wait_for_window_state(window_id: str, state: str, present: bool, timeout: float = 3) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        states = run(["xprop", "-id", window_id, "_NET_WM_STATE"])
+        if (state in states) is present:
+            return
+        time.sleep(0.05)
+    raise AssertionError(
+        f"window state {state!r} did not become present={present}; "
+        f"actual state: {run(['xprop', '-id', window_id, '_NET_WM_STATE'])}"
+    )
+
+
 def stop_window(process: subprocess.Popen[str], home: tempfile.TemporaryDirectory[str], window_id: str, mode: str) -> None:
     try:
         if mode == "wm-close":
@@ -172,21 +185,14 @@ def exercise_window_management() -> None:
             extents = run(["xprop", "-id", window_id, "_NET_FRAME_EXTENTS"])
             top = int(re.search(r"=\s*\d+,\s*\d+,\s*(\d+)", extents)[1])
             run(["xdotool", "mousemove", str(x + width - right_offset), str(y - top // 2), "click", "1"])
-            time.sleep(0.25)
 
         click_titlebar_button(MAXIMIZE_BUTTON_RIGHT_OFFSET)
-        assert "MAXIMIZED_VERT" in run(["xprop", "-id", window_id, "_NET_WM_STATE"]), (
-            "native maximize button did not maximize the ISO-X window"
-        )
+        wait_for_window_state(window_id, "MAXIMIZED_VERT", True)
         click_titlebar_button(MAXIMIZE_BUTTON_RIGHT_OFFSET)
-        assert "MAXIMIZED_VERT" not in run(["xprop", "-id", window_id, "_NET_WM_STATE"]), (
-            "native maximize button did not restore the ISO-X window"
-        )
+        wait_for_window_state(window_id, "MAXIMIZED_VERT", False)
 
         click_titlebar_button(MINIMIZE_BUTTON_RIGHT_OFFSET)
-        assert "HIDDEN" in run(["xprop", "-id", window_id, "_NET_WM_STATE"]), (
-            "native minimize button did not iconify the ISO-X window"
-        )
+        wait_for_window_state(window_id, "HIDDEN", True)
         assert process.poll() is None, "native minimize button terminated the ISO-X application"
         run(["wmctrl", "-ia", window_id])
         wait_for_window_focus(window_id)
