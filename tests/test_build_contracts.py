@@ -185,7 +185,7 @@ def test_user_click_and_menu_contrast_settings_are_applied_and_built():
         gtkrc = (home / ".gtkrc-2.0").read_text(encoding="utf-8")
         gtk_css = (home / ".config/gtk-3.0/gtk.css").read_text(encoding="utf-8")
         for content in (gtkrc, gtk_css):
-            assert "#050812" in content and "#ffffff" in content
+            assert "#000000" in content and "#ffffff" in content
 
         rootfs = Path(temporary) / "rootfs"
         theme_file = rootfs / "usr/share/themes/Clearlooks/openbox-3/themerc"
@@ -213,7 +213,7 @@ def test_user_click_and_menu_contrast_settings_are_applied_and_built():
         subprocess.run(["/bin/sh", str(theme_hook)], env=environment, check=True,
                        capture_output=True, text=True)
         result = theme_file.read_text(encoding="utf-8")
-        assert "menu.items.bg.color: #050812" in result
+        assert "menu.items.bg.color: #000000" in result
         assert "menu.items.text.color: #ffffff" in result
         assert "menu.items.active.bg.color: #0078d4" in result
         assert "menu.items.active.text.color: #ffffff" in result

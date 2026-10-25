@@ -47,7 +47,7 @@ button:focus, entry:focus, treeview.view:focus { outline-color: @accent_color; }
 button:hover { border-color: @accent_color; }
 selection, *:selected { background-color: @theme_selected_bg_color; color: @theme_selected_fg_color; }
 menu, menuitem, popover, popover.background {
-  background-color: #050812;
+  background-color: #000000;
   color: #ffffff;
 }
 menuitem:hover, menuitem:selected {
@@ -59,7 +59,7 @@ EOF
 
 cat > "$TARGET_HOME/.gtkrc-2.0" <<'EOF'
 style "isox-menu" {
-  bg[NORMAL] = "#050812"
+  bg[NORMAL] = "#000000"
   fg[NORMAL] = "#ffffff"
   bg[PRELIGHT] = "#0078d4"
   fg[PRELIGHT] = "#ffffff"
@@ -67,7 +67,7 @@ style "isox-menu" {
   fg[SELECTED] = "#ffffff"
   bg[ACTIVE] = "#101725"
   fg[ACTIVE] = "#ffffff"
-  bg[INSENSITIVE] = "#050812"
+  bg[INSENSITIVE] = "#000000"
   fg[INSENSITIVE] = "#aab4c4"
 }
 widget_class "*Menu*" style "isox-menu"

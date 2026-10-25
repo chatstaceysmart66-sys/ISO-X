@@ -20,7 +20,7 @@ set_theme_value() {
 }
 
 set_theme_value menu.items.bg "Flat Solid"
-set_theme_value menu.items.bg.color "#050812"
+set_theme_value menu.items.bg.color "#000000"
 set_theme_value menu.items.text.color "#ffffff"
 set_theme_value menu.items.disabled.text.color "#aab4c4"
 set_theme_value menu.items.active.bg "Flat Solid"
