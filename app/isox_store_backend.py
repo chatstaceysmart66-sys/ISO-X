@@ -185,7 +185,7 @@ def parse_appstream_file(
         if len(contents) > 8 * 1024 * 1024:
             raise ValueError(f"AppStream XML exceeds the size limit: {path}")
         root = ET.fromstring(contents)
-    except (ET.ParseError, OSError) as error:
+    except (ET.ParseError, OSError, EOFError) as error:
         raise ValueError(f"Could not parse AppStream XML {path}: {error}") from error
     components = [root] if root.tag.rsplit("}", 1)[-1] == "component" else list(root)
     records: list[dict[str, object]] = []
@@ -323,7 +323,7 @@ def parse_dep11_file(
                 "desktop_id": desktop_id,
             })
         return records
-    except (OSError, yaml.YAMLError, UnicodeDecodeError) as error:
+    except (OSError, EOFError, yaml.YAMLError, UnicodeDecodeError) as error:
         raise ValueError(f"Could not parse DEP-11 metadata {path}: {error}") from error
 
 

@@ -11,9 +11,11 @@ if [ "${ISOX_CI_BOOT:-0}" = 1 ]; then
   [ "${#ISOX_CI_NONCE}" -eq 32 ] || { echo "ISOX_CI_NONCE must contain 32 hexadecimal characters." >&2; exit 2; }
   BOOTAPPEND_LIVE="boot=live config components username=user hostname=iso-x console=tty0 console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes systemd.log_target=console isox.ci=1 isox.ci.nonce=${ISOX_CI_NONCE}"
 fi
+# Keep repository indexes in the live filesystem so the store can browse
+# the configured Debian catalog before the user has network access.
 lb config noauto \
   --apt-recommends false \
-  --apt-indices false \
+  --apt-indices true \
   --architectures amd64 \
   --archive-areas "main contrib non-free non-free-firmware" \
   --security true \

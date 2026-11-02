@@ -61,6 +61,8 @@ assert '004_isox_040.sql' in (ROOT / "app/iso_x_gtk.py").read_text(encoding="utf
 # The package set names exactly one top-level WM, login manager, network manager and audio stack.
 for package in ("openbox", "lightdm", "network-manager", "pipewire-audio", "pipewire-alsa", "pipewire-pulse", "wireplumber"):
     assert package in packages, f"Expected desktop component missing: {package}"
+for package in ("alsa-ucm-conf", "firmware-intel-sound", "firmware-sof-signed", "alsa-utils"):
+    assert package in packages, f"Audio hardware support package missing: {package}"
 for package in ("xfwm4", "lxde", "lxqt", "wicd", "connman", "pulseaudio"):
     assert package not in packages, f"Unexpected second core manager/audio server present: {package}"
 
@@ -86,6 +88,24 @@ assert 'BUILD_AND_TEST_RESULTS_AR.md" config/includes.chroot/usr/share/doc/iso-x
 assert 'README.md" config/includes.chroot/usr/share/doc/iso-x/README.md' in build
 
 print("PASS: explicit BIOS+UEFI bootloader config, all SQL migrations staged, core package managers non-duplicated, and upstream license boundary documented.")
+
+
+def test_live_build_apt_indices_argument_is_passed_to_lb():
+    with tempfile.TemporaryDirectory(prefix="isox-live-config-") as temporary:
+        temp = Path(temporary)
+        fake_lb = temp / "lb"
+        args_file = temp / "args"
+        fake_lb.write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$@" > "$LB_ARGUMENTS_FILE"\n',
+            encoding="utf-8",
+        )
+        fake_lb.chmod(0o755)
+        env = os.environ.copy()
+        env["PATH"] = f"{temp}:{env['PATH']}"
+        env["LB_ARGUMENTS_FILE"] = str(args_file)
+        subprocess.run(["/bin/sh", str(ROOT / "auto/config")], env=env, check=True)
+        args = args_file.read_text(encoding="utf-8").splitlines()
+    assert args[args.index("--apt-indices") + 1] == "true"
 
 
 def test_browser_homepage_is_staged_and_configured():
@@ -533,6 +553,7 @@ def test_performance_capture_uses_current_acceptance_matrix():
         assert requirement in guidance, f"Performance guidance omits {requirement!r}"
 
 if __name__ == "__main__":
+    test_live_build_apt_indices_argument_is_passed_to_lb()
     test_browser_homepage_is_staged_and_configured()
     test_firefox_defaults_hook_applies_after_existing_packaged_prefs()
     test_app_center_queries_and_package_operations_are_background_and_privileged()

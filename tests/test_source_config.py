@@ -34,6 +34,10 @@ for required in ('--distribution trixie', '--architectures amd64', '--binary-ima
                  'username=user hostname=iso-x', '--memtest none'):
     assert required in auto_config, f"Missing live-build configuration: {required}"
 assert '--linux-packages "linux-image"' in auto_config
+assert "--apt-indices true" in auto_config, (
+    "The live store needs the local APT catalog before the user can refresh over the network."
+)
+assert "--apt-indices false" not in auto_config
 assert 'linux-headers-amd64' not in auto_config, "Kernel headers should be optional with the watermark module"
 services_hook = (ROOT / "config/hooks/live/0300-isox-services.hook.chroot").read_text(encoding="utf-8")
 assert "/etc/lightdm/lightdm-gtk-greeter.conf" in services_hook

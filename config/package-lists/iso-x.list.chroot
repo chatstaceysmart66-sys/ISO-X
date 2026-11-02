@@ -62,6 +62,10 @@ pipewire-pulse
 wireplumber
 pavucontrol
 alsa-utils
+alsa-ucm-conf
+# Firmware for Intel SST/SOF devices; absence can leave laptop audio unavailable.
+firmware-intel-sound
+firmware-sof-signed
 volumeicon-alsa
 libspa-0.2-bluetooth
 cups

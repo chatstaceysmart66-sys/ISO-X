@@ -87,6 +87,41 @@ class StoreBackendTests(unittest.TestCase):
                 )
             self.assertEqual(parse_appstream_file(path, "C")[0]["name"], "Reader")
 
+    def test_truncated_gzip_appstream_does_not_discard_valid_catalog_files(self):
+        runner = FakeRunner()
+        runner.responses[("apt-cache", "policy", "example-reader")] = completed(
+            [], stdout="Candidate: 1.0\n"
+        )
+        runner.responses[("dpkg-query", "-W")] = completed(
+            [], stdout="unknown ok not-installed\t\n"
+        )
+        runner.responses[("apt-cache", "show", "example-reader")] = completed(
+            [], stdout="Package: example-reader\nVersion: 1.0\nArchitecture: amd64\n\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "broken.xml.gz").write_bytes(b"\x1f\x8b\x08")
+            (root / "broken_dep11_Components-amd64.yml.gz").write_bytes(b"\x1f\x8b\x08")
+            (root / "valid.xml").write_text(
+                '<components><component type="desktop-application">'
+                "<id>org.example.Reader</id><pkgname>example-reader</pkgname><name>Reader</name>"
+                "</component></components>",
+                encoding="utf-8",
+            )
+            backend = StoreBackend(runner=runner, appstream_roots=[root], architecture="amd64")
+            apps = backend.search(source="APT")
+        self.assertEqual([app.name for app in apps], ["Reader"])
+        self.assertEqual(len(backend.catalog_warnings), 2)
+        self.assertTrue(
+            any("broken.xml.gz" in warning for warning in backend.catalog_warnings)
+        )
+        self.assertTrue(
+            any(
+                "broken_dep11_Components-amd64.yml.gz" in warning
+                for warning in backend.catalog_warnings
+            )
+        )
+
     def test_parses_debian_dep11_catalog_with_localized_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "trixie_dep11_Components-amd64.yml"

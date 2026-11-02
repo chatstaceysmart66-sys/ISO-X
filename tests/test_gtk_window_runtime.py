@@ -205,12 +205,16 @@ def exercise_window_management() -> None:
         )
 
         run(["xdotool", "windowminimize", window_id])
+        wait_for_window_state(window_id, "HIDDEN", True)
         assert run(["xdotool", "getwindowfocus"]) != window_id, "window did not minimize"
         run(["wmctrl", "-ia", window_id])
+        wait_for_window_focus(window_id)
         run(["wmctrl", "-ir", window_id, "-b", "add,maximized_vert,maximized_horz"])
+        wait_for_window_state(window_id, "MAXIMIZED_VERT", True)
         width, height = geometry(window_id)
         assert width >= 1200 and height >= 650, f"maximize was not applied: {width}x{height}"
         run(["wmctrl", "-ir", window_id, "-b", "remove,maximized_vert,maximized_horz"])
+        wait_for_window_state(window_id, "MAXIMIZED_VERT", False)
         run(["wmctrl", "-ir", window_id, "-e", "0,80,60,900,660"])
         width, height = geometry(window_id)
         assert abs(width - 900) <= 40 and abs(height - 660) <= 20, (
