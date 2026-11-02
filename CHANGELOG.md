@@ -11,7 +11,7 @@
 - `tests/test_user_iso.py`: تصحيح fixture لاختبار أن مدخل Persistence هو الافتراضي كما في قالب الإقلاع الفعلي.
 - `tests/qemu-runner.py`: إصلاح رفض لقطة سطح ISO-X الحالية بسبب شرط قديم للون الخلفية، وتطبيع ANSI عند فحص سجلات graphical target. أُضيفت اختبارات للوحة ISO-X الفعلية ولمؤشرات علامة الجاهزية.
 - سجل التحذيرات والقيود والأجهزة غير المختبرة في `docs/KNOWN_WARNINGS_AR.md`. ما زال segfault لـ`tint2` موثقًا وغير محلول؛ لا تُخفى الرسالة ولا يُدّعى أن الشريط يعمل بثبات.
-- التحقق النهائي المحلي: `python3 -m pytest -q` (**61 passed، 1 skipped، 4 subtests passed**)، `bash tests/smoke.sh`، `bash tests/test_qemu_headless_validation.sh`، واختبار GTK/Openbox على Xvfb بدقة `1366x1024` كلها نجحت. لم يُبنَ ISO أو يُشغّل CI جديد؛ لا يثبت ذلك APT الفعلي أو persistence بعد reboot أو الصوت/HDMI أو إقلاع صورة من هذا worktree.
+- التحقق المحلي قبل إصلاح fixture الأخير: `python3 -m pytest -q` (**61 passed، 1 skipped، 4 subtests passed**)، `bash tests/smoke.sh`، `bash tests/test_qemu_headless_validation.sh`، واختبار GTK/Openbox على Xvfb بدقة `1366x1024` كلها نجحت. CI `41483673606` كشف أن fixture GRUB لا يحدد مدخل Persistence الافتراضي؛ أُصلح محليًا، وتُعاد الاختبارات وCI. لم يثبت بعد build/إقلاع ISO أو APT الفعلي أو persistence بعد reboot أو الصوت/HDMI.
 
 
 ## 2026-11-02 — استكمال التحقق المحلي لملحق الهوية والمتجر وعدسة التطبيقات

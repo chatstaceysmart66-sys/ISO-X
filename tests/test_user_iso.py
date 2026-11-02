@@ -321,6 +321,7 @@ class UserIsoTests(unittest.TestCase):
             )
             (tree / "isolinux/live.cfg").write_text(syslinux, encoding="utf-8")
             grub = (
+                'set default="Live system (amd64) with Persistence"\n'
                 'set timeout=10\nmenuentry "Live system (amd64)" {\n'
                 f" linux /live/vmlinuz boot=live config components username=user hostname=iso-x console=tty0 "
                 f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
@@ -387,6 +388,7 @@ class UserIsoTests(unittest.TestCase):
                 check=True, capture_output=True, text=True,
             )
             released_grub = extracted_grub.read_text(encoding="utf-8").splitlines()
+            self.assertIn('set default="Live system (amd64) with Persistence"', released_grub)
             self.assertFalse(any("isox.ci" in line or "console=tty0" in line or "loglevel=7" in line for line in released_grub))
             grub_commands = [line.strip() for line in released_grub if line.lstrip().startswith("linux ")]
             grub_expected = MODULE.EXPECTED_BASE + ["findiso=${iso_path}"]
