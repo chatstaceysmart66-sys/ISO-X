@@ -15,11 +15,11 @@ mouse_effects = 1
 mouse_hover_icon_asb = 100 0 10
 mouse_pressed_icon_asb = 100 0 20
 
-# Launcher section: ISO-X is the app/start launcher, plus browser and files.
+# Launcher section: the ISO-X dragon opens installed applications.
 launcher_padding = 6 3 6
 launcher_background_id = 0
 launcher_icon_size = 26
-launcher_item_app = /usr/share/applications/iso-x.desktop
+launcher_item_app = /usr/share/applications/isox-launcher.desktop
 launcher_item_app = /usr/share/applications/isox-installer.desktop
 launcher_item_app = /usr/share/applications/firefox-esr.desktop
 launcher_item_app = /usr/share/applications/pcmanfm.desktop

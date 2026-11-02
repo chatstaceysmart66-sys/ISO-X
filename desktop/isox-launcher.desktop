@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Applications
+Name[ar]=التطبيقات
+Comment=Browse and launch installed applications
+Comment[ar]=استعراض التطبيقات المثبتة وتشغيلها
+Exec=/usr/local/bin/isox-apps
+Icon=iso-x
+Terminal=false
+Categories=System;

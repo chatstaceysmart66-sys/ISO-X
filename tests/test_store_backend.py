@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from isox_store_backend import (  # noqa: E402
     FLATHUB_URL,
     OperationResult,
+    StoreApp,
     StoreBackend,
     parse_dep11_file,
     parse_appstream_file,
@@ -134,6 +135,80 @@ ProjectLicense: GPL-3.0-or-later
             self.assertEqual(backend._appstream_records(), [])
             backend.invalidate_catalog_cache()
             self.assertEqual(backend._appstream_records()[0]["name"], "Reader")
+
+    def test_application_discovery_surfaces_apt_catalog_failures(self):
+        runner = FakeRunner()
+        runner.responses[("apt-cache", "policy", "example-reader")] = completed(
+            [], returncode=100, stderr="Could not resolve the Debian mirror"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "apps.xml").write_text(
+                "<components><component><id>org.example.Reader</id>"
+                "<pkgname>example-reader</pkgname><name>Reader</name>"
+                "</component></components>",
+                encoding="utf-8",
+            )
+            backend = StoreBackend(
+                runner=runner, appstream_roots=[root], architecture="amd64"
+            )
+            with self.assertRaisesRegex(RuntimeError, "Could not resolve"):
+                backend.search()
+
+    def test_flatpak_catalog_failures_are_not_silently_turned_into_empty_results(self):
+        runner = FakeRunner()
+        runner.responses[("flatpak", "remotes")] = completed(
+            [], returncode=1, stderr="Could not connect to the system bus"
+        )
+        backend = StoreBackend(runner=runner, appstream_roots=[], architecture="amd64")
+        with patch("isox_store_backend.shutil.which", return_value="/usr/bin/flatpak"):
+            with self.assertRaisesRegex(RuntimeError, "system bus"):
+                backend.search(source="Flatpak")
+
+    def test_all_apt_packages_paginates_without_truncating_or_repeating(self):
+        runner = FakeRunner()
+        runner.responses[("apt-cache", "pkgnames")] = completed(
+            [], stdout="delta\nalpha\ngamma\nbeta\n"
+        )
+        for package in ("alpha", "beta", "delta", "gamma"):
+            runner.responses[("apt-cache", "policy", package)] = completed(
+                [], stdout=f"{package}:\n  Candidate: 1.0\n"
+            )
+            runner.responses[("apt-cache", "show", package)] = completed(
+                [], stdout=f"Package: {package}\nVersion: 1.0\nArchitecture: amd64\nSize: 1024\n\n"
+            )
+        backend = StoreBackend(runner=runner, appstream_roots=[], architecture="amd64")
+
+        first = backend.all_apt_packages(page=0, page_size=2)
+        second = backend.all_apt_packages(page=1, page_size=2)
+
+        self.assertEqual([app.package_id for app in first.items], ["alpha", "beta"])
+        self.assertEqual([app.package_id for app in second.items], ["delta", "gamma"])
+        self.assertEqual(first.total_items, 4)
+        self.assertTrue(first.has_next)
+        self.assertTrue(second.has_previous)
+        self.assertFalse(second.has_next)
+        queried = [call[2] for call in runner.calls if call[:2] == ["apt-cache", "policy"]]
+        self.assertEqual(queried, ["alpha", "beta", "delta", "gamma"])
+
+    def test_search_page_validates_and_preserves_all_results(self):
+        runner = FakeRunner()
+        backend = StoreBackend(runner=runner, appstream_roots=[], architecture="amd64")
+        with patch.object(backend, "search", return_value=[
+            StoreApp(str(index), "apt", "APT", f"App {index}", "", "System", f"pkg{index}")
+            for index in range(5)
+        ]):
+            first = backend.search_page(page=0, page_size=2)
+            second = backend.search_page(page=1, page_size=2)
+            self.assertEqual([app.package_id for app in first.items], ["pkg0", "pkg1"])
+            self.assertEqual([app.package_id for app in second.items], ["pkg2", "pkg3"])
+            self.assertEqual(first.total_items, 5)
+            self.assertTrue(first.has_next)
+            self.assertFalse(backend.search_page(page=0, page_size=2).page > 0)
+        with self.assertRaises(ValueError):
+            backend.search_page(page=-1)
+        with self.assertRaises(ValueError):
+            backend.all_apt_packages(page_size=101)
 
     def test_apt_results_are_source_verified_and_include_real_package_metadata(self):
         runner = FakeRunner()

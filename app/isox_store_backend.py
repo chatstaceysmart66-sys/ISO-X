@@ -95,6 +95,22 @@ class OperationResult:
     returncode: int | None = None
 
 
+@dataclass(frozen=True)
+class AppPage:
+    items: list[StoreApp]
+    page: int
+    page_size: int
+    total_items: int
+
+    @property
+    def has_previous(self) -> bool:
+        return self.page > 0
+
+    @property
+    def has_next(self) -> bool:
+        return (self.page + 1) * self.page_size < self.total_items
+
+
 def _run(
     argv: Sequence[str],
     *,
@@ -382,10 +398,11 @@ class StoreBackend:
             return self._policy_cache[package]
         try:
             result = self.runner(["apt-cache", "policy", package], timeout=10)
-        except (OSError, subprocess.SubprocessError):
-            return "", False
+        except (OSError, subprocess.SubprocessError) as error:
+            raise RuntimeError(f"APT policy query failed for {package}: {error}") from error
         if result.returncode:
-            return "", False
+            detail = (result.stderr or result.stdout or f"exit status {result.returncode}").strip()
+            raise RuntimeError(f"APT policy query failed for {package}: {detail[-1000:]}")
         candidate = ""
         for line in result.stdout.splitlines():
             match = re.match(r"\s*Candidate:\s*(\S+)", line)
@@ -453,16 +470,17 @@ class StoreBackend:
             return []
         try:
             result = self.runner(["apt-cache", "search", "--names-only", query.strip()], timeout=30)
-        except (OSError, subprocess.SubprocessError):
-            return []
+        except (OSError, subprocess.SubprocessError) as error:
+            raise RuntimeError(f"APT search failed: {error}") from error
         if result.returncode:
-            return []
+            detail = (result.stderr or result.stdout or f"exit status {result.returncode}").strip()
+            raise RuntimeError(f"APT search failed: {detail[-1000:]}")
         matches = []
         for line in result.stdout.splitlines():
             package, separator, summary = line.partition(" - ")
             if separator and PACKAGE_RE.fullmatch(package.strip()):
                 matches.append((package.strip(), summary.strip()))
-        return matches[:120]
+        return matches
 
     def _installed_desktop_apps(self) -> list[StoreApp]:
         result: list[StoreApp] = []
@@ -537,7 +555,7 @@ class StoreBackend:
                 })
                 fallback_summaries[package] = summary
         apps = []
-        for package, record in list(candidates.items())[:80]:
+        for package, record in sorted(candidates.items(), key=lambda item: (str(item[1]["name"]).casefold(), item[0])):
             version, available = self._package_policy(package)
             if not available:
                 continue
@@ -585,23 +603,26 @@ class StoreBackend:
             return []
         try:
             remotes = self.runner(["flatpak", "remotes", "--user", "--columns=name"], timeout=15)
-        except (OSError, subprocess.SubprocessError):
-            return []
+        except (OSError, subprocess.SubprocessError) as error:
+            raise RuntimeError(f"Flatpak remote discovery failed: {error}") from error
         if remotes.returncode:
-            return []
+            detail = (remotes.stderr or remotes.stdout or f"exit status {remotes.returncode}").strip()
+            raise RuntimeError(f"Flatpak remote discovery failed: {detail[-1000:]}")
         installed_by_id: dict[str, tuple[str, str, str]] = {}
         try:
             installed = self.runner(
                 ["flatpak", "list", "--user", "--app", "--columns=application,name,version,origin,arch"],
                 timeout=20,
             )
-            if installed.returncode == 0:
-                for line in installed.stdout.splitlines():
-                    fields = line.split("\t")
-                    if len(fields) >= 5 and FLATPAK_ID_RE.fullmatch(fields[0]):
-                        installed_by_id[fields[0]] = (fields[1], fields[2], fields[3])
-        except (OSError, subprocess.SubprocessError):
-            pass
+            if installed.returncode:
+                detail = (installed.stderr or installed.stdout or f"exit status {installed.returncode}").strip()
+                raise RuntimeError(f"Flatpak installed-app discovery failed: {detail[-1000:]}")
+            for line in installed.stdout.splitlines():
+                fields = line.split("\t")
+                if len(fields) >= 5 and FLATPAK_ID_RE.fullmatch(fields[0]):
+                    installed_by_id[fields[0]] = (fields[1], fields[2], fields[3])
+        except (OSError, subprocess.SubprocessError) as error:
+            raise RuntimeError(f"Flatpak installed-app discovery failed: {error}") from error
         results = []
         terms = query.casefold().split()
         for remote in dict.fromkeys(line.strip() for line in remotes.stdout.splitlines() if line.strip()):
@@ -613,10 +634,11 @@ class StoreBackend:
                     "--columns=application,name,description,version,branch,arch,origin",
                     remote,
                 ], timeout=45)
-            except (OSError, subprocess.SubprocessError):
-                continue
+            except (OSError, subprocess.SubprocessError) as error:
+                raise RuntimeError(f"Flatpak catalog query failed for {remote}: {error}") from error
             if listing.returncode:
-                continue
+                detail = (listing.stderr or listing.stdout or f"exit status {listing.returncode}").strip()
+                raise RuntimeError(f"Flatpak catalog query failed for {remote}: {detail[-1000:]}")
             for line in listing.stdout.splitlines():
                 fields = line.split("\t")
                 if len(fields) < 6:
@@ -663,7 +685,16 @@ class StoreBackend:
                 if source in ("All", "Flatpak"):
                     category_results.extend(self._flatpak_apps(term))
             apps = category_results
-        if category not in ("All", "Installed", "Games", "Windows"):
+        if category == "Productivity":
+            apps = [app for app in apps if app.category in ("Office", "Education")]
+        elif category == "Tools":
+            apps = [app for app in apps if app.category in ("System", "Development")]
+        elif category == "Apps":
+            apps = [
+                app for app in apps
+                if app.desktop_id or app.source in ("flatpak", "installed")
+            ]
+        elif category not in ("All", "Installed", "Games", "Windows"):
             apps = [app for app in apps if app.category == category]
         elif category == "Games":
             apps = [
@@ -679,7 +710,70 @@ class StoreBackend:
         unique: dict[str, StoreApp] = {}
         for app in apps:
             unique.setdefault(app.app_id, app)
-        return sorted(unique.values(), key=lambda app: (not app.installed, app.name.casefold()))[:200]
+        return sorted(unique.values(), key=lambda app: (not app.installed, app.name.casefold()))
+
+    def search_page(
+        self,
+        query: str = "",
+        category: str = "All",
+        *,
+        source: str = "All",
+        page: int = 0,
+        page_size: int = 24,
+    ) -> AppPage:
+        if page < 0 or not 1 <= page_size <= 100:
+            raise ValueError("page must be non-negative and page_size must be between 1 and 100")
+        apps = self.search(query, category, source=source)
+        start = page * page_size
+        return AppPage(apps[start:start + page_size], page, page_size, len(apps))
+
+    def all_apt_packages(self, query: str = "", *, page: int = 0, page_size: int = 30) -> AppPage:
+        if page < 0 or not 1 <= page_size <= 100:
+            raise ValueError("page must be non-negative and page_size must be between 1 and 100")
+        query = query.strip()[:160]
+        if query:
+            matches = self._apt_search(query)
+            summaries = dict(matches)
+            package_names = sorted(summaries)
+        else:
+            try:
+                result = self.runner(["apt-cache", "pkgnames"], timeout=45)
+            except (OSError, subprocess.SubprocessError) as error:
+                raise RuntimeError(f"APT package catalog failed: {error}") from error
+            if result.returncode:
+                detail = (result.stderr or result.stdout or f"exit status {result.returncode}").strip()
+                raise RuntimeError(f"APT package catalog failed: {detail[-1000:]}")
+            package_names = sorted({
+                name.strip() for name in result.stdout.splitlines()
+                if PACKAGE_RE.fullmatch(name.strip())
+            })
+            summaries = {}
+
+        start = page * page_size
+        selected = package_names[start:start + page_size]
+        apps: list[StoreApp] = []
+        for package in selected:
+            version, available = self._package_policy(package)
+            if not available:
+                continue
+            installed, installed_version = self._package_state(package)
+            size, architecture = self._apt_metadata(package, version)
+            if architecture and self.architecture and architecture not in (self.architecture, "all"):
+                continue
+            apps.append(StoreApp(
+                app_id=f"apt-package:{package}",
+                source="apt",
+                source_name="Debian APT",
+                name=package,
+                summary=summaries.get(package, "Debian package"),
+                category="All packages",
+                package_id=package,
+                version=installed_version if installed else version,
+                installed=installed,
+                size_bytes=size,
+                architecture=architecture or self.architecture,
+            ))
+        return AppPage(apps, page, page_size, len(package_names))
 
     def installed_apps(self) -> list[StoreApp]:
         apps = self._apt_apps() + self._flatpak_apps()

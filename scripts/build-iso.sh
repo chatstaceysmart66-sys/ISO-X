@@ -182,6 +182,7 @@ fi
 install -m 0644 "$PROJECT_DIR/app/iso_x_gtk.py" config/includes.chroot/usr/share/iso-x/iso_x_gtk.py
 install -m 0644 "$PROJECT_DIR/app/isox_appcenter.py" config/includes.chroot/usr/share/iso-x/isox_appcenter.py
 install -m 0644 "$PROJECT_DIR/app/isox_store_backend.py" config/includes.chroot/usr/share/iso-x/isox_store_backend.py
+install -m 0644 "$PROJECT_DIR/app/isox_launcher.py" config/includes.chroot/usr/share/iso-x/isox_launcher.py
 install -m 0644 "$PROJECT_DIR/app/isox_keyboard.py" config/includes.chroot/usr/share/iso-x/isox_keyboard.py
 install -m 0644 "$PROJECT_DIR"/assets/sounds/*.wav config/includes.chroot/usr/share/iso-x/assets/sounds/
 install -m 0644 "$PROJECT_DIR/app/isox_welcome.py" config/includes.chroot/usr/share/iso-x/isox_welcome.py
@@ -201,26 +202,28 @@ install -m 0644 "$PROJECT_DIR/db/schema.sql" config/includes.chroot/usr/share/is
 install -m 0644 "$PROJECT_DIR/db/migrations/002_isox_020.sql" config/includes.chroot/usr/share/iso-x/db/migrations/002_isox_020.sql
 install -m 0644 "$PROJECT_DIR/db/migrations/003_isox_031.sql" config/includes.chroot/usr/share/iso-x/db/migrations/003_isox_031.sql
 install -m 0644 "$PROJECT_DIR/db/migrations/004_isox_040.sql" config/includes.chroot/usr/share/iso-x/db/migrations/004_isox_040.sql
+BRAND_ASSET_DIR="$BUILD_DIR/generated-brand-assets"
+python3 "$PROJECT_DIR/scripts/generate-brand-assets.py" --output-dir "$BRAND_ASSET_DIR"
 install -m 0644 "$PROJECT_DIR/assets/iso-x-dragon.svg" config/includes.chroot/usr/share/iso-x/assets/iso-x-dragon.svg
-install -m 0644 "$PROJECT_DIR/assets/iso-x-dragon.png" config/includes.chroot/usr/share/iso-x/assets/iso-x-dragon.png
-install -m 0644 "$PROJECT_DIR/assets/iso-x-boot.svg" config/includes.chroot/usr/share/iso-x/assets/iso-x-boot.svg
-install -m 0644 "$PROJECT_DIR/assets/iso-x-boot.png" config/includes.chroot/usr/share/iso-x/assets/iso-x-boot.png
+install -m 0644 "$BRAND_ASSET_DIR/iso-x-dragon.png" config/includes.chroot/usr/share/iso-x/assets/iso-x-dragon.png
+install -m 0644 "$BRAND_ASSET_DIR/iso-x-boot.svg" config/includes.chroot/usr/share/iso-x/assets/iso-x-boot.svg
+install -m 0644 "$BRAND_ASSET_DIR/iso-x-boot.png" config/includes.chroot/usr/share/iso-x/assets/iso-x-boot.png
 install -m 0644 "$PROJECT_DIR/plymouth/isox/isox.plymouth" config/includes.chroot/usr/share/iso-x/assets/isox.plymouth
 install -m 0644 "$PROJECT_DIR/plymouth/isox/isox.script" config/includes.chroot/usr/share/iso-x/assets/isox.script
-install -m 0644 "$PROJECT_DIR/assets/iso-x-desktop-wallpaper.svg" config/includes.chroot/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.svg
-install -m 0644 "$PROJECT_DIR/assets/iso-x-desktop-wallpaper.png" config/includes.chroot/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.png
+install -m 0644 "$BRAND_ASSET_DIR/iso-x-desktop-wallpaper.svg" config/includes.chroot/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.svg
+install -m 0644 "$BRAND_ASSET_DIR/iso-x-desktop-wallpaper.png" config/includes.chroot/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.png
 install -m 0644 "$PROJECT_DIR/assets/iso-x-dragon.svg" config/includes.chroot/usr/share/icons/hicolor/scalable/apps/iso-x.svg
 if [[ "$CINEMATIC_READY" -eq 1 && -x "$CINEMATIC_BIN" ]]; then
   FONT_SOURCE="$(find /usr/share/fonts -type f \( -iname 'NotoSansArabic-Regular.ttf' -o -iname 'NotoSansArabic-VF.ttf' \) -print -quit 2>/dev/null || true)"
   if [[ -n "$FONT_SOURCE" ]]; then
     install -m 0755 "$CINEMATIC_BIN" config/includes.chroot/usr/local/bin/isox-cinematic
     install -D -m 0644 "$FONT_SOURCE" config/includes.chroot/usr/share/iso-x/cinematic-assets/fonts/NotoSansArabic-Regular.ttf
-    install -D -m 0644 "$PROJECT_DIR/assets/iso-x-dragon.png" config/includes.chroot/usr/share/iso-x/cinematic-assets/images/iso-x-dragon.png
+    install -D -m 0644 "$BRAND_ASSET_DIR/iso-x-dragon.png" config/includes.chroot/usr/share/iso-x/cinematic-assets/images/iso-x-dragon.png
   else
     echo "تحذير: لا يوجد خط مشهد Bevy على المضيف؛ سيُستبعد المشهد من الصورة." >&2
   fi
 fi
-install -m 0644 "$PROJECT_DIR/assets/iso-x-plymouth.png" config/includes.chroot/usr/share/iso-x/assets/iso-x-plymouth.png
+install -m 0644 "$BRAND_ASSET_DIR/iso-x-plymouth.png" config/includes.chroot/usr/share/iso-x/assets/iso-x-plymouth.png
 if [[ "$WATERMARK_ENABLED" == 1 ]]; then
   install -m 0644 "$PROJECT_DIR/kernel/isox-watermark/isox_watermark.c" config/includes.chroot/usr/src/isox-watermark-0.3.1/isox_watermark.c
   install -m 0644 "$PROJECT_DIR/kernel/isox-watermark/Makefile" config/includes.chroot/usr/src/isox-watermark-0.3.1/Makefile
@@ -311,6 +314,12 @@ KEYBOARD_LAUNCH
 chmod 0755 config/includes.chroot/usr/local/bin/isox-keyboard
 install -m 0644 "$PROJECT_DIR/desktop/isox-welcome.desktop" config/includes.chroot/usr/share/applications/isox-welcome.desktop
 install -m 0644 "$PROJECT_DIR/desktop/isox-store.desktop" config/includes.chroot/usr/share/applications/isox-store.desktop
+cat > config/includes.chroot/usr/local/bin/isox-apps <<'APP_LAUNCHER'
+#!/bin/sh
+exec /usr/bin/python3 /usr/share/iso-x/isox_launcher.py "$@"
+APP_LAUNCHER
+chmod 0755 config/includes.chroot/usr/local/bin/isox-apps
+install -m 0644 "$PROJECT_DIR/desktop/isox-launcher.desktop" config/includes.chroot/usr/share/applications/isox-launcher.desktop
 cat > config/includes.chroot/usr/share/applications/iso-x.desktop <<'DESKTOP'
 [Desktop Entry]
 Type=Application
@@ -320,6 +329,7 @@ Exec=/usr/local/bin/iso-x
 Icon=iso-x
 Terminal=false
 Categories=System;Utility;
+NoDisplay=true
 DESKTOP
 cat > config/includes.chroot/usr/share/applications/isox-installer.desktop <<'INSTALLER_DESKTOP'
 [Desktop Entry]
@@ -395,6 +405,10 @@ Name[ar]=سلة المحذوفات
 URL=trash:///
 Icon=user-trash
 ICON_TRASH
+for shortcut in google youtube chatgpt; do
+  install -m 0644 "$PROJECT_DIR/desktop/$shortcut.desktop" \
+    "config/includes.chroot/etc/skel/سطح المكتب/$shortcut.desktop"
+done
 cat > "config/includes.chroot/etc/skel/سطح المكتب/Network.desktop" <<'ICON_NETWORK'
 [Desktop Entry]
 Type=Application

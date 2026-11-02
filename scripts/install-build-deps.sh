@@ -17,7 +17,7 @@ fi
   live-build debootstrap squashfs-tools xorriso isolinux syslinux-common syslinux-efi \
   grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed mtools dosfstools \
   qemu-system-x86 qemu-utils ovmf openssl fonts-noto-core build-essential pkg-config \
-  python3-pytest desktop-file-utils libxml2-utils systemd file procps \
+  python3-pytest python3-cairosvg desktop-file-utils libxml2-utils systemd file procps \
   clang lld cmake ninja-build libudev-dev libasound2-dev libx11-dev libx11-xcb-dev \
   libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev \
   libxkbcommon-x11-dev libxcursor-dev libxi-dev libxrandr-dev \
@@ -27,6 +27,7 @@ for cmd in lb debootstrap mksquashfs xorriso qemu-system-x86_64 qemu-img openssl
   command -v "$cmd" >/dev/null || { echo "Missing required command after setup: $cmd" >&2; exit 4; }
 done
 python3 -c 'import pytest; print("python3 pytest module:", pytest.__version__)'
+python3 -c 'import cairosvg; print("CairoSVG:", cairosvg.__version__)'
 python3 -m pytest --version
 dpkg-query -W -f='${Package}=${Version}\n' live-build debootstrap squashfs-tools xorriso \
   grub-pc-bin grub-efi-amd64-bin isolinux syslinux-efi qemu-system-x86 qemu-utils ovmf \

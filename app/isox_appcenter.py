@@ -17,7 +17,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
 
-from isox_store_backend import OperationResult, StoreApp, StoreBackend
+from isox_store_backend import AppPage, OperationResult, StoreApp, StoreBackend
 
 
 APP_NAME = "ISO-X Store"
@@ -31,27 +31,51 @@ SOUND_FILES = {
     "download-complete": "download-complete.wav",
 }
 SETTINGS_PATH = Path.home() / ".config/iso-x/store.json"
+BRAND_IMAGE_PATH = next(
+    (
+        path for path in (
+            Path("/usr/share/iso-x/assets/iso-x-dragon.png"),
+            Path(__file__).resolve().parent / "assets/iso-x-dragon.png",
+            Path(__file__).resolve().parents[1] / "assets/iso-x-dragon.png",
+        )
+        if path.is_file()
+    ),
+    Path("/usr/share/iso-x/assets/iso-x-dragon.png"),
+)
 DEFAULT_SETTINGS = {"sounds_enabled": True, "sound_volume": 0.35, "theme": "dark", "language": "auto"}
 LANGUAGE_OVERRIDE = "auto"
 SUPPORTED_CATEGORIES = (
     ("All", "الكل", "All"),
+    ("Apps", "التطبيقات الرسومية", "Graphical applications"),
     ("Education", "الدراسة والتعليم", "Study & Education"),
     ("Office", "المستندات والمكتب وPDF", "Documents, Office & PDF"),
     ("Internet", "الإنترنت والتواصل", "Internet & Communication"),
     ("Graphics", "الصور والرسم والتصميم", "Graphics & Design"),
     ("Media", "الفيديو والصوت", "Video & Audio"),
+    ("Productivity", "الإنتاجية", "Productivity"),
     ("Development", "البرمجة والطرفية", "Development & Terminal"),
+    ("Tools", "الأدوات", "Tools"),
     ("System", "الشبكة وأدوات النظام", "Network & System"),
     ("Games", "الألعاب", "Games"),
     ("Windows", "تطبيقات Windows", "Windows Apps"),
     ("Installed", "المثبتة", "Installed"),
 )
+CATALOG_PAGE_SIZE = 24
 CSS = b"""
 window { background: #0b1020; color: #edf4ff; }
 window.light { background: #f1f5fa; color: #142236; }
+label { color: #edf4ff; }
+window.light label { color: #142236; }
+window.light label.brand { color: #0879b7; }
 headerbar { background: #101a2d; color: #f2f7ff; border-bottom: 1px solid #234264; }
 headerbar .title { color: #55c9ff; font-weight: 700; }
-button { border-radius: 9px; padding: 7px 11px; }
+button {
+    background: #182840; color: #edf4ff; border: 1px solid #2c4565;
+    border-radius: 9px; padding: 7px 11px;
+}
+button:hover { background: #1b3858; border-color: #35c4ff; }
+button:disabled { background: #151e30; color: #8798ae; }
+entry, combobox { background: #111b2e; color: #edf4ff; border-color: #294563; }
 button.suggested-action { background: #0879b7; color: #fff; }
 button.destructive-action { background: #8f3248; color: #fff; }
 frame.card { background: #111b2e; border: 1px solid #253955; border-radius: 13px; }
@@ -61,6 +85,7 @@ label.brand { color: #35c4ff; font-weight: 700; }
 list { background: transparent; }
 list row { border-radius: 8px; padding: 4px; }
 list row:selected { background: #143c5c; }
+label.empty-state { padding: 48px; font-size: 15px; }
 """
 LIGHT_CSS = b"""
 window.light headerbar { background: #ffffff; color: #142236; border-bottom: 1px solid #c8d8e8; }
@@ -130,10 +155,9 @@ class StoreWindow(Gtk.Window):
         self.set_size_request(780, 560)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.connect("delete-event", self._on_delete_event)
-        logo_path = Path("/usr/share/iso-x/assets/iso-x-dragon.png")
-        if logo_path.is_file():
+        if BRAND_IMAGE_PATH.is_file():
             try:
-                self.set_icon_from_file(str(logo_path))
+                self.set_icon_from_file(str(BRAND_IMAGE_PATH))
             except GLib.Error:
                 self.set_icon_name("applications-other")
         else:
@@ -149,6 +173,9 @@ class StoreWindow(Gtk.Window):
         self.current_category = "All"
         self.current_source = "All"
         self.search_text = ""
+        self.result_page = 0
+        self.total_results = 0
+        self.navigation_update = False
         self.apps: list[StoreApp] = []
         self.pending_updates: list[str] = []
         self.operation_history: list[tuple[str, str, str]] = []
@@ -191,6 +218,19 @@ class StoreWindow(Gtk.Window):
         header = Gtk.HeaderBar(title=APP_NAME)
         header.set_show_close_button(True)
         header.set_subtitle(DEVELOPER)
+        brand = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7)
+        try:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                str(BRAND_IMAGE_PATH), 24, 24, True
+            )
+            brand_image = Gtk.Image.new_from_pixbuf(pixbuf)
+        except GLib.Error:
+            brand_image = Gtk.Image.new_from_icon_name(
+                "applications-other", Gtk.IconSize.MENU
+            )
+        brand.pack_start(brand_image, False, False, 0)
+        brand.pack_start(Gtk.Label(label=_text("متجر ISO-X", "ISO-X Store")), False, False, 0)
+        header.set_custom_title(brand)
         self.set_titlebar(header)
 
         shell = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
@@ -203,11 +243,16 @@ class StoreWindow(Gtk.Window):
         self.page_rows: dict[str, Gtk.ListBoxRow] = {}
         for page_id, arabic, english in (
             ("home", "الرئيسية", "Home"),
+            ("apps", "التطبيقات", "Applications"),
             ("games", "الألعاب", "Games"),
-            ("windows", "تطبيقات Windows", "Windows Apps"),
+            ("internet", "الإنترنت", "Internet"),
+            ("media", "الوسائط والصور", "Media & Graphics"),
+            ("productivity", "الإنتاجية", "Productivity"),
+            ("tools", "الأدوات", "Tools"),
             ("installed", "المثبتة", "Installed"),
             ("updates", "التحديثات", "Updates"),
-            ("downloads", "النشاط", "Activity"),
+            ("packages", "كل الحزم", "All packages"),
+            ("downloads", "التنزيلات والنشاط", "Downloads & activity"),
             ("settings", "الإعدادات", "Settings"),
         ):
             row = Gtk.ListBoxRow()
@@ -292,7 +337,30 @@ class StoreWindow(Gtk.Window):
         self.flow.set_row_spacing(10)
         self.flow.set_column_spacing(10)
         self.apps_scroll.add(self.flow)
-        self.stack.add_named(self.apps_scroll, "apps")
+        self.empty_state = Gtk.Label(
+            label=_text(
+                "لا توجد نتائج في هذا القسم من المصادر المفعّلة. جرّب البحث أو تحديث الفهارس.",
+                "No results are available in this section from enabled sources. Try another search or refresh catalogs.",
+            ),
+            xalign=0.5,
+            yalign=0.5,
+        )
+        self.empty_state.set_line_wrap(True)
+        self.empty_state.get_style_context().add_class("empty-state")
+        self.pagination = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.previous_page = Gtk.Button(label=_text("السابق", "Previous"))
+        self.previous_page.connect("clicked", self._change_page, -1)
+        self.page_status = Gtk.Label(label="")
+        self.next_page = Gtk.Button(label=_text("التالي", "Next"))
+        self.next_page.connect("clicked", self._change_page, 1)
+        self.pagination.pack_start(self.previous_page, False, False, 0)
+        self.pagination.pack_start(self.page_status, True, True, 0)
+        self.pagination.pack_end(self.next_page, False, False, 0)
+        apps_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        apps_page.pack_start(self.apps_scroll, True, True, 0)
+        apps_page.pack_start(self.empty_state, True, True, 0)
+        apps_page.pack_end(self.pagination, False, False, 0)
+        self.stack.add_named(apps_page, "apps")
         self.activity = Gtk.ListBox()
         activity_scroll = Gtk.ScrolledWindow()
         activity_scroll.add(self.activity)
@@ -385,81 +453,132 @@ class StoreWindow(Gtk.Window):
     def _sidebar_activated(self, _sidebar: Gtk.ListBox, row: Gtk.ListBoxRow) -> None:
         page_id = getattr(row, "page_id", "home")
         self.current_page = page_id
+        self.navigation_update = True
+        self.result_page = 0
         self.search.set_text("")
-        self.category.set_active_id("Installed" if page_id == "installed" else "All")
-        self.search.set_sensitive(page_id not in ("settings", "downloads"))
-        self.category.set_sensitive(page_id not in ("settings", "downloads"))
-        self.source.set_sensitive(page_id not in ("settings", "downloads"))
+        category = {
+            "home": "Apps",
+            "apps": "Apps",
+            "games": "Games",
+            "internet": "Internet",
+            "media": "Media",
+            "productivity": "Productivity",
+            "tools": "Tools",
+            "installed": "Installed",
+        }.get(page_id, "All")
+        self.category.set_active_id(category)
+        if page_id == "packages":
+            self.source.set_active_id("APT")
+        else:
+            self.source.set_active_id("All")
+        self.navigation_update = False
+        catalog_page = page_id not in ("settings", "downloads", "updates")
+        self.search.set_sensitive(catalog_page)
+        self.category.set_sensitive(catalog_page and page_id != "packages")
+        self.source.set_sensitive(catalog_page and page_id != "packages")
         self.stack.set_visible_child_name("settings" if page_id == "settings" else "activity" if page_id == "downloads" else "apps")
         if page_id == "updates":
             self._check_updates()
-        elif page_id in ("games", "windows"):
-            self.search.set_text("")
-            self.category.set_active_id("Games" if page_id == "games" else "Windows")
-        elif page_id in ("home", "installed"):
+        elif page_id not in ("settings", "downloads"):
             self._refresh_catalog()
-        elif page_id == "downloads":
+        else:
             self._show_activity()
 
     def _search_changed(self, _entry: Gtk.SearchEntry) -> None:
-        if self.current_page in ("settings", "downloads"):
+        if self.navigation_update or self.current_page in ("settings", "downloads", "updates"):
             return
+        self.result_page = 0
+        self.generation += 1
         if hasattr(self, "_search_timeout"):
             GLib.source_remove(self._search_timeout)
         self._search_timeout = GLib.timeout_add(300, self._refresh_catalog)
 
     def _category_changed(self, combo: Gtk.ComboBoxText) -> None:
         self.current_category = combo.get_active_id() or "All"
-        if self.current_page not in ("settings", "downloads"):
+        self.result_page = 0
+        if not self.navigation_update and self.current_page not in ("settings", "downloads", "updates", "packages"):
             self._refresh_catalog()
 
     def _source_changed(self, combo: Gtk.ComboBoxText) -> None:
         self.current_source = combo.get_active_id() or "All"
-        if self.current_page not in ("settings", "downloads"):
+        self.result_page = 0
+        if not self.navigation_update and self.current_page not in ("settings", "downloads", "updates", "packages"):
             self._refresh_catalog()
 
     def _sort_changed(self, combo: Gtk.ComboBoxText) -> None:
         self.sort_mode = combo.get_active_id() or "name"
         self._render_apps(self.apps)
 
+    def _change_page(self, _button: Gtk.Button, direction: int) -> None:
+        page_count = (self.total_results + CATALOG_PAGE_SIZE - 1) // CATALOG_PAGE_SIZE
+        self.result_page = max(0, min(self.result_page + direction, page_count - 1))
+        self._refresh_catalog()
+
     def _refresh_catalog(self) -> bool:
         if self.busy:
+            return False
+        if self.current_page == "updates":
+            self._check_updates()
             return False
         self.generation += 1
         generation = self.generation
         query = self.search.get_text().strip()
         category = self.category.get_active_id() or "All"
         source = self.source.get_active_id() or "All"
-        if self.current_page == "installed":
-            category = "Installed"
-        if self.current_page == "games":
-            category = "Games"
-        if self.current_page == "windows":
-            category = "Windows"
+        category = {
+            "home": "Apps",
+            "apps": "Apps",
+            "games": "Games",
+            "internet": "Internet",
+            "media": "Media",
+            "productivity": "Productivity",
+            "tools": "Tools",
+            "installed": "Installed",
+        }.get(self.current_page, category)
+        all_packages = self.current_page == "packages"
+        result_page = self.result_page
+        if all_packages:
+            source = "APT"
         self.spinner.start()
         self.status.set_text(_text("جارٍ البحث في المصادر المحلية…", "Searching configured local sources…"))
 
         def work() -> None:
             try:
-                apps = self.backend.search(query, category, source=source)
+                result = (
+                    self.backend.all_apt_packages(
+                        query, page=result_page, page_size=CATALOG_PAGE_SIZE
+                    )
+                    if all_packages
+                    else self.backend.search_page(
+                        query,
+                        category,
+                        source=source,
+                        page=result_page,
+                        page_size=CATALOG_PAGE_SIZE,
+                    )
+                )
                 error = ""
             except Exception as exc:
-                apps, error = [], f"{type(exc).__name__}: {exc}"
-            GLib.idle_add(self._catalog_loaded, generation, apps, error)
+                result, error = None, f"{type(exc).__name__}: {exc}"
+            GLib.idle_add(self._catalog_loaded, generation, result, error)
 
         threading.Thread(target=work, daemon=True).start()
         return False
 
-    def _catalog_loaded(self, generation: int, apps: list[StoreApp], error: str) -> bool:
+    def _catalog_loaded(self, generation: int, result: AppPage | None, error: str) -> bool:
         if generation != self.generation:
             return False
         self.spinner.stop()
-        self.apps = apps
+        self.apps = result.items if result is not None else []
+        self.total_results = result.total_items if result is not None else 0
         if error:
             self.status.set_text(_text("تعذر اكتشاف التطبيقات: ", "App discovery failed: ") + error)
         else:
-            self.status.set_text(_text(f"عُثر على {len(apps)} نتيجة من المصادر المفعّلة.", f"{len(apps)} results from configured sources."))
-        self._render_apps(apps)
+            self.status.set_text(_text(
+                f"عُثر على {self.total_results} نتيجة من المصادر المفعّلة.",
+                f"{self.total_results} results from configured sources.",
+            ))
+        self._render_apps(self.apps)
         self._update_source_buttons()
         return False
 
@@ -474,6 +593,21 @@ class StoreWindow(Gtk.Window):
         for app in apps:
             self.flow.add(self._app_card(app))
         self.flow.show_all()
+        has_results = bool(apps)
+        self.apps_scroll.set_visible(has_results)
+        self.empty_state.set_visible(not has_results)
+        page_count = (self.total_results + CATALOG_PAGE_SIZE - 1) // CATALOG_PAGE_SIZE
+        self.pagination.set_visible(page_count > 1)
+        self.previous_page.set_sensitive(self.result_page > 0)
+        self.next_page.set_sensitive(self.result_page + 1 < page_count)
+        if self.total_results:
+            first = self.result_page * CATALOG_PAGE_SIZE + 1
+            last = first + len(apps) - 1
+            self.page_status.set_text(
+                _text(f"{first}–{last} من {self.total_results}", f"{first}–{last} of {self.total_results}")
+            )
+        else:
+            self.page_status.set_text("")
 
     def _app_card(self, app: StoreApp) -> Gtk.Widget:
         frame = Gtk.Frame()
@@ -627,6 +761,7 @@ class StoreWindow(Gtk.Window):
             result = work()
             if not result.success:
                 return result
+            self.backend.invalidate_catalog_cache()
             installed = self.backend.is_installed(app.source, app.package_id)
             expected = operation != "remove"
             if installed != expected:
@@ -684,9 +819,11 @@ class StoreWindow(Gtk.Window):
     def _set_controls_sensitive(self, sensitive: bool) -> None:
         for widget in (self.refresh_button, self.update_button, self.upgrade_button, self.flatpak_button, self.flathub_button):
             widget.set_sensitive(sensitive)
-        self.search.set_sensitive(sensitive and self.current_page not in ("settings", "downloads"))
-        self.category.set_sensitive(sensitive and self.current_page not in ("settings", "downloads"))
-        self.source.set_sensitive(sensitive and self.current_page not in ("settings", "downloads"))
+        self.sidebar.set_sensitive(sensitive)
+        catalog_page = self.current_page not in ("settings", "downloads", "updates")
+        self.search.set_sensitive(sensitive and catalog_page)
+        self.category.set_sensitive(sensitive and catalog_page and self.current_page != "packages")
+        self.source.set_sensitive(sensitive and catalog_page and self.current_page != "packages")
         self.flow.set_sensitive(sensitive)
 
     def _refresh_indexes(self, _button: Gtk.Button) -> None:
@@ -707,6 +844,8 @@ class StoreWindow(Gtk.Window):
     def _check_updates(self, _button: Gtk.Button | None = None) -> None:
         if self.busy:
             return
+        self.generation += 1
+        generation = self.generation
         self.busy = True
         self._set_controls_sensitive(False)
         self.spinner.start()
@@ -736,11 +875,13 @@ class StoreWindow(Gtk.Window):
                 error = ""
             except Exception as exc:
                 updates, apps, error = [], [], f"{type(exc).__name__}: {exc}"
-            GLib.idle_add(self._updates_loaded, updates, apps, error)
+            GLib.idle_add(self._updates_loaded, generation, updates, apps, error)
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _updates_loaded(self, updates: list[str], apps: list[StoreApp], error: str) -> bool:
+    def _updates_loaded(self, generation: int, updates: list[str], apps: list[StoreApp], error: str) -> bool:
+        if generation != self.generation:
+            return False
         self.busy = False
         self.spinner.stop()
         self._set_controls_sensitive(True)
@@ -753,6 +894,8 @@ class StoreWindow(Gtk.Window):
             or (flatpak_updates and bool(shutil.which("flatpak")))
         )
         self.apps = apps
+        self.result_page = 0
+        self.total_results = len(apps)
         self._render_apps(apps)
         if error:
             self.status.set_text(_text("تعذر فحص التحديثات: ", "Update check failed: ") + error)

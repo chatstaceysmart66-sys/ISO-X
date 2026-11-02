@@ -51,7 +51,7 @@ def wait_for_layout(expected: str) -> None:
             return
         time.sleep(0.05)
     raise AssertionError(
-        f"XKB did not switch to {expected!r}; expected_group={expected_group};\n{xkb_diagnostics()}"
+        f"XKB did not switch to {expected!r}; expected_layout={expected_layout};\n{xkb_diagnostics()}"
     )
 
 
@@ -383,6 +383,7 @@ def exercise_gtk_text_input() -> None:
         source = textwrap.dedent("""
             import os
             import gi
+            gi.require_version("Gdk", "3.0")
             gi.require_version("Gtk", "3.0")
             from gi.repository import Gtk
             from pathlib import Path
@@ -404,11 +405,20 @@ def exercise_gtk_text_input() -> None:
             run(["xdotool", "windowactivate", "--sync", window_id])
             run(["xdotool", "key", "38"])
             _wait_for_text(result_path, "ش")
+            run(["xdotool", "key", "25"])
+            _wait_for_text(result_path, "شص")
+            run(["xdotool", "type", "--clearmodifiers", "و"])
+            _wait_for_text(result_path, "شصو")
             assert toggle_layout() == "EN"
             wait_for_layout("us")
             run(["xdotool", "key", "ctrl+a", "BackSpace"])
             run(["xdotool", "key", "38"])
             _wait_for_text(result_path, "a")
+            run(["xdotool", "key", "w"])
+            _wait_for_text(result_path, "aw")
+            assert run(["xdotool", "getwindowfocus"]) == window_id, (
+                "typing W opened an Openbox menu instead of reaching the focused entry"
+            )
         finally:
             if process.poll() is None:
                 process.terminate()
@@ -513,6 +523,300 @@ def exercise_terminal_text_input() -> None:
             result_path.unlink(missing_ok=True)
 
 
+def exercise_application_launcher() -> None:
+    with tempfile.TemporaryDirectory(prefix="isox-launcher-") as directory:
+        root = Path(directory)
+        first_root = root / "user-applications"
+        second_root = root / "system-applications"
+        first_root.mkdir()
+        second_root.mkdir()
+        marker = root / "launched.txt"
+        ready = root / "ready.txt"
+        hide_count = root / "hide-count.txt"
+        result = root / "launcher-result.txt"
+        refreshed_entry = first_root / "newly-installed.desktop"
+        launch_script = root / "record-launch.py"
+        launch_script.write_text(
+            "from pathlib import Path\n"
+            f"Path({str(marker)!r}).write_text('launched', encoding='utf-8')\n",
+            encoding="utf-8",
+        )
+
+        def write_entry(path: Path, name: str, executable: str = "/usr/bin/true", extra: str = "") -> None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                "[Desktop Entry]\n"
+                "Type=Application\n"
+                f"Name={name}\n"
+                f"Exec={executable}\n"
+                "Icon=application-x-executable\n"
+                "Terminal=false\n"
+                "Categories=Utility;\n"
+                f"{extra}",
+                encoding="utf-8",
+            )
+
+        preferred = (
+            ("firefox-esr.desktop", "Firefox", f"/usr/bin/python3 {launch_script}"),
+            ("thunar.desktop", "Files"),
+            ("isox-store.desktop", "ISO-X Store"),
+            ("galculator.desktop", "Calculator"),
+            ("xfce4-terminal.desktop", "Terminal"),
+            ("xfce4-settings-manager.desktop", "Settings"),
+            ("vlc.desktop", "Media"),
+            ("xfce4-screenshooter.desktop", "Screenshot"),
+        )
+        for desktop_id, name, *command in preferred:
+            write_entry(
+                first_root / desktop_id,
+                name,
+                command[0] if command else "/usr/bin/true",
+            )
+        for index in range(50):
+            entry = first_root / f"secondary-{index:02}.desktop"
+            write_entry(entry, f"Secondary Application {index:02}")
+        write_entry(
+            second_root / "secondary-00.desktop",
+            "Duplicate that must be shadowed",
+        )
+        write_entry(
+            second_root / "internal.desktop",
+            "System copy of hidden internal tool",
+        )
+        write_entry(
+            second_root / "hidden.desktop",
+            "System copy of hidden desktop entry",
+        )
+        write_entry(
+            first_root / "internal.desktop",
+            "Hidden internal tool",
+            extra="NoDisplay=true\n",
+        )
+        write_entry(
+            first_root / "hidden.desktop",
+            "Hidden desktop entry",
+            extra="Hidden=true\n",
+        )
+        write_entry(
+            first_root / "Development" / "Nested.desktop",
+            "Nested utility",
+        )
+
+        source = textwrap.dedent("""
+            import os
+            import sys
+            from pathlib import Path
+            import gi
+            gi.require_version("Gtk", "3.0")
+            from gi.repository import GLib
+            sys.path.insert(0, os.environ["ISOX_APP_DIR"])
+            import isox_launcher
+
+            isox_launcher.APPLICATION_ROOTS = (
+                os.environ["ISOX_TEST_APPS_USER"],
+                os.environ["ISOX_TEST_APPS_SYSTEM"],
+            )
+            application = isox_launcher.LauncherApplication()
+            result_path = Path(os.environ["ISOX_LAUNCHER_RESULT"])
+            ready_path = Path(os.environ["ISOX_LAUNCHER_READY"])
+            hide_path = Path(os.environ["ISOX_LAUNCHER_HIDES"])
+            refreshed_entry = Path(os.environ["ISOX_REFRESHED_ENTRY"])
+            trace_path = Path(os.environ["ISOX_LAUNCHER_TRACE"])
+            click_path = Path(os.environ["ISOX_LAUNCHER_CLICK"])
+            hide_count = 0
+
+            def reopen():
+                application.window.toggle()
+                expected_count = 60 if hide_count == 1 else 59
+                assert len(application.window.apps) == expected_count, (
+                    "launcher did not refresh installed applications when reopened"
+                )
+                if hide_count == 1:
+                    refreshed_entry.unlink()
+                return GLib.SOURCE_REMOVE
+
+            def hidden(_window):
+                global hide_count
+                hide_count += 1
+                hide_path.write_text(str(hide_count), encoding="utf-8")
+                if hide_count < 3:
+                    GLib.timeout_add(350, reopen)
+                else:
+                    GLib.timeout_add(350, application.quit)
+
+            def prepare_launch_click():
+                try:
+                    window = application.window
+                    launch_button = window.primary_grid.get_child_at(0, 0)
+                    assert launch_button is not None
+                    allocation = launch_button.get_allocation()
+                    assert allocation.width > 1 and allocation.height > 1, (
+                        f"primary app button was not allocated: {allocation.width}x{allocation.height}"
+                    )
+                    local_x, local_y = launch_button.translate_coordinates(
+                        window, allocation.width // 2, allocation.height // 2
+                    )
+                    origin = window.get_position()
+                    click_path.write_text(
+                        f"{origin[0] + local_x + 1},{origin[1] + local_y + 1}",
+                        encoding="utf-8",
+                    )
+                    ready_path.write_text("READY", encoding="utf-8")
+                except Exception as error:
+                    result_path.write_text(f"ERROR: {type(error).__name__}: {error}", encoding="utf-8")
+                    application.quit()
+                return GLib.SOURCE_REMOVE
+
+            def exercise():
+                try:
+                    window = application.window
+                    close_if_outside = window._close_if_outside
+
+                    def trace_outside_click(x, y):
+                        trace_path.write_text(f"{x},{y}", encoding="utf-8")
+                        return close_if_outside(x, y)
+
+                    window._close_if_outside = trace_outside_click
+                    assert len(window.apps) == 59, (
+                        f"expected 59 visible desktop entries, got {len(window.apps)}: "
+                        f"{[app.get_id() for app in window.apps]}"
+                    )
+                    app_names = {app.get_display_name() for app in window.apps}
+                    assert "System copy of hidden internal tool" not in app_names
+                    assert "System copy of hidden desktop entry" not in app_names
+                    assert len(window.preferred) == 8
+                    assert len(window.primary_grid.get_children()) == 8
+                    window.connect("hide", hidden)
+                    window.more_button.emit("clicked")
+                    assert len(window.all_list.get_children()) == 48
+                    window._load_more(None)
+                    assert len(window.all_list.get_children()) == 59
+                    window.search.set_text("Application 49")
+                    window._search_changed(window.search)
+                    assert len(window.all_list.get_children()) == 1
+                    window.search.set_text("")
+                    window._search_changed(window.search)
+                    assert len(window.all_list.get_children()) == 48
+                    window.back_button.emit("clicked")
+                    assert window.primary_page.get_visible()
+                    assert not window.all_page.get_visible()
+                    window.more_button.emit("clicked")
+                    assert len(window.all_list.get_children()) == 48
+                    refreshed_entry.write_text(
+                        "[Desktop Entry]\\n"
+                        "Type=Application\\n"
+                        "Name=Newly installed application\\n"
+                        "Exec=/usr/bin/true\\n"
+                        "Icon=application-x-executable\\n"
+                        "Terminal=false\\n"
+                        "Categories=Utility;\\n",
+                        encoding="utf-8",
+                    )
+                    window._refresh_applications()
+                    assert len(window.apps) == 60
+                    result_path.write_text(
+                        f"pointer-status={window.status.get_text() or '<empty>'}",
+                        encoding="utf-8",
+                    )
+                    window.back_button.emit("clicked")
+                    GLib.timeout_add(100, prepare_launch_click)
+                except Exception as error:
+                    result_path.write_text(f"ERROR: {type(error).__name__}: {error}", encoding="utf-8")
+                    application.quit()
+                return GLib.SOURCE_REMOVE
+
+            application.connect("activate", lambda *_args: GLib.idle_add(exercise))
+            raise SystemExit(application.run([]))
+        """)
+        env = os.environ.copy()
+        env.update({
+            "ISOX_APP_DIR": str(ROOT / "app"),
+            "ISOX_TEST_APPS_USER": str(first_root),
+            "ISOX_TEST_APPS_SYSTEM": str(second_root),
+            "ISOX_LAUNCHER_RESULT": str(result),
+            "ISOX_LAUNCHER_READY": str(ready),
+            "ISOX_LAUNCHER_HIDES": str(hide_count),
+            "ISOX_REFRESHED_ENTRY": str(refreshed_entry),
+            "ISOX_LAUNCHER_TRACE": str(root / "outside-click.txt"),
+            "ISOX_LAUNCHER_CLICK": str(root / "app-click.txt"),
+        })
+        process = subprocess.Popen(
+            [sys.executable, "-c", source], env=env,
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+        )
+        try:
+            try:
+                _wait_for_text(ready, "READY")
+            except AssertionError as error:
+                if process.poll() is None:
+                    process.terminate()
+                _stdout, stderr = process.communicate(timeout=5)
+                detail = result.read_text(encoding="utf-8") if result.is_file() else ""
+                raise AssertionError(
+                    f"{error}; launcher result={detail!r}; stderr={stderr}"
+                ) from error
+            click_x, click_y = (
+                int(value) for value in (root / "app-click.txt").read_text(encoding="utf-8").split(",")
+            )
+            window_id = run(
+                ["xdotool", "search", "--sync", "--onlyvisible", "--name", "ISO-X Applications"],
+                timeout=10,
+            ).splitlines()[0]
+            x, y, width, height = screen_geometry(window_id)
+            assert x <= click_x < x + width and y <= click_y < y + height, (
+                f"app click target {(click_x, click_y)} is outside launcher {(x, y, width, height)}"
+            )
+            run(["xdotool", "mousemove", str(click_x), str(click_y), "click", "1"])
+            try:
+                _wait_for_text(marker, "launched")
+            except AssertionError as error:
+                if process.poll() is None:
+                    process.terminate()
+                _stdout, stderr = process.communicate(timeout=5)
+                detail = result.read_text(encoding="utf-8") if result.is_file() else ""
+                raise AssertionError(
+                    f"{error}; launcher result={detail!r}; click={(click_x, click_y)}; "
+                    f"window={(x, y, width, height)}; stderr={stderr}"
+                ) from error
+            _wait_for_text(hide_count, "1")
+            window_id = run(
+                ["xdotool", "search", "--sync", "--onlyvisible", "--name", "ISO-X Applications"],
+                timeout=10,
+            ).splitlines()[0]
+            x, y, width, height = screen_geometry(window_id)
+            assert not (x <= 2 < x + width and y <= 2 < y + height), (
+                "launcher window placement overlaps the desktop click-away target"
+            )
+            run(["xdotool", "windowactivate", "--sync", window_id])
+            run(["xdotool", "key", "Escape"])
+            _wait_for_text(hide_count, "2")
+            window_id = run(
+                ["xdotool", "search", "--sync", "--onlyvisible", "--name", "ISO-X Applications"],
+                timeout=10,
+            ).splitlines()[0]
+            run(["xdotool", "windowactivate", "--sync", window_id])
+            run(["xdotool", "mousemove", "2", "2", "click", "1"])
+            try:
+                _wait_for_text(hide_count, "3")
+            except AssertionError as error:
+                trace = (root / "outside-click.txt").read_text(encoding="utf-8") if (root / "outside-click.txt").is_file() else "<no pointer event delivered>"
+                status = result.read_text(encoding="utf-8") if result.is_file() else "<no status>"
+                raise AssertionError(
+                    f"{error}; outside-click trace={trace}; launcher status={status}"
+                ) from error
+            returncode = process.wait(timeout=10)
+            if returncode != 0:
+                _stdout, stderr = process.communicate()
+                raise AssertionError(f"launcher GUI test exited {returncode}: {stderr}")
+            assert not result.exists() or not result.read_text(encoding="utf-8").startswith("ERROR:"), (
+                result.read_text(encoding="utf-8") if result.exists() else ""
+            )
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=5)
+
+
 def main() -> int:
     openbox = subprocess.Popen(
         ["openbox", "--sm-disable", "--config-file", str(ROOT / "desktop/openbox-rc.xml")],
@@ -522,6 +826,7 @@ def main() -> int:
         wait_for_openbox()
         exercise_keyboard_layouts()
         exercise_gtk_text_input()
+        exercise_application_launcher()
         exercise_alt_tab_focus_routing()
         exercise_terminal_text_input()
         exercise_window_management()

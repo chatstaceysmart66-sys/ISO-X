@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Google
+Comment=Open Google in Firefox
+Comment[ar]=فتح Google في Firefox
+Exec=firefox-esr --new-window https://www.google.com/
+Icon=web-browser
+Terminal=false
+Categories=Network;WebBrowser;

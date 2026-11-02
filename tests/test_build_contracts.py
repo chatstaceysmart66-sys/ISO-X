@@ -5,6 +5,7 @@ import configparser
 import json
 import re
 import os
+import sys
 import subprocess
 import tempfile
 
@@ -121,15 +122,46 @@ def test_firefox_defaults_hook_applies_after_existing_packaged_prefs():
 def test_app_center_queries_and_package_operations_are_background_and_privileged():
     source = (ROOT / "app/isox_appcenter.py").read_text(encoding="utf-8")
     backend = (ROOT / "app/isox_store_backend.py").read_text(encoding="utf-8")
-    assert "self.backend.search(query, category, source=source)" in source
+    assert "self.backend.search_page(" in source
+    assert "self.backend.all_apt_packages(" in source
+    assert "CATALOG_PAGE_SIZE = 24" in source
+    assert '("packages", "كل الحزم", "All packages")' in source
+    assert "BRAND_IMAGE_PATH" in source
+    assert "GdkPixbuf.Pixbuf.new_from_file_at_scale" in source
     assert "threading.Thread(target=work, daemon=True).start()" in source
     assert '["pkexec", "/usr/bin/apt-get", *arguments]' in backend
     assert '"--no-install-recommends"' in backend
     assert '"--no-auto-remove"' in backend
     assert "buttons=Gtk.ButtonsType.OK_CANCEL" in source
+    assert "self.backend.invalidate_catalog_cache()" in source
     assert "self.backend.is_installed(app.source, app.package_id)" in source
     assert "subprocess.Popen" in backend and "shell=True" not in backend
     assert 'FLATHUB_URL = "https://dl.flathub.org/repo/flathub.flatpakrepo"' in backend
+
+
+def test_launcher_uses_installed_desktop_entries_without_plain_letter_hotkeys():
+    launcher = (ROOT / "app/isox_launcher.py").read_text(encoding="utf-8")
+    openbox = (ROOT / "desktop/openbox-rc.xml").read_text(encoding="utf-8")
+    tint2 = (ROOT / "desktop/tint2rc").read_text(encoding="utf-8")
+    build = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
+    assert "Gio.DesktopAppInfo.new_from_filename" in launcher
+    assert "app.should_show()" in launcher
+    assert "app.get_is_hidden()" in launcher
+    assert "PAGE_SIZE = 48" in launcher
+    assert "self._show_all" in launcher and "self._show_primary" in launcher
+    assert "Gdk.KEY_Escape" in launcher and "focus-out-event" in launcher
+    assert "set_skip_taskbar_hint(True)" not in launcher
+    assert 'key="W"' not in openbox
+    assert "isox-launcher.desktop" in tint2
+    assert "isox_launcher.py" in build and "isox-apps" in build
+    assert 'for shortcut in google youtube chatgpt; do' in build
+    assert (
+        'isox-launcher.desktop" config/includes.chroot/usr/share/applications/isox-launcher.desktop'
+        in build
+    )
+    assert "INTERNAL_DESKTOP_IDS" in launcher
+    assert "_refresh_applications()" in launcher
+    assert "XDG_DATA_HOME" in launcher and "flatpak" in launcher
 
 
 def test_file_operations_are_confirmed_and_run_in_background():
@@ -221,6 +253,34 @@ def test_user_click_and_menu_contrast_settings_are_applied_and_built():
         subprocess.run(["/bin/sh", str(theme_hook)], env=environment, check=True,
                        capture_output=True, text=True)
         assert theme_file.read_text(encoding="utf-8") == result
+
+
+def test_master_dragon_generates_boot_wallpaper_and_app_pngs():
+    generator = ROOT / "scripts/generate-brand-assets.py"
+    build = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
+    assert "python3-cairosvg" in (ROOT / "scripts/install-build-deps.sh").read_text(encoding="utf-8")
+    assert "python3-cairosvg" in (ROOT / ".github/workflows/iso-build.yml").read_text(encoding="utf-8")
+    assert build.index('generate-brand-assets.py" --output-dir "$BRAND_ASSET_DIR"') < build.index('"$BRAND_ASSET_DIR/iso-x-dragon.png"')
+
+    with tempfile.TemporaryDirectory(prefix="isox-brand-render-") as temporary:
+        output = Path(temporary)
+        subprocess.run([sys.executable, str(generator), "--output-dir", str(output)],
+                       check=True, capture_output=True, text=True)
+        expected = {
+            "iso-x-dragon.png": (1024, 1024),
+            "iso-x-boot.png": (1024, 1024),
+            "iso-x-plymouth.png": (512, 512),
+            "iso-x-desktop-wallpaper.png": (3840, 2160),
+        }
+        for name, dimensions in expected.items():
+            image = output / name
+            assert image.is_file() and image.stat().st_size > 1000
+            assert image.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+            assert __import__("struct").unpack(">II", image.read_bytes()[16:24]) == dimensions
+        assert (output / "iso-x-boot.svg").is_file()
+        assert (output / "iso-x-desktop-wallpaper.svg").is_file()
+        assert 'config/includes.chroot/usr/share/iso-x/assets/iso-x-dragon.png' in build
+        assert 'config/includes.chroot/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.png' in build
 
 
 def test_legacy_tk_shell_is_not_staged_as_a_second_desktop():

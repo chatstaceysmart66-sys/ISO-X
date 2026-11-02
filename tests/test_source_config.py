@@ -58,6 +58,11 @@ for asset in (
     "config/hooks/live/0100-isox-watermark.hook.chroot",
     "config/hooks/live/0200-isox-plymouth.hook.chroot",
     "desktop/openbox-menu.xml", "desktop/openbox-rc.xml",
+    "desktop/isox-launcher.desktop",
+    "desktop/google.desktop",
+    "desktop/youtube.desktop",
+    "desktop/chatgpt.desktop",
+    "app/isox_launcher.py",
     "scripts/install-build-deps.sh", "scripts/isox-run.py", "scripts/isox-speedtest",
     "scripts/apply-windows-look.sh", "scripts/toggle-airplane.sh", "config/hooks/live/0300-isox-services.hook.chroot",
     "tests/test_secure_vault.py", "tests/test_secureboot_validation.sh",
@@ -67,6 +72,14 @@ for asset in (
     "desktop/isox-store.desktop", "tests/test_store_backend.py",
 ):
     assert (ROOT / asset).is_file(), f"Missing feature/integration asset: {asset}"
+
+brand_generator = (ROOT / "scripts/generate-brand-assets.py").read_text(encoding="utf-8")
+brand_boot = ET.parse(ROOT / "assets/iso-x-boot.svg").getroot()
+brand_wallpaper = ET.parse(ROOT / "assets/iso-x-desktop-wallpaper.svg").getroot()
+assert any(element.tag.endswith("image") and element.get("href") == "iso-x-dragon.svg" for element in brand_boot)
+assert any(element.tag.endswith("image") and element.get("href") == "iso-x-dragon.svg" for element in brand_wallpaper)
+assert "generate-brand-assets.py" in build and "BRAND_ASSET_DIR" in build
+assert "import cairosvg" in brand_generator
 
 assert {"appstream", "python3-yaml", "flatpak", "pulseaudio-utils"} <= packages
 assert "x11-xserver-utils" in packages, "Openbox snap shortcuts require xrandr from x11-xserver-utils."
@@ -81,6 +94,20 @@ for store_asset, image_path in (
     assert store_asset in build and image_path in build, f"Store asset is not staged: {store_asset}"
 store_menu = (ROOT / "desktop/openbox-menu.xml").read_text(encoding="utf-8")
 assert '<item label="ISO-X Store">' in store_menu and "isox_appcenter.py" in store_menu
+launcher = (ROOT / "app/isox_launcher.py").read_text(encoding="utf-8")
+assert "Gio.DesktopAppInfo.new_from_filename" in launcher
+assert "isox-launcher.desktop" in (ROOT / "desktop/tint2rc").read_text(encoding="utf-8")
+assert "launcher_item_app = /usr/share/applications/firefox-esr.desktop" in (ROOT / "desktop/tint2rc").read_text(encoding="utf-8")
+for shortcut, url in (
+    ("google", "https://www.google.com/"),
+    ("youtube", "https://www.youtube.com/"),
+    ("chatgpt", "https://chatgpt.com/"),
+):
+    entry = configparser.ConfigParser(interpolation=None)
+    entry.optionxform = str
+    entry.read(ROOT / f"desktop/{shortcut}.desktop", encoding="utf-8")
+    assert entry["Desktop Entry"]["Exec"] == f"firefox-esr --new-window {url}"
+    assert 'install -m 0644 "$PROJECT_DIR/desktop/$shortcut.desktop"' in build
 
 assert 'Image("iso-x-plymouth.png")' in (ROOT / "plymouth/isox/isox.script").read_text()
 plymouth_dims = __import__("struct").unpack(">II", (ROOT / "assets/iso-x-plymouth.png").read_bytes()[16:24])

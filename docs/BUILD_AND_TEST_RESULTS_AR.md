@@ -5,6 +5,23 @@
 **الهدف:** Debian GNU/Linux 13 Trixie، amd64.  
 **الحالة:** CI بنى ISO حقيقية وفحص SHA-256 وEl Torito/System Area؛ فشل QEMU BIOS بسبب إعداد USB ناقص في الاختبار، لذلك لم يُرفع Artifact الإصدار ولم يثبت الإقلاع الفعلي.
 
+## تحديث محلي — 2026-11-02
+
+هذه نتائج الجولة الحالية على الشيفرة المصدرية، ولا تستبدل أدلة البناء التاريخية أدناه:
+
+| الأمر | النتيجة | الملاحظة |
+|---|---|---|
+| `/usr/bin/python3 scripts/run-source-checks.py /tmp/isox-acceptance-final /tmp/isox-acceptance-cache-final` | **49 passed، 1 skipped؛ 24 فحصاً إضافياً passed** | لا فشل أو عناصر NOT_RUN. شملت pytest وGTK/Openbox وShellCheck وdesktop-file-validate وPersistence على ملف مؤقت؛ لا تثبت persistence بعد reboot. |
+| اختبار GTK التفاعلي تحت Xvfb/Openbox | **نجاح بعد آخر تعديل** | شغّله runner أعلاه؛ تحقق من الكتابة، المزيد/الرجوع، تحديث قائمة التطبيقات، تشغيل التطبيق، Esc، النقر الخارجي، وتجاوز نسخ `.desktop` المخفية بالأولوية الصحيحة. |
+| متجر GTK بالعربية والإنجليزية | **رُسمت الواجهتان** | اللقطتان في `docs/ui-evidence/`؛ backend وبيانات البطاقات اختبارية ثابتة، وليستا كتالوجاً حقيقياً أو إثبات تثبيت. |
+| `pytest -q tests/test_build_contracts.py tests/test_store_backend.py tests/test_source_config.py` | **37 passed** | اختبارات عقود المتجر والمشغّل وإعداد المصدر، لا تنفذ عمليات APT الحقيقية. |
+| `python3 -m compileall -q app scripts tests`، `bash -n scripts/build-iso.sh`، `git diff --check` | **نجاح** | فحوص صياغة وتنسيق المصدر. |
+| `bash tests/test_write_usb_persistence.sh` | **نجاح** | محاكاة partition/فتح صورة على ملف قرص مؤقت؛ لا تثبت persistence بعد reboot لضيف ISO. |
+| بناء ISO من worktree الحالي | **لم يُنفذ** | المضيف UID 1000، المساحة المتاحة 18 GiB مقابل 20 GiB مطلوبة، ولا تتوفر `lb`, `debootstrap`, `mksquashfs`, `xorriso`. لم يُعتمد أي artifact من snapshot أقدم. |
+| BIOS/UEFI للإصدار الحالي، APT install/remove/update حقيقي، persistence بعد reboot، الصوت وHDMI/العتاد | **غير مثبتة** | لا تُستنتج من اختبارات المصدر أو من لقطات الواجهة. |
+
+تُجهّز اختصارات Google وYouTube وChatGPT كروابط سطح مكتب تفتح Firefox ESR، بينما يبقى Firefox نفسه مشغلاً مثبتاً في tint2. اختبار GTK شغّل تطبيقاً مؤقتاً عبر desktop entry تجريبي؛ لم يُختبر النقر على اختصارات المواقع في جلسة إصدار.
+
 ## نتائج الاختبارات
 
 تُحدّث هذه القائمة بعد التنفيذ الفعلي فقط. رمز الخروج `0` يعني نجاح الأمر المذكور وحده، ولا يثبت بناء ISO أو إقلاعها.

@@ -12,7 +12,6 @@
     <keybind key="A-F4"><action name="Close"/></keybind>
     <keybind key="A-Tab"><action name="NextWindow"><finalactions><action name="Focus"/><action name="Raise"/><action name="Unshade"/></finalactions></action></keybind>
     <keybind key="A-S-Tab"><action name="PreviousWindow"><finalactions><action name="Focus"/><action name="Raise"/><action name="Unshade"/></finalactions></action></keybind>
-    <keybind key="W"><action name="ShowMenu"><menu>root-menu</menu></action></keybind>
     <keybind key="W-e"><action name="Execute"><command>thunar</command></action></keybind>
     <keybind key="W-w"><action name="Execute"><command>/usr/local/bin/isox-welcome</command></action></keybind>
     <keybind key="W-r"><action name="Execute"><command>/usr/local/bin/isox-run</command></action></keybind>
