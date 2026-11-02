@@ -176,17 +176,17 @@ def parse_appstream_file(
     language = language or locale.getlocale()[0] or "C"
     if len(language) > 16:
         language = "C"
-    if path.stat().st_size > 8 * 1024 * 1024:
-        return []
     try:
+        if path.stat().st_size > 8 * 1024 * 1024:
+            raise ValueError(f"AppStream XML exceeds the size limit: {path}")
         opener = gzip.open if path.suffix == ".gz" else open
         with opener(path, "rb") as stream:
             contents = stream.read(8 * 1024 * 1024 + 1)
         if len(contents) > 8 * 1024 * 1024:
-            return []
+            raise ValueError(f"AppStream XML exceeds the size limit: {path}")
         root = ET.fromstring(contents)
-    except (ET.ParseError, OSError):
-        return []
+    except (ET.ParseError, OSError) as error:
+        raise ValueError(f"Could not parse AppStream XML {path}: {error}") from error
     components = [root] if root.tag.rsplit("}", 1)[-1] == "component" else list(root)
     records: list[dict[str, object]] = []
     for component in components:
@@ -229,6 +229,7 @@ def parse_appstream_file(
             size = None
         records.append({
             "appstream_id": component.findtext("./id", default="").strip(),
+            "component_type": component.get("type", ""),
             "package_names": package_names,
             "name": names,
             "summary": summary,
@@ -266,11 +267,13 @@ def parse_dep11_file(
         language = "C"
     max_bytes = 64 * 1024 * 1024
     try:
+        if path.stat().st_size > max_bytes:
+            raise ValueError(f"DEP-11 metadata exceeds the size limit: {path}")
         opener = gzip.open if path.suffix == ".gz" else open
         with opener(path, "rb") as stream:
             contents = stream.read(max_bytes + 1)
         if len(contents) > max_bytes:
-            return []
+            raise ValueError(f"DEP-11 metadata exceeds the size limit: {path}")
         documents = yaml.safe_load_all(io.BytesIO(contents))
         records = []
         for component in documents:
@@ -307,6 +310,7 @@ def parse_dep11_file(
             icon = _safe_local_icon(icon_value if isinstance(icon_value, str) else "", icon_roots)
             records.append({
                 "appstream_id": str(component.get("ID", "")).strip(),
+                "component_type": str(component.get("Type", "")).strip(),
                 "package_names": package_names,
                 "name": name,
                 "summary": _dep11_text(component.get("Summary"), language),
@@ -319,8 +323,8 @@ def parse_dep11_file(
                 "desktop_id": desktop_id,
             })
         return records
-    except (OSError, yaml.YAMLError, UnicodeDecodeError):
-        return []
+    except (OSError, yaml.YAMLError, UnicodeDecodeError) as error:
+        raise ValueError(f"Could not parse DEP-11 metadata {path}: {error}") from error
 
 
 class StoreBackend:
@@ -344,6 +348,7 @@ class StoreBackend:
         )
         self.architecture = architecture or self._architecture()
         self._appstream_cache: list[dict[str, object]] | None = None
+        self.catalog_warnings: list[str] = []
         self._policy_cache: dict[str, tuple[str, bool]] = {}
         self._state_cache: dict[str, tuple[bool, str]] = {}
         self._metadata_cache: dict[tuple[str, str], tuple[int | None, str]] = {}
@@ -359,6 +364,7 @@ class StoreBackend:
         if self._appstream_cache is not None:
             return self._appstream_cache
         records = []
+        self.catalog_warnings = []
         seen: set[tuple[str, str]] = set()
         for root in self.appstream_roots:
             if not root.is_dir():
@@ -374,7 +380,8 @@ class StoreBackend:
                         parsed = parse_dep11_file(path, icon_roots=self.icon_roots)
                     else:
                         parsed = parse_appstream_file(path, icon_roots=self.icon_roots)
-                except OSError:
+                except (OSError, ValueError) as error:
+                    self.catalog_warnings.append(str(error))
                     continue
                 for record in parsed:
                     for package in record["package_names"]:
@@ -387,6 +394,7 @@ class StoreBackend:
 
     def invalidate_catalog_cache(self) -> None:
         self._appstream_cache = None
+        self.catalog_warnings.clear()
         self._policy_cache.clear()
         self._state_cache.clear()
         self._metadata_cache.clear()
@@ -529,33 +537,25 @@ class StoreBackend:
 
     def _apt_apps(self, query: str = "") -> list[StoreApp]:
         records = self._appstream_records()
-        candidates: dict[str, dict[str, object]] = {}
+        candidates: dict[tuple[str, str], dict[str, object]] = {}
         terms = query.casefold().split()
         for record in records:
-            haystack = " ".join(str(record[key]) for key in ("name", "summary", "description", "categories")).casefold()
-            if terms and not all(term in haystack for term in terms):
+            if record["component_type"] != "desktop-application" and not record["desktop_id"]:
                 continue
             package = str(record["package_name"])
-            candidates.setdefault(package, record)
-        fallback_summaries: dict[str, str] = {}
-        if query.strip():
-            for package, summary in self._apt_search(query):
-                candidates.setdefault(package, {
-                    "appstream_id": "",
-                    "package_name": package,
-                    "name": package,
-                    "summary": summary,
-                    "description": summary,
-                    "categories": [],
-                    "icon": "",
-                    "developer": "",
-                    "license": "",
-                    "size_bytes": None,
-                    "desktop_id": "",
-                })
-                fallback_summaries[package] = summary
+            haystack = " ".join(
+                [str(record[key]) for key in ("name", "summary", "description", "categories")]
+                + [package]
+            ).casefold()
+            if terms and not all(term in haystack for term in terms):
+                continue
+            appstream_id = str(record["appstream_id"])
+            candidates.setdefault((package, appstream_id), record)
         apps = []
-        for package, record in sorted(candidates.items(), key=lambda item: (str(item[1]["name"]).casefold(), item[0])):
+        for (package, appstream_id), record in sorted(
+            candidates.items(),
+            key=lambda item: (str(item[1]["name"]).casefold(), item[0][0], item[0][1]),
+        ):
             version, available = self._package_policy(package)
             if not available:
                 continue
@@ -577,11 +577,11 @@ class StoreBackend:
                 except (OSError, subprocess.SubprocessError):
                     newer = False
             apps.append(StoreApp(
-                app_id=f"apt:{package}",
+                app_id=f"apt:{appstream_id}:{package}" if appstream_id else f"apt:{package}",
                 source="apt",
                 source_name="Debian APT",
                 name=str(record["name"]),
-                summary=str(record["summary"]) or fallback_summaries.get(package, ""),
+                summary=str(record["summary"]),
                 category=category,
                 package_id=package,
                 version=version if newer or not installed else installed_version,
@@ -896,7 +896,33 @@ class StoreBackend:
         installed, version = self._package_state(package)
         if not installed or version != expected_version:
             return OperationResult(False, "The installed package changed; refresh and review it again.")
+        if self._apt_package_is_protected(package, version):
+            return OperationResult(False, "This is an essential or core system package and cannot be removed from ISO-X Store.")
         return self._privileged_apt(["remove", "--yes", "--no-auto-remove", "--", package])
+
+    def _apt_package_is_protected(self, package: str, version: str) -> bool:
+        if package in {"apt", "base-files", "bash", "coreutils", "dpkg", "init", "libc6", "systemd", "systemd-sysv"}:
+            return True
+        try:
+            result = self.runner(["apt-cache", "show", package], timeout=10)
+        except (OSError, subprocess.SubprocessError) as error:
+            raise RuntimeError(f"Could not verify whether {package} is safe to remove: {error}") from error
+        if result.returncode:
+            detail = (result.stderr or result.stdout or f"exit status {result.returncode}").strip()
+            raise RuntimeError(f"Could not verify whether {package} is safe to remove: {detail[-1000:]}")
+        for paragraph in result.stdout.split("\n\n"):
+            fields = {}
+            for line in paragraph.splitlines():
+                if line and not line[0].isspace() and ": " in line:
+                    key, value = line.split(": ", 1)
+                    fields[key] = value
+            if fields.get("Version") != version:
+                continue
+            return (
+                fields.get("Essential", "").lower() == "yes"
+                or fields.get("Priority", "").lower() in {"required", "important"}
+            )
+        raise RuntimeError(f"Could not verify installed metadata for {package}; removal was refused.")
 
     def install_flatpak(self, remote: str, app_id: str, branch: str = "") -> OperationResult:
         if (
@@ -971,17 +997,36 @@ class StoreBackend:
         elif app.source == "apt":
             if not app.desktop_id or Path(app.desktop_id).name != app.desktop_id:
                 return OperationResult(False, "The installed desktop entry is not valid.")
-            if not (Path("/usr/share/applications") / app.desktop_id).is_file():
+            desktop_file = Path("/usr/share/applications") / app.desktop_id
+            if not desktop_file.is_file():
                 return OperationResult(False, "The desktop launcher is no longer installed.")
-            if not shutil.which("gtk-launch"):
-                return OperationResult(False, "gtk-launch is not installed.")
-            argv = ["gtk-launch", app.desktop_id.removesuffix(".desktop")]
         else:
             if Path(app.desktop_id).name != app.desktop_id or not app.desktop_id.endswith(".desktop"):
                 return OperationResult(False, "The desktop launcher is not valid.")
-            argv = ["gtk-launch", app.desktop_id.removesuffix(".desktop")]
+            desktop_file = next(
+                (root / app.desktop_id for root in self.desktop_roots if (root / app.desktop_id).is_file()),
+                None,
+            )
+            if desktop_file is None:
+                return OperationResult(False, "The desktop launcher is no longer installed.")
+        if app.source != "flatpak":
+            if shutil.which("gio"):
+                argv = ["gio", "launch", str(desktop_file)]
+            elif shutil.which("gtk-launch"):
+                argv = ["gtk-launch", app.desktop_id.removesuffix(".desktop")]
+            else:
+                return OperationResult(False, "No supported desktop-entry launcher (gio or gtk-launch) is installed.")
         try:
-            subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-        except OSError as error:
-            return OperationResult(False, str(error))
-        return OperationResult(True, "Application launch requested.")
+            if app.source == "flatpak":
+                subprocess.Popen(
+                    argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, start_new_session=True,
+                )
+                return OperationResult(True, "Application launch requested.")
+            result = self.runner(argv, timeout=15)
+        except (OSError, subprocess.SubprocessError) as error:
+            return OperationResult(False, f"Could not launch {app.name}: {error}")
+        if result.returncode:
+            detail = (result.stderr or result.stdout or f"exit status {result.returncode}").strip()
+            return OperationResult(False, f"Could not launch {app.name}: {detail[-1000:]}", result.returncode)
+        return OperationResult(True, "Application launch requested.", 0)

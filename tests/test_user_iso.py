@@ -309,11 +309,11 @@ class UserIsoTests(unittest.TestCase):
                 "include menu.cfg\ndefault vesamenu.c32\nprompt 0\ntimeout 100\n", encoding="utf-8"
             )
             syslinux = (
-                "label live-amd64\n\tmenu default\n"
+                "label live-amd64\n"
                 f"\tappend boot=live config components username=user hostname=iso-x console=tty0 "
                 f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
                 f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE}\n"
-                "label live-amd64-persistence\n"
+                "label live-amd64-persistence\n\tmenu default\n"
                 f"\tappend boot=live config components username=user hostname=iso-x console=tty0 "
                 f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
                 f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} persistence\n"

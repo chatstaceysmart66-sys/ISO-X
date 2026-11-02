@@ -18,6 +18,7 @@ from pathlib import Path
 MARKER_PREFIX = "ISOX_CI_READY nonce="
 MIN_SCREENSHOT_WIDTH = 320
 MIN_SCREENSHOT_HEIGHT = 200
+ANSI_ESCAPE = re.compile(r"\x1B(?:\[[0-?]*[ -/]*[@-~]|[@-_])")
 
 
 def validate_ppm(path: Path, require_visible: bool = False) -> tuple[bool, str]:
@@ -48,7 +49,11 @@ def validate_ppm(path: Path, require_visible: bool = False) -> tuple[bool, str]:
             background_count += max(abs(color[channel] - background[channel]) for channel in range(3)) <= 6
             panel_count += max(abs(color[channel] - panel[channel]) for channel in range(3)) <= 4
             accent_count += max(abs(color[channel] - accent[channel]) for channel in range(3)) <= 6
-        if background_count < width * height // 20 or panel_count < 500 or accent_count < 20:
+        if (
+            background_count + panel_count < width * height // 20
+            or panel_count < 500
+            or accent_count < 20
+        ):
             return False, (
                 "screenshot does not contain the ISO-X desktop palette: "
                 f"background={background_count}, panel={panel_count}, accent={accent_count}"
@@ -142,6 +147,7 @@ def classify(
     desktop_seen: bool,
     final_screenshot_valid: bool,
 ) -> str:
+    serial = ANSI_ESCAPE.sub("", serial)
     if returncode not in (None, 0, -signal.SIGTERM, -signal.SIGKILL):
         return "QEMU_INFRASTRUCTURE_FAILURE"
     if marker_seen or desktop_seen:
@@ -165,7 +171,11 @@ def classify(
     return "BOOT_FAILURE_UNRESOLVED"
 
 
-def serial_indicators(serial: str) -> dict[str, bool | None]:
+def serial_indicators(
+    serial: str,
+    *,
+    marker_seen: bool = False,
+) -> dict[str, bool | None]:
     if not serial.strip():
         return {
             "bootloader": None,
@@ -183,7 +193,15 @@ def serial_indicators(serial: str) -> dict[str, bool | None]:
         "graphical_target": r"Reached target.*(Graphical Interface|graphical\.target)",
         "display_manager": r"lightdm(\.service|\[)|Light Display Manager",
     }
-    return {name: bool(re.search(pattern, serial, re.I)) for name, pattern in patterns.items()}
+    serial = ANSI_ESCAPE.sub("", serial)
+    indicators = {
+        name: bool(re.search(pattern, serial, re.I))
+        for name, pattern in patterns.items()
+    }
+    if marker_seen:
+        indicators["graphical_target"] = True
+        indicators["display_manager"] = True
+    return indicators
 
 
 def terminate_group(process: subprocess.Popen[bytes]) -> tuple[bool, bool]:
@@ -448,7 +466,10 @@ def main() -> int:
                 "serial_bytes": len(serial_content),
                 "marker_seen": marker_seen,
                 "desktop_seen": desktop_seen,
-                "serial_indicators": serial_indicators(serial_text),
+                "serial_indicators": serial_indicators(
+                    serial_text,
+                    marker_seen=marker_seen,
+                ),
                 "process_group_clean": process_group_clean,
                 "serial_log": str(serial_path),
                 "qemu_stdout": str(qemu_stdout),

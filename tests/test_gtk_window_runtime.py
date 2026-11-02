@@ -15,6 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "app"))
+import isox_keyboard
 from isox_keyboard import current_group, current_layout, toggle_layout
 
 
@@ -326,6 +327,125 @@ def exercise_close_button() -> None:
 def exercise_alt_f4() -> None:
     process, home, window_id = launch_window()
     stop_window(process, home, window_id, "alt-f4")
+
+
+def exercise_click_to_focus_content() -> None:
+    if int(run(["xdotool", "getdisplaygeometry"]).split()[0]) < 1050:
+        raise AssertionError("Openbox click-to-focus test needs a virtual display at least 1050 pixels wide")
+    with tempfile.TemporaryDirectory(prefix="isox-focus-") as directory:
+        root = Path(directory)
+        source = textwrap.dedent("""
+            import os
+            import gi
+            gi.require_version("Gtk", "3.0")
+            from gi.repository import Gtk, GLib
+            from pathlib import Path
+            name = os.environ["ISOX_FOCUS_NAME"]
+            window = Gtk.Window(title=name)
+            window.set_default_size(440, 240)
+            window.move(int(os.environ["ISOX_FOCUS_X"]), 80)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            box.set_border_width(20)
+            entry = Gtk.Entry()
+            entry.connect(
+                "changed",
+                lambda widget: Path(os.environ["ISOX_FOCUS_ENTRY"]).write_text(
+                    widget.get_text(), encoding="utf-8"
+                ),
+            )
+            button = Gtk.Button(label="Click me")
+            button.connect(
+                "clicked",
+                lambda _widget: Path(os.environ["ISOX_FOCUS_BUTTON"]).write_text(
+                    "clicked", encoding="utf-8"
+                ),
+            )
+            box.pack_start(entry, False, False, 0)
+            box.pack_start(button, False, False, 0)
+            window.add(box)
+            window.connect("destroy", Gtk.main_quit)
+            window.show_all()
+            Gtk.main()
+        """)
+        processes = []
+        try:
+            for name, x in (("Focus Probe A", 40), ("Focus Probe B", 550)):
+                app_root = root / name.replace(" ", "-")
+                app_root.mkdir()
+                env = os.environ.copy()
+                env.update({
+                    "ISOX_FOCUS_NAME": name,
+                    "ISOX_FOCUS_X": str(x),
+                    "ISOX_FOCUS_ENTRY": str(app_root / "entry.txt"),
+                    "ISOX_FOCUS_BUTTON": str(app_root / "button.txt"),
+                })
+                process = subprocess.Popen(
+                    [sys.executable, "-c", source], env=env,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+                )
+                processes.append((process, app_root, name))
+                run(["xdotool", "search", "--sync", "--onlyvisible", "--name", name], timeout=10)
+
+            ids = {}
+            for _process, _app_root, name in processes:
+                ids[name] = run(
+                    ["xdotool", "search", "--onlyvisible", "--name", name], timeout=5
+                ).splitlines()[0]
+
+            def window_origin(window_id: str) -> tuple[int, int]:
+                output = run(["xwininfo", "-id", window_id])
+                coordinates = [
+                    re.search(pattern, output)
+                    for pattern in (
+                        r"Absolute upper-left X:\s+(\d+)",
+                        r"Absolute upper-left Y:\s+(\d+)",
+                    )
+                ]
+                assert all(coordinates), f"Could not read GTK client origin:\n{output}"
+                return int(coordinates[0][1]), int(coordinates[1][1])
+
+            def click(window_id: str, offset_y: int) -> str:
+                origin_x, origin_y = window_origin(window_id)
+                x, y = origin_x + 220, origin_y + offset_y
+                run(["xdotool", "mousemove", str(x), str(y), "click", "1"])
+                return f"{x},{y}"
+
+            second = root / "Focus-Probe-B"
+            run(["wmctrl", "-ia", ids["Focus Probe A"]])
+            assert run(["xdotool", "getwindowfocus"]) == ids["Focus Probe A"]
+            entry_point = click(ids["Focus Probe B"], 37)
+            try:
+                wait_for_window_focus(ids["Focus Probe B"])
+            except AssertionError as error:
+                raise AssertionError(
+                    f"{error}; entry click={entry_point}; windows={run(['wmctrl', '-lG'])}; "
+                    f"pointer={run(['xdotool', 'getmouselocation', '--shell'])}; "
+                    f"target={run(['xwininfo', '-id', ids['Focus Probe B']])}"
+                ) from error
+            run(["xdotool", "type", "--clearmodifiers", "content-click"])
+            _wait_for_text(second / "entry.txt", "content-click")
+
+            run(["wmctrl", "-ia", ids["Focus Probe A"]])
+            click(ids["Focus Probe B"], 83)
+            wait_for_window_focus(ids["Focus Probe B"])
+            _wait_for_text(second / "button.txt", "clicked")
+        finally:
+            for process, _app_root, name in processes:
+                if process.poll() is None:
+                    windows = subprocess.run(
+                        ["xdotool", "search", "--onlyvisible", "--name", name],
+                        capture_output=True, text=True, check=False, timeout=5,
+                    )
+                    if windows.returncode == 0:
+                        subprocess.run(
+                            ["wmctrl", "-ic", windows.stdout.splitlines()[0]],
+                            capture_output=True, check=False, timeout=5,
+                        )
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.terminate()
+                        process.wait(timeout=5)
 
 
 def exercise_close_while_modal_dialog_is_open() -> None:
@@ -819,6 +939,8 @@ def exercise_application_launcher() -> None:
 
 
 def main() -> int:
+    keyboard_config = tempfile.TemporaryDirectory(prefix="isox-keyboard-runtime-")
+    isox_keyboard.PREFERENCE_PATH = Path(keyboard_config.name) / "iso-x" / "keyboard-layout"
     openbox = subprocess.Popen(
         ["openbox", "--sm-disable", "--config-file", str(ROOT / "desktop/openbox-rc.xml")],
         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
@@ -828,6 +950,7 @@ def main() -> int:
         exercise_keyboard_layouts()
         exercise_gtk_text_input()
         exercise_application_launcher()
+        exercise_click_to_focus_content()
         exercise_alt_tab_focus_routing()
         exercise_terminal_text_input()
         exercise_window_management()
@@ -839,6 +962,7 @@ def main() -> int:
     finally:
         openbox.terminate()
         openbox.wait(timeout=5)
+        keyboard_config.cleanup()
     print("PASS: Openbox window controls, titlebar movement, all eight resize zones, Alt+Tab focus routing, and GTK/xterm AR↔EN input checks pass.")
     return 0
 

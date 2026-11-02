@@ -81,7 +81,7 @@ class StoreBackendTests(unittest.TestCase):
             path = Path(directory) / "catalog.xml.gz"
             with gzip.open(path, "wb") as stream:
                 stream.write(
-                    b"<components><component><id>org.example.Reader</id>"
+                    b"<components><component type='desktop-application'><id>org.example.Reader</id>"
                     b"<pkgname>example-reader</pkgname><name>Reader</name>"
                     b"</component></components>"
                 )
@@ -144,7 +144,7 @@ ProjectLicense: GPL-3.0-or-later
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "apps.xml").write_text(
-                "<components><component><id>org.example.Reader</id>"
+                "<components><component type='desktop-application'><id>org.example.Reader</id>"
                 "<pkgname>example-reader</pkgname><name>Reader</name>"
                 "</component></components>",
                 encoding="utf-8",
@@ -191,6 +191,31 @@ ProjectLicense: GPL-3.0-or-later
         queried = [call[2] for call in runner.calls if call[:2] == ["apt-cache", "policy"]]
         self.assertEqual(queried, ["alpha", "beta", "delta", "gamma"])
 
+    def test_general_apt_search_includes_packages_without_graphical_appstream_entries(self):
+        runner = FakeRunner()
+        runner.responses[("apt-cache", "search")] = completed(
+            [], stdout="internal-library - Shared internal library\n"
+        )
+        runner.responses[("apt-cache", "policy", "internal-library")] = completed(
+            [], stdout="Candidate: 1.0\n"
+        )
+        runner.responses[("dpkg-query", "-W")] = completed(
+            [], stdout="unknown ok not-installed\t\n"
+        )
+        runner.responses[("apt-cache", "show", "internal-library")] = completed(
+            [], stdout="Package: internal-library\nVersion: 1.0\nArchitecture: amd64\n\n"
+        )
+        backend = StoreBackend(runner=runner, appstream_roots=[], architecture="amd64")
+
+        apps = backend.search("internal", source="APT")
+        packages = backend.all_apt_packages("internal").items
+
+        self.assertEqual(apps, [])
+        self.assertEqual(len(packages), 1)
+        self.assertEqual(packages[0].package_id, "internal-library")
+        self.assertEqual(packages[0].category, "All packages")
+        self.assertFalse(packages[0].launchable)
+
     def test_search_page_validates_and_preserves_all_results(self):
         runner = FakeRunner()
         backend = StoreBackend(runner=runner, appstream_roots=[], architecture="amd64")
@@ -227,7 +252,7 @@ ProjectLicense: GPL-3.0-or-later
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "catalog.xml"
             path.write_text(
-                "<components><component><id>org.example.Editor</id>"
+                "<components><component type='desktop-application'><id>org.example.Editor</id>"
                 "<pkgname>example-editor</pkgname><name>Example Editor</name>"
                 "<summary>Write documents</summary><categories><category>Office</category></categories>"
                 "<size type='download'>99</size></component></components>",
@@ -259,7 +284,7 @@ ProjectLicense: GPL-3.0-or-later
         })
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, "catalog.xml").write_text(
-                "<components><component><id>org.example.Foreign</id>"
+                "<components><component type='desktop-application'><id>org.example.Foreign</id>"
                 "<pkgname>foreign-app</pkgname><name>Foreign App</name>"
                 "</component></components>",
                 encoding="utf-8",
@@ -276,6 +301,112 @@ ProjectLicense: GPL-3.0-or-later
         self.assertFalse(backend.install_apt("safe-app;id", "2.0").success)
         self.assertFalse(backend.install_apt("safe-app", "1.0").success)
         self.assertFalse(any(call[0] == "pkexec" for call in runner.calls))
+
+    def test_graphical_catalog_excludes_generic_packages_and_keeps_distinct_components(self):
+        runner = FakeRunner()
+        runner.responses[("apt-cache", "policy", "shared-package")] = completed(
+            [], stdout="Candidate: 1.0\n"
+        )
+        runner.responses[("dpkg-query", "-W")] = completed(
+            [], stdout="unknown ok not-installed\t\n"
+        )
+        runner.responses[("apt-cache", "show", "shared-package")] = completed(
+            [], stdout="Package: shared-package\nVersion: 1.0\nArchitecture: amd64\n\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "catalog.xml").write_text(
+                """<components>
+                <component type="desktop-application">
+                  <id>org.example.Editor</id><pkgname>shared-package</pkgname><name>Editor</name>
+                </component>
+                <component type="desktop-application">
+                  <id>org.example.Viewer</id><pkgname>shared-package</pkgname><name>Viewer</name>
+                </component>
+                <component type="generic">
+                  <id>org.example.Library</id><pkgname>internal-library</pkgname><name>Internal library</name>
+                </component>
+                </components>""",
+                encoding="utf-8",
+            )
+            backend = StoreBackend(runner=runner, appstream_roots=[root], architecture="amd64")
+            apps = backend.search(source="APT")
+        self.assertEqual({app.name for app in apps}, {"Editor", "Viewer"})
+        self.assertEqual(len({app.app_id for app in apps}), 2)
+
+    def test_malformed_appstream_file_is_reported_without_discarding_valid_catalog(self):
+        runner = FakeRunner()
+        runner.responses[("apt-cache", "policy", "example-reader")] = completed(
+            [], stdout="Candidate: 1.0\n"
+        )
+        runner.responses[("dpkg-query", "-W")] = completed(
+            [], stdout="unknown ok not-installed\t\n"
+        )
+        runner.responses[("apt-cache", "show", "example-reader")] = completed(
+            [], stdout="Package: example-reader\nVersion: 1.0\nArchitecture: amd64\n\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "broken.xml").write_text("<components><component>", encoding="utf-8")
+            (root / "valid.xml").write_text(
+                '<components><component type="desktop-application">'
+                "<id>org.example.Reader</id><pkgname>example-reader</pkgname><name>Reader</name>"
+                "</component></components>",
+                encoding="utf-8",
+            )
+            backend = StoreBackend(runner=runner, appstream_roots=[root], architecture="amd64")
+            apps = backend.search(source="APT")
+        self.assertEqual([app.name for app in apps], ["Reader"])
+        self.assertEqual(len(backend.catalog_warnings), 1)
+        self.assertIn("broken.xml", backend.catalog_warnings[0])
+
+    def test_apt_removal_refuses_core_packages_before_polkit(self):
+        runner = FakeRunner()
+        runner.responses[("dpkg-query", "-W")] = completed(
+            [], stdout="install ok installed\t2.0\n"
+        )
+        backend = StoreBackend(runner=runner)
+        result = backend.remove_apt("libc6", "2.0")
+        self.assertFalse(result.success)
+        self.assertIn("core system package", result.message)
+        self.assertFalse(any(call[0] == "pkexec" for call in runner.calls))
+
+    def test_installed_application_launch_uses_gio_without_gtk_launch(self):
+        runner = FakeRunner()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            desktop_file = root / "org.example.Reader.desktop"
+            desktop_file.write_text("[Desktop Entry]\nType=Application\nName=Reader\n", encoding="utf-8")
+            backend = StoreBackend(runner=runner, appstream_roots=[], desktop_roots=[root])
+            app = StoreApp(
+                "installed:org.example.Reader.desktop", "installed", "Installed",
+                "Reader", "", "Other", "org.example.Reader.desktop",
+                installed=True, desktop_id=desktop_file.name, launchable=True,
+            )
+            with patch("isox_store_backend.shutil.which", side_effect=lambda name: "/usr/bin/gio" if name == "gio" else None):
+                result = backend.launch(app)
+        self.assertTrue(result.success)
+        self.assertIn(["gio", "launch", str(desktop_file)], runner.calls)
+
+    def test_desktop_entry_launch_reports_nonzero_gio_exit(self):
+        runner = FakeRunner()
+        runner.responses[("gio", "launch")] = completed(
+            [], returncode=1, stderr="desktop file has no Exec command"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            desktop_file = root / "org.example.Broken.desktop"
+            desktop_file.write_text("[Desktop Entry]\nType=Application\nName=Broken\n", encoding="utf-8")
+            backend = StoreBackend(runner=runner, appstream_roots=[], desktop_roots=[root])
+            app = StoreApp(
+                "installed:org.example.Broken.desktop", "installed", "Installed",
+                "Broken", "", "Other", desktop_file.name,
+                installed=True, desktop_id=desktop_file.name, launchable=True,
+            )
+            with patch("isox_store_backend.shutil.which", side_effect=lambda name: "/usr/bin/gio" if name == "gio" else None):
+                result = backend.launch(app)
+        self.assertFalse(result.success)
+        self.assertIn("no Exec command", result.message)
 
     def test_apt_install_uses_fixed_argv_after_candidate_revalidation(self):
         runner = FakeRunner()

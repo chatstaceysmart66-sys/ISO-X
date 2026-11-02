@@ -54,6 +54,10 @@ def qmp_server():
                         Path(words[1]).write_bytes(b"P6\nnot-an-image")
                     elif kind == "small-screenshot":
                         Path(words[1]).write_bytes(b"P6\n1 1\n255\n\x00\x00\x00")
+                    elif kind == "isox-window-screenshot":
+                        pixels = bytearray(bytes((18, 18, 28)) * (1280 * 800))
+                        pixels[:60] = bytes((0, 229, 255)) * 20
+                        Path(words[1]).write_bytes(b"P6\n1280 800\n255\n" + pixels)
                     elif kind == "black-screenshot":
                         Path(words[1]).write_bytes(b"P6\n640 480\n255\n" + b"\x00" * (640 * 480 * 3))
                     elif kind == "unrelated-screenshot":
@@ -88,7 +92,7 @@ if kind == "misleading":
     with open(serial, "a", encoding="utf-8") as stream:
         stream.write("Reached target Graphical Interface\n")
         stream.write("ISOX_CI_READY nonce=ffffffffffffffffffffffffffffffff\n")
-elif kind in ("success", "success-zero-on-term", "small-boot-frame", "qmp-failure", "qmp-command-error"):
+elif kind in ("success", "success-zero-on-term", "small-boot-frame", "isox-window-screenshot", "qmp-failure", "qmp-command-error"):
     time.sleep(1)
     with open(serial, "a", encoding="utf-8") as stream:
         stream.write(f"ISOX_CI_READY nonce={os.environ['FAKE_QEMU_NONCE']}\n")
@@ -120,6 +124,8 @@ assert r["status"] == "PASS_BOOT", r
 assert r["marker_seen"] is True and r["process_group_clean"] is True, r
 assert r["shutdown_reason"] == "readiness_marker" and r["termination_requested"] is True, r
 assert r["final_screenshot_valid"] is True, r
+assert r["serial_indicators"]["graphical_target"] is True, r
+assert r["serial_indicators"]["display_manager"] is True, r
 assert r["duration_seconds"] < 5, r
 assert r["serial_bytes"] > 0, r
 assert r["screenshots"] == ["qemu-bios-headless-early.ppm", "qemu-bios-headless-final.ppm"], r
@@ -129,6 +135,18 @@ assert args[args.index("-smp") + 1] == "4", args
 for screenshot in r["screenshots"]:
     image = Path(sys.argv[1]).parent / screenshot
     assert image.read_bytes().startswith(b"P6\n640 480\n255\n"), image
+PY
+
+FAKE_QEMU_KIND=isox-window-screenshot FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=5 \
+  ISOX_QEMU_NONCE="$NONCE" PATH="$TMP/bin:$PATH" \
+  bash "$ROOT/tests/qemu-acceptance.sh" bios-headless "$TMP/test.iso" "$TMP/isox-window" \
+  >"$TMP/isox-window.log" 2>&1
+python3 - "$TMP/isox-window/qemu-bios-headless-result.json" <<'PY'
+import json, sys
+from pathlib import Path
+r = json.loads(Path(sys.argv[1]).read_text())
+assert r["status"] == "PASS_BOOT" and r["final_screenshot_valid"] is True, r
+assert r["serial_indicators"]["graphical_target"] is True, r
 PY
 
 FAKE_QEMU_KIND=success-zero-on-term FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=20 \

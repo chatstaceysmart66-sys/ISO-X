@@ -70,6 +70,9 @@ for asset in (
     "db/migrations/003_isox_031.sql", "db/migrations/004_isox_040.sql",
     "app/isox_store_backend.py", "scripts/generate-store-sounds.py",
     "desktop/isox-store.desktop", "tests/test_store_backend.py",
+    "tests/test_keyboard.py",
+    "docs/SHORTCUTS_AR.md",
+    "docs/KNOWN_WARNINGS_AR.md",
 ):
     assert (ROOT / asset).is_file(), f"Missing feature/integration asset: {asset}"
 
@@ -82,6 +85,7 @@ assert "generate-brand-assets.py" in build and "BRAND_ASSET_DIR" in build
 assert "import cairosvg" in brand_generator
 
 assert {"appstream", "python3-yaml", "flatpak", "pulseaudio-utils"} <= packages
+assert {"at-spi2-core", "libglib2.0-bin", "udisks2", "exfatprogs", "ntfs-3g"} <= packages
 assert "x11-xserver-utils" in packages, "Openbox snap shortcuts require xrandr from x11-xserver-utils."
 assert "user-setup" in packages, "live-config needs user-setup to create the configured live account."
 assert "pkexec" in packages, "The store backend requires the pkexec package for privileged APT operations."
@@ -122,11 +126,19 @@ for xml in (ROOT / "desktop/openbox-menu.xml", ROOT / "desktop/openbox-rc.xml",
 
 openbox_root = ET.parse(ROOT / "desktop/openbox-rc.xml").getroot()
 openbox_ns = {"ob": "http://openbox.org/3.4/rc"}
+focus = openbox_root.find("ob:focus", openbox_ns)
+assert focus is not None and focus.findtext("ob:raiseOnFocus", namespaces=openbox_ns) == "yes"
 mouse_contexts = {
     name: context
     for context in openbox_root.findall("ob:mouse/ob:context", openbox_ns)
     for name in context.attrib["name"].split()
 }
+assert any(
+    binding.attrib == {"button": "Left", "action": "Press"}
+    and {action.attrib.get("name") for action in binding.findall("ob:action", openbox_ns)}
+    >= {"Focus", "Raise"}
+    for binding in mouse_contexts["Client"].findall("ob:mousebind", openbox_ns)
+), "Clicking inactive window content must focus and raise that window."
 
 def has_mouse_action(context_name, button, gesture, action, edge=None):
     context = mouse_contexts[context_name]
@@ -203,7 +215,9 @@ assert "gxkb" not in packages and "isox-keyboard" in build
 assert '"$PROJECT_DIR/app/isox_keyboard.py" config/includes.chroot/usr/share/iso-x/isox_keyboard.py' in build
 assert "x11-xkb-utils" in packages
 assert "xkb-switch" not in (ROOT / ".github/workflows/iso-build.yml").read_text()
-assert 'setxkbmap -layout ara,us -option grp:alt_shift_toggle_bidir' in build
+assert 'isox-keyboard restore' in build
+assert "alt_shift_toggle_bidir" in (ROOT / "app/isox_keyboard.py").read_text(encoding="utf-8")
+assert "Alt الأيسر + Shift الأيسر" in (ROOT / "docs/SHORTCUTS_AR.md").read_text(encoding="utf-8")
 assert 'XKBLAYOUT="ara,us"' in build and 'XKBOPTIONS="grp:alt_shift_toggle_bidir"' in build
 assert "nm-applet >/tmp/isox-nm-applet.log" in build
 assert "nm-applet --indicator" not in build, "tint2 uses the XEmbed system tray"

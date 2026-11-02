@@ -205,6 +205,10 @@ def test_ibus_has_one_openbox_autostart_entry():
     build = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
     assert build.count("ibus-daemon -drx") == 1
     assert "ibus-daemon.desktop" not in build
+    assert "isox-keyboard restore" in build
+    assert 'PREFERENCE_PATH = Path(' in (ROOT / "app/isox_keyboard.py").read_text(encoding="utf-8")
+    for doc in ("SHORTCUTS_AR.md", "KNOWN_WARNINGS_AR.md"):
+        assert f'"$PROJECT_DIR/docs/{doc}"' in build
 
 
 def test_user_click_and_menu_contrast_settings_are_applied_and_built():

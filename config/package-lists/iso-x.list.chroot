@@ -25,9 +25,11 @@ xterm
 dbus-x11
 python3
 python3-gi
+libglib2.0-bin
 python3-gi-cairo
 appstream
 python3-yaml
+at-spi2-core
 flatpak
 pulseaudio-utils
 gir1.2-gtk-3.0
@@ -140,6 +142,9 @@ debian-installer-launcher
 thunar
 gvfs
 gvfs-backends
+udisks2
+exfatprogs
+ntfs-3g
 xfce4-terminal
 mousepad
 galculator

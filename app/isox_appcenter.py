@@ -14,6 +14,7 @@ from pathlib import Path
 
 import gi
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
 
@@ -171,6 +172,7 @@ class StoreWindow(Gtk.Window):
         self.busy = False
         self.package_operation_active = False
         self.generation = 0
+        self._search_timeout = 0
         self.current_page = "home"
         self.current_category = "All"
         self.current_source = "All"
@@ -203,6 +205,9 @@ class StoreWindow(Gtk.Window):
         return level > 1
 
     def _on_destroy(self, *_args) -> None:
+        if self._search_timeout:
+            GLib.source_remove(self._search_timeout)
+            self._search_timeout = 0
         if Gtk.main_level() > 0:
             GLib.idle_add(self._quit_main_loops)
 
@@ -508,9 +513,13 @@ class StoreWindow(Gtk.Window):
             return
         self.result_page = 0
         self.generation += 1
-        if hasattr(self, "_search_timeout"):
+        if self._search_timeout:
             GLib.source_remove(self._search_timeout)
-        self._search_timeout = GLib.timeout_add(300, self._refresh_catalog)
+        self._search_timeout = GLib.timeout_add(300, self._search_timeout_fired)
+
+    def _search_timeout_fired(self) -> bool:
+        self._search_timeout = 0
+        return self._refresh_catalog()
 
     def _category_changed(self, combo: Gtk.ComboBoxText) -> None:
         self.current_category = combo.get_active_id() or "All"
@@ -602,10 +611,18 @@ class StoreWindow(Gtk.Window):
         if error:
             self.status.set_text(_text("تعذر اكتشاف التطبيقات: ", "App discovery failed: ") + error)
         else:
-            self.status.set_text(_text(
+            warnings = getattr(self.backend, "catalog_warnings", [])
+            message = _text(
                 f"عُثر على {self.total_results} نتيجة من المصادر المفعّلة.",
                 f"{self.total_results} results from configured sources.",
-            ))
+            )
+            if warnings:
+                details = "; ".join(warnings[:2])
+                message += _text(
+                    f" تعذّر تحليل {len(warnings)} ملف فهرس؛ عُرضت النتائج الصالحة. {details}",
+                    f" Could not parse {len(warnings)} catalog file(s); valid results are shown. {details}",
+                )
+            self.status.set_text(message)
         self._render_apps(self.apps)
         self._update_source_buttons()
         return False
@@ -650,7 +667,13 @@ class StoreWindow(Gtk.Window):
         title.set_max_width_chars(24)
         header.pack_start(title, True, True, 0)
         card.pack_start(header, False, False, 0)
-        summary = Gtk.Label(label=app.summary or app.package_id, xalign=0, wrap=True)
+        summary_text = app.summary or app.package_id
+        if app.category == "All packages":
+            summary_text += _text(
+                " · حزمة Debian عامة؛ قد تكون أداة تقنية بلا واجهة رسومية.",
+                " · Debian package; it may be a component without a graphical interface.",
+            )
+        summary = Gtk.Label(label=summary_text, xalign=0, wrap=True)
         summary.set_lines(2)
         summary.get_style_context().add_class("muted")
         card.pack_start(summary, True, True, 0)
@@ -1027,8 +1050,8 @@ class StoreWindow(Gtk.Window):
         )
         if not shutil.which("flatpak"):
             self.banner.set_text(_text(
-                "يُعرض محتوى Debian من الفهارس المحلية. Flatpak غير مثبت؛ لا تُعرض تطبيقات خارج المصادر المفعّلة.",
-                "Debian results use local catalog metadata. Flatpak is not installed; apps from inactive sources are not listed.",
+                "تُعرض بيانات Debian المحلية وقد تكون قديمة حتى تحديث الفهارس. Flatpak غير مثبت؛ لا تُعرض تطبيقات من مصادر غير مفعّلة.",
+                "Debian results use local metadata that may be stale until catalogs are refreshed. Flatpak is not installed; inactive sources are not listed.",
             ))
         else:
             self.banner.set_text(_text(

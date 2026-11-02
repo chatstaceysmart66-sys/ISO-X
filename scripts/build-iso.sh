@@ -202,6 +202,8 @@ install -m 0644 "$PROJECT_DIR/docs/UPSTREAM_INTEGRATION_AR.md" config/includes.c
 install -m 0644 "$PROJECT_DIR/docs/ARCHITECTURE_AR.md" config/includes.chroot/usr/share/doc/iso-x/ARCHITECTURE_AR.md
 install -m 0644 "$PROJECT_DIR/docs/BUILD_AND_TEST_RESULTS_AR.md" config/includes.chroot/usr/share/doc/iso-x/BUILD_AND_TEST_RESULTS_AR.md
 install -m 0644 "$PROJECT_DIR/docs/HARDWARE_ACCEPTANCE_CHECKLIST_AR.md" config/includes.chroot/usr/share/doc/iso-x/HARDWARE_ACCEPTANCE_CHECKLIST_AR.md
+install -m 0644 "$PROJECT_DIR/docs/SHORTCUTS_AR.md" config/includes.chroot/usr/share/doc/iso-x/SHORTCUTS_AR.md
+install -m 0644 "$PROJECT_DIR/docs/KNOWN_WARNINGS_AR.md" config/includes.chroot/usr/share/doc/iso-x/KNOWN_WARNINGS_AR.md
 install -m 0644 "$PROJECT_DIR/docs/UPSTREAM_REVIEW_AR.md" config/includes.chroot/usr/share/doc/iso-x/UPSTREAM_REVIEW_AR.md
 install -m 0755 "$PROJECT_DIR/scripts/isox-speedtest" config/includes.chroot/usr/local/bin/isox-speedtest
 install -m 0755 "$PROJECT_DIR/scripts/write-usb.sh" config/includes.chroot/usr/local/sbin/isox-write-usb
@@ -442,9 +444,9 @@ fi
 if command -v nm-applet >/dev/null 2>&1; then
   nm-applet >/tmp/isox-nm-applet.log 2>&1 &
 fi
-if command -v setxkbmap >/dev/null 2>&1; then
-  setxkbmap -layout ara,us -option grp:alt_shift_toggle_bidir >/tmp/isox-keyboard.log 2>&1 ||
-    printf '%s\n' 'Failed to apply the Arabic/English XKB layouts.' >>/tmp/isox-keyboard.log
+if command -v isox-keyboard >/dev/null 2>&1; then
+  isox-keyboard restore >/tmp/isox-keyboard.log 2>&1 ||
+    printf '%s\n' 'Failed to restore the Arabic/English keyboard layout.' >>/tmp/isox-keyboard.log
 fi
 if command -v blueman-applet >/dev/null 2>&1; then
   blueman-applet >/tmp/isox-blueman.log 2>&1 &
