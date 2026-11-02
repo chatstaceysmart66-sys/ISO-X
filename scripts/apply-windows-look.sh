@@ -85,7 +85,7 @@ EOF
 cat > "$TARGET_HOME/.config/pcmanfm/isox/desktop-items-0.conf" <<'EOF'
 [*]
 wallpaper=/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.png
-wallpaper_mode=stretch
+wallpaper_mode=fit
 wallpaper_common=1
 desktop_bg=#050812
 desktop_fg=#eaf4ff

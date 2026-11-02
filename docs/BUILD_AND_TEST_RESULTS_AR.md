@@ -1,5 +1,19 @@
 # نتائج البناء والاختبارات — ISO-X 0.4.0
 
+## أحدث تحقق — 2026-11-02
+
+| العنصر | الحالة والدليل |
+|---|---|
+| الاختبار المستهدف لإعداد PCManFM | **PASS** — `python3 -m pytest -q tests/test_build_contracts.py::test_user_click_and_menu_contrast_settings_are_applied_and_built`؛ exit 0، `1 passed`. يؤكد أن الملف المولّد يضبط `wallpaper_mode=fit` ولا يستخدم `stretch`. |
+| اختبارات إعداد البناء والمصدر بعد عزل tint2 | **PASS** — `python3 -m pytest -q tests/test_build_contracts.py`؛ exit 0، `19 passed`. `python3 tests/test_source_config.py`؛ exit 0. |
+| Smoke suite بعد التعديلات | **PASS** — `bash tests/smoke.sh`؛ exit 0، 27 اختبارًا وسائر فحوص smoke المطبوعة PASS. لا يثبت ISO أو إقلاعًا. |
+| اختبار عزل tint2 | أزيل عنصر البطارية الداخلي `B` من إعداد اللوحة، وأضيف عقد مصدر يتأكد من بقاء `xfce4-power-manager` مثبتًا ومشغّلًا. **لا يثبت هذا زوال segfault**؛ يتطلب ISO جديدة وإقلاع BIOS/UEFI وفحص السجلات ومؤشر البطارية. |
+| CI على HEAD السابق | `41500842716` على `f7e188293ac86d10a7b2205135605a2086fe2e20`: source-check وbuild وBIOS وUEFI **SUCCESS**؛ `promote` كان **IN_PROGRESS** عند الفحص. رابط التشغيل: https://github.com/chatstaceysmart66-sys/ISO-X/actions/runs/41500842716 |
+| ISO التشخيصية لذلك التشغيل | الحجم `2,782,298,112` بايت؛ SHA-256 `681df93f90cbf838720643d01b7748837b10d7f8ca9e498cf74e3fde6428e375`. لا تشمل تغيير `fit` المحلي، وليست إصدارًا. |
+| أعطال tint2 | **FAIL / غير محلول** — سجل UEFI من التشغيل نفسه يظهر segfault عند `137.191616` ثانية، ثم علامة الجاهزية لاحقًا. لا تُعد علامة الجاهزية نجاحًا للشريط. |
+| المرجع المرفق وData URI | **NOT_RUN / محجوب** — الملف الأصلي غير متاح؛ لا بصمة ولا استخراج أو مطابقة أصول. |
+| ISO جديدة بعد التغيير | **NOT_RUN** — الاختبار المحلي لا يبني ISO؛ لا تُنسب ملفات staging/rootfs/ISO إلى هذا التعديل. |
+
 **تاريخ مراجعة السجل:** 2026-11-02
 **الفرع:** `fix/isox-build-and-runtime`  
 **الهدف:** Debian GNU/Linux 13 Trixie، amd64.  

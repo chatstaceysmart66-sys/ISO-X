@@ -248,6 +248,11 @@ def test_user_click_and_menu_contrast_settings_are_applied_and_built():
         assert libfm.getboolean("config", "single_click") is True
         assert libfm.getboolean("config", "confirm_del") is True
         assert libfm.getboolean("config", "confirm_trash") is True
+        desktop_profile = (
+            home / ".config/pcmanfm/isox/desktop-items-0.conf"
+        ).read_text(encoding="utf-8")
+        assert "wallpaper_mode=fit" in desktop_profile
+        assert "wallpaper_mode=stretch" not in desktop_profile
 
         gtkrc = (home / ".gtkrc-2.0").read_text(encoding="utf-8")
         gtk_css = (home / ".config/gtk-3.0/gtk.css").read_text(encoding="utf-8")

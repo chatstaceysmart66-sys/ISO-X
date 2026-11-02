@@ -208,7 +208,9 @@ for package in ("dmz-cursor-theme", "libnotify-bin", "xfce4-notifyd", "hardinfo"
 assert "fonts-kacst" not in packages and "pinta" not in packages
 assert "firmware-nvidia-graphics" not in packages, "A backports-only package would break the stable-only build"
 assert (ROOT / "desktop/tint2rc").read_text().count("panel_padding =") == 1
-assert "panel_items = LTBESC" in (ROOT / "desktop/tint2rc").read_text()
+assert "panel_items = LTESC" in (ROOT / "desktop/tint2rc").read_text()
+assert "xfce4-power-manager" in packages
+assert "xfce4-power-manager >/tmp/isox-power.log" in build
 assert "execp_command = /usr/local/bin/isox-keyboard status" in (ROOT / "desktop/tint2rc").read_text()
 assert "execp_lclick_command = /usr/local/bin/isox-keyboard toggle" in (ROOT / "desktop/tint2rc").read_text()
 assert "pcmanfm --desktop --profile=isox" in build, "Desktop icons and the wallpaper need a desktop manager"
