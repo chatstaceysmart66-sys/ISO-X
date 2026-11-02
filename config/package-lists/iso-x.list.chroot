@@ -55,6 +55,7 @@ firmware-mediatek
 blueman
 pipewire
 pipewire-audio
+pipewire-alsa
 pipewire-pulse
 wireplumber
 pavucontrol

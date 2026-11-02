@@ -13,11 +13,13 @@ sudo ./build.sh
 
 The default image does not build or include the optional watermark kernel module, so no release key or Rust toolchain is required. `ISOX_ENABLE_WATERMARK=1` opts into the separately signed watermark feature and requires `ISOX_RELEASE_KEY` and `ISOX_RELEASE_CERT` from outside the repository. `ISOX_BUILD_CINEMATIC=1` separately opts into the optional Bevy scene and requires a compatible Rust toolchain and network/cache access to its crates. Neither option is part of the default desktop or boot path. The build script rejects an existing non-empty build directory rather than deleting it. A successful run prints the output ISO path and SHA-256; this source checkout has not yet produced a verified ISO.
 
-The USB writer requires the generated sidecar `${ISO}.sha256`, validates it and the ISO structure, checks that the selected whole USB disk is large enough, then requires the exact confirmation `WIPE <disk-name>`. This overwrites the selected device. Review the device model and data before confirming:
+The USB writer requires the generated sidecar `${ISO}.sha256`, validates it and the ISO structure, checks that the selected whole USB disk is large enough, then requires the exact confirmation `WIPE <disk-name>`. By default it also creates an ext4 persistence partition in the remaining space and asks for `CREATE PERSISTENCE`; pass `no` as the second argument for a non-persistent USB. Both modes overwrite the selected device. Review the device model and data before confirming:
 
 ```bash
 sudo /usr/local/sbin/isox-write-usb /path/to/ISO-X-0.4.0-live-amd64.iso
 ```
+
+Files and system settings, including saved NetworkManager connections, survive reboots only when booting the persistent menu entry from a USB created in persistence mode. NetworkManager stores system connections under `/etc/NetworkManager/system-connections` with root-only directory permissions.
 
 ## Repository layout
 

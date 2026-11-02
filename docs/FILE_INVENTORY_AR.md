@@ -81,15 +81,15 @@
 
 | المسار | النوع والأبعاد | الحجم |
 |---|---|---:|
-| `assets/iso-x-boot.png` | PNG RGB، 1024×1024 | 87510 بايت |
-| `assets/iso-x-desktop-wallpaper.png` | PNG RGBA، 3840×2160 | 2749909 بايت |
-| `assets/iso-x-dragon.png` | PNG RGBA، 1024×1024 | 159081 بايت |
-| `assets/iso-x-plymouth.png` | PNG RGB، 512×512 | 40774 بايت |
+| `assets/iso-x-boot.png` | PNG RGB، 1024×1024 | 168471 بايت |
+| `assets/iso-x-desktop-wallpaper.png` | PNG RGB، 3840×2160 | 887149 بايت |
+| `assets/iso-x-dragon.png` | PNG RGBA، 1024×1024 | 129718 بايت |
+| `assets/iso-x-plymouth.png` | PNG RGB، 512×512 | 72256 بايت |
 | `docs/previews/isox-welcome-design-preview.png` | PNG RGB، 1600×900 | 215686 بايت |
 | `assets/iso-x-boot.svg` | SVG، 23 سطراً / 2362 بايت | شعار متجهي خاص بمشهد الإقلاع. | ينسخه `build-iso.sh` كأصل عام؛ Plymouth يستخدم PNG منفصلة. | XML صالح مصدرًا؛ لا اختبار عرض. |
-| `assets/iso-x-desktop-wallpaper.svg` | SVG، 35 سطراً / 6934 بايت | خلفية متجهية 3840×2160 بتنين/سماء وعناصر glow. | تُنسخ إلى `/usr/share/backgrounds/iso-x/`; profile يختار PNG لا SVG. | لا اختبار بصري؛ ربما نسخة مصدر غير مستخدمة في desktop profile. |
+| `assets/iso-x-desktop-wallpaper.svg` | مصدر خلفية متجهية بتدرج داكن وتنين ISO-X وعناصر تقنية خافتة ونص ترحيبي لاتيني قابل للرسم بموثوقية. | يُدمج الشعار المتجهي أثناء التوليد، وتُنسخ SVG وPNG إلى `/usr/share/backgrounds/iso-x/`; profile يستخدم PNG. | تم فحص PNG المولّد بصريًا وأبعاد 3840×2160؛ عرضها على عتاد/دقة أخرى غير مثبت. |
 | `assets/iso-x-dragon.svg` | SVG، 56 سطراً / 4278 بايت | الشعار المتجهي للواجهة/أيقونة التطبيق. | ينسخ إلى `/usr/share/iso-x/assets` وإلى scalable app icon. | لا اختبار GTK rendering. |
-| `assets/iso-x-start.html` | HTML، 38 سطراً / 3490 بايت | صفحة بداية عربية RTL فيها بحث ويب وروابط Debian/Mozilla/README محلية. | ينسخ إلى `/usr/share/iso-x/start.html` وتصبح Firefox homepage بواسطة hook. | اختبار `test_build_contracts.py` يفحص النص وhook؛ رابط README `file:///usr/share/doc/iso-x/README_AR.md` يحتاج تحقق من فتح Markdown في Firefox. |
+| `assets/iso-x.html` | صفحة HTML عربية RTL محدثة للترحيب والبحث وروابط النظام. | ينسخ إلى `/usr/share/iso-x/start.html` وتصبح Firefox homepage بواسطة hook. | اختبار `test_build_contracts.py` يفحص النص والربط؛ لم يُختبر العرض داخل Firefox في ISO مبنية. |
 
 ## الدفعة 5: وثائق المشروع والملفات العامة
 
@@ -180,7 +180,7 @@
 | `assets/iso-x-dragon.png` | ثنائي (فُحصت بياناته فقط) |
 | `assets/iso-x-dragon.svg` | قُرئ بالكامل |
 | `assets/iso-x-plymouth.png` | ثنائي (فُحصت بياناته فقط) |
-| `assets/iso-x-start.html` | قُرئ بالكامل |
+| `assets/iso-x.html` | قُرئ بالكامل |
 | `auto/config` | قُرئ بالكامل |
 | `build.sh` | قُرئ بالكامل |
 | `config/hooks/live/0050-isox-locales.hook.chroot` | قُرئ بالكامل |

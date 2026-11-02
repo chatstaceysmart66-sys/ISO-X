@@ -30,9 +30,12 @@ grub_template = (ROOT / "config/bootloaders/grub-pc/grub.cfg").read_text(encodin
 assert "timeout 100" in isolinux_template
 assert "live-@FLAVOUR@-persistence" in syslinux_template
 assert "append @APPEND_LIVE@ persistence" in syslinux_template
+assert "\tmenu default" in syslinux_template
 assert "set timeout=10" in grub_template
+assert 'set default="Live system (amd64) with Persistence"' in grub_template
 assert "with Persistence" in grub_template
 usb_writer = (ROOT / "scripts/write-usb.sh").read_text(encoding="utf-8")
+assert 'mode="${2:-persistence}"' in usb_writer
 assert "sfdisk --append --no-reread --wipe never" in usb_writer
 assert 'expected an MBR (dos) table' in usb_writer
 assert "sgdisk" not in usb_writer
@@ -56,7 +59,7 @@ for migration in migrations:
 assert '004_isox_040.sql' in (ROOT / "app/iso_x_gtk.py").read_text(encoding="utf-8")
 
 # The package set names exactly one top-level WM, login manager, network manager and audio stack.
-for package in ("openbox", "lightdm", "network-manager", "pipewire-audio", "pipewire-pulse", "wireplumber"):
+for package in ("openbox", "lightdm", "network-manager", "pipewire-audio", "pipewire-alsa", "pipewire-pulse", "wireplumber"):
     assert package in packages, f"Expected desktop component missing: {package}"
 for package in ("xfwm4", "lxde", "lxqt", "wicd", "connman", "pulseaudio"):
     assert package not in packages, f"Unexpected second core manager/audio server present: {package}"
@@ -88,13 +91,21 @@ print("PASS: explicit BIOS+UEFI bootloader config, all SQL migrations staged, co
 def test_browser_homepage_is_staged_and_configured():
     build_script = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
     hook = (ROOT / "config/hooks/live/0400-isox-firefox-defaults.hook.chroot").read_text(encoding="utf-8")
-    page = (ROOT / "assets/iso-x-start.html").read_text(encoding="utf-8")
-    assert 'assets/iso-x-start.html" config/includes.chroot/usr/share/iso-x/start.html' in build_script
+    page = (ROOT / "assets/iso-x.html").read_text(encoding="utf-8")
+    assert 'assets/iso-x.html" config/includes.chroot/usr/share/iso-x/start.html' in build_script
     assert '0400-isox-firefox-defaults.hook.chroot' in build_script
     assert 'pref("browser.startup.homepage", "%s");' in hook
     assert 'file:///usr/share/iso-x/start.html' in hook
     assert 'lang="ar" dir="rtl"' in page
     assert 'name="q"' in page and 'action="https://duckduckgo.com/"' in page
+
+
+def test_pipewire_user_session_and_saved_network_profiles_are_configured():
+    build_script = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
+    hook = (ROOT / "config/hooks/live/0300-isox-services.hook.chroot").read_text(encoding="utf-8")
+    for unit in ("pipewire.socket", "pipewire-pulse.socket", "wireplumber.service"):
+        assert f"default.target.wants/{unit}" in build_script
+    assert "install -d -o root -g root -m 0700 /etc/NetworkManager/system-connections" in hook
 
 
 def test_firefox_defaults_hook_applies_after_existing_packaged_prefs():
@@ -147,7 +158,7 @@ def test_launcher_uses_installed_desktop_entries_without_plain_letter_hotkeys():
     assert "Gio.DesktopAppInfo.new_from_filename" in launcher
     assert "app.should_show()" in launcher
     assert "app.get_is_hidden()" in launcher
-    assert "PAGE_SIZE = 48" in launcher
+    assert "PAGE_SIZE = 8" in launcher
     assert "self._show_all" in launcher and "self._show_primary" in launcher
     assert "Gdk.KEY_Escape" in launcher and "focus-out-event" in launcher
     assert "set_skip_taskbar_hint(True)" not in launcher
@@ -334,14 +345,15 @@ def test_generated_boot_config_validator_rejects_stalls_and_ci_leaks():
         grub = root / "grub.cfg"
         isolinux.write_text("include menu.cfg\ndefault vesamenu.c32\nprompt 0\ntimeout 100\n", encoding="utf-8")
         live.write_text(
-            "label live-amd64\n\tmenu label ^Live system (amd64)\n\tmenu default\n"
+            "label live-amd64\n\tmenu label ^Live system (amd64)\n"
             "\tlinux /live/vmlinuz\n\tinitrd /live/initrd.img\n\tappend boot=live quiet\n"
             "label live-amd64-persistence\n\tmenu label Live system (amd64) with Persistence\n"
+            "\tmenu default\n"
             "\tlinux /live/vmlinuz\n\tinitrd /live/initrd.img\n\tappend boot=live quiet persistence\n",
             encoding="utf-8",
         )
         grub.write_text(
-            "set timeout=10\n"
+            'set default="Live system (amd64) with Persistence"\nset timeout=10\n'
             'menuentry "Live system (amd64)" {\n linux /live/vmlinuz boot=live quiet\n}\n'
             'menuentry "Live system (amd64) with Persistence" {\n'
             " linux /live/vmlinuz boot=live quiet persistence\n}\n",
@@ -353,6 +365,25 @@ def test_generated_boot_config_validator_rejects_stalls_and_ci_leaks():
         )
         assert result.returncode == 0, result.stderr
         assert "PASS:" in result.stdout
+
+        grub.write_text(
+            grub.read_text(encoding="utf-8").replace(
+                'set default="Live system (amd64) with Persistence"', "set default=0"
+            ),
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            ["bash", str(validator), str(isolinux), str(live), str(grub), "0", ""],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode != 0
+        assert "UEFI persistent live entry must be the default" in result.stderr
+        grub.write_text(
+            grub.read_text(encoding="utf-8").replace(
+                "set default=0", 'set default="Live system (amd64) with Persistence"'
+            ),
+            encoding="utf-8",
+        )
 
         isolinux.write_text("include menu.cfg\ndefault vesamenu.c32\nprompt 0\ntimeout 0\n", encoding="utf-8")
         result = subprocess.run(
@@ -377,14 +408,14 @@ def test_generated_boot_config_validator_rejects_stalls_and_ci_leaks():
 
         nonce = "0123456789abcdef0123456789abcdef"
         live.write_text(
-            "label live-amd64\nmenu default\nappend boot=live quiet isox.ci=1 "
+            "label live-amd64\nappend boot=live quiet isox.ci=1 "
             f"isox.ci.nonce={nonce}\n"
-            "label live-amd64-persistence\nappend boot=live quiet isox.ci=1 "
+            "label live-amd64-persistence\nmenu default\nappend boot=live quiet isox.ci=1 "
             f"isox.ci.nonce={nonce} persistence\n",
             encoding="utf-8",
         )
         grub.write_text(
-            "set timeout=10\n"
+            f'set default="Live system (amd64) with Persistence"\nset timeout=10\n'
             f'menuentry "Live system (amd64)" {{\n linux /live/vmlinuz boot=live quiet isox.ci=1 isox.ci.nonce={nonce}\n}}\n'
             f'menuentry "Live system (amd64) with Persistence" {{\n'
             f" linux /live/vmlinuz boot=live quiet isox.ci=1 isox.ci.nonce={nonce} persistence\n}}\n",

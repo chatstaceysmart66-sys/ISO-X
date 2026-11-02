@@ -78,6 +78,8 @@ button:disabled { background: #151e30; color: #8798ae; }
 entry, combobox { background: #111b2e; color: #edf4ff; border-color: #294563; }
 button.suggested-action { background: #0879b7; color: #fff; }
 button.destructive-action { background: #8f3248; color: #fff; }
+button.category-tab { border-radius: 18px; padding: 5px 12px; }
+button.category-tab:checked { background: #0879b7; border-color: #35c4ff; color: #fff; }
 frame.card { background: #111b2e; border: 1px solid #253955; border-radius: 13px; }
 frame.card > border { border: 0; }
 label.muted { color: #a9b9d0; }
@@ -176,6 +178,7 @@ class StoreWindow(Gtk.Window):
         self.result_page = 0
         self.total_results = 0
         self.navigation_update = False
+        self._syncing_category_tabs = False
         self.apps: list[StoreApp] = []
         self.pending_updates: list[str] = []
         self.operation_history: list[tuple[str, str, str]] = []
@@ -276,6 +279,21 @@ class StoreWindow(Gtk.Window):
         self.category.set_active_id("All")
         self.category.connect("changed", self._category_changed)
         controls.pack_start(self.category, False, False, 0)
+        self.category_tab_buttons: dict[str, Gtk.ToggleButton] = {}
+        self.category_tabs = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        category_scroll = Gtk.ScrolledWindow()
+        category_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        category_scroll.set_shadow_type(Gtk.ShadowType.NONE)
+        category_scroll.set_size_request(-1, 44)
+        category_scroll.add(self.category_tabs)
+        for key, arabic, english in SUPPORTED_CATEGORIES:
+            button = Gtk.ToggleButton(label=_text(arabic, english))
+            button.get_style_context().add_class("category-tab")
+            button.connect("clicked", self._category_tab_clicked, key)
+            self.category_tabs.pack_start(button, False, False, 0)
+            self.category_tab_buttons[key] = button
+        self._sync_category_tabs()
+        content.pack_start(category_scroll, False, False, 0)
         self.source = Gtk.ComboBoxText()
         for key, arabic, english in (
             ("All", "كل المصادر", "All sources"),
@@ -475,6 +493,7 @@ class StoreWindow(Gtk.Window):
         catalog_page = page_id not in ("settings", "downloads", "updates")
         self.search.set_sensitive(catalog_page)
         self.category.set_sensitive(catalog_page and page_id != "packages")
+        self.category_tabs.set_sensitive(catalog_page and page_id != "packages")
         self.source.set_sensitive(catalog_page and page_id != "packages")
         self.stack.set_visible_child_name("settings" if page_id == "settings" else "activity" if page_id == "downloads" else "apps")
         if page_id == "updates":
@@ -495,9 +514,28 @@ class StoreWindow(Gtk.Window):
 
     def _category_changed(self, combo: Gtk.ComboBoxText) -> None:
         self.current_category = combo.get_active_id() or "All"
+        self._sync_category_tabs()
         self.result_page = 0
         if not self.navigation_update and self.current_page not in ("settings", "downloads", "updates", "packages"):
             self._refresh_catalog()
+
+    def _category_tab_clicked(self, button: Gtk.ToggleButton, category: str) -> None:
+        if self._syncing_category_tabs:
+            return
+        if not button.get_active():
+            self._sync_category_tabs()
+            return
+        self.category.set_active_id(category)
+        self._sync_category_tabs()
+
+    def _sync_category_tabs(self) -> None:
+        selected = self.category.get_active_id() or "All"
+        self._syncing_category_tabs = True
+        try:
+            for category, button in self.category_tab_buttons.items():
+                button.set_active(category == selected)
+        finally:
+            self._syncing_category_tabs = False
 
     def _source_changed(self, combo: Gtk.ComboBoxText) -> None:
         self.current_source = combo.get_active_id() or "All"
@@ -525,16 +563,6 @@ class StoreWindow(Gtk.Window):
         query = self.search.get_text().strip()
         category = self.category.get_active_id() or "All"
         source = self.source.get_active_id() or "All"
-        category = {
-            "home": "Apps",
-            "apps": "Apps",
-            "games": "Games",
-            "internet": "Internet",
-            "media": "Media",
-            "productivity": "Productivity",
-            "tools": "Tools",
-            "installed": "Installed",
-        }.get(self.current_page, category)
         all_packages = self.current_page == "packages"
         result_page = self.result_page
         if all_packages:
@@ -615,7 +643,7 @@ class StoreWindow(Gtk.Window):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
         card.set_border_width(12)
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        icon = self._app_icon(app.icon, 48)
+        icon = self._app_icon(app.icon, 56)
         header.pack_start(icon, False, False, 0)
         title = Gtk.Label(label=app.name, xalign=0, wrap=True)
         title.get_style_context().add_class("brand")
@@ -1052,8 +1080,8 @@ class StoreWindow(Gtk.Window):
             return
         if not self.play_sound(sound_id):
             self.status.set_text(_text(
-                "تعذر تشغيل الصوت؛ تحقق من pulseaudio-utils وخرج الصوت. يستمر المتجر بالعمل.",
-                "Could not play sound; check pulseaudio-utils and the audio output. The store remains usable.",
+                "تعذر تشغيل الصوت؛ تحقق من PipeWire ومخرج الصوت. يستمر المتجر بالعمل.",
+                "Could not play sound; check PipeWire and the selected audio output. The store remains usable.",
             ))
 
     def play_sound(self, sound_id: str) -> bool:

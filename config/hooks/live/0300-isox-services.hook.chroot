@@ -3,6 +3,7 @@ set -Eeuo pipefail
 # Preserve NetworkManager's control of Wi-Fi; do not enable a standalone
 # wpa_supplicant instance which could conflict with it.
 install -d -m 0755 /etc/NetworkManager
+install -d -o root -g root -m 0700 /etc/NetworkManager/system-connections
 cat > /etc/NetworkManager/NetworkManager.conf <<'EOF'
 [main]
 plugins=keyfile

@@ -1,12 +1,12 @@
 label live-@FLAVOUR@
 	menu label ^Live system (@FLAVOUR@)
-	menu default
 	linux @LINUX@
 	initrd @INITRD@
 	append @APPEND_LIVE@
 
 label live-@FLAVOUR@-persistence
 	menu label Live system (@FLAVOUR@) with Persistence
+	menu default
 	linux @LINUX@
 	initrd @INITRD@
 	append @APPEND_LIVE@ persistence

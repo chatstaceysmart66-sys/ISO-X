@@ -688,20 +688,21 @@ def exercise_application_launcher() -> None:
                     assert len(window.primary_grid.get_children()) == 8
                     window.connect("hide", hidden)
                     window.more_button.emit("clicked")
-                    assert len(window.all_list.get_children()) == 48
-                    window._load_more(None)
+                    assert len(window.all_list.get_children()) == 8
+                    while window.all_more.get_visible():
+                        window._load_more(None)
                     assert len(window.all_list.get_children()) == 59
                     window.search.set_text("Application 49")
                     window._search_changed(window.search)
                     assert len(window.all_list.get_children()) == 1
                     window.search.set_text("")
                     window._search_changed(window.search)
-                    assert len(window.all_list.get_children()) == 48
+                    assert len(window.all_list.get_children()) == 8
                     window.back_button.emit("clicked")
                     assert window.primary_page.get_visible()
                     assert not window.all_page.get_visible()
                     window.more_button.emit("clicked")
-                    assert len(window.all_list.get_children()) == 48
+                    assert len(window.all_list.get_children()) == 8
                     refreshed_entry.write_text(
                         "[Desktop Entry]\\n"
                         "Type=Application\\n"

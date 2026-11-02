@@ -153,6 +153,7 @@ mkdir -p config/package-lists \
   config/includes.chroot/usr/lib/systemd/user \
   config/includes.chroot/usr/share/iso-x/db/migrations \
   config/includes.chroot/etc/systemd/system/multi-user.target.wants \
+  config/includes.chroot/etc/systemd/user/default.target.wants \
   config/includes.chroot/etc/skel/.config/openbox \
   config/includes.chroot/etc/skel/.config/tint2 \
   config/includes.chroot/etc/skel/.config/systemd/user/timers.target.wants \
@@ -185,8 +186,14 @@ install -m 0644 "$PROJECT_DIR/app/isox_store_backend.py" config/includes.chroot/
 install -m 0644 "$PROJECT_DIR/app/isox_launcher.py" config/includes.chroot/usr/share/iso-x/isox_launcher.py
 install -m 0644 "$PROJECT_DIR/app/isox_keyboard.py" config/includes.chroot/usr/share/iso-x/isox_keyboard.py
 install -m 0644 "$PROJECT_DIR"/assets/sounds/*.wav config/includes.chroot/usr/share/iso-x/assets/sounds/
+ln -sfn /usr/lib/systemd/user/pipewire.socket \
+  config/includes.chroot/etc/systemd/user/default.target.wants/pipewire.socket
+ln -sfn /usr/lib/systemd/user/pipewire-pulse.socket \
+  config/includes.chroot/etc/systemd/user/default.target.wants/pipewire-pulse.socket
+ln -sfn /usr/lib/systemd/user/wireplumber.service \
+  config/includes.chroot/etc/systemd/user/default.target.wants/wireplumber.service
 install -m 0644 "$PROJECT_DIR/app/isox_welcome.py" config/includes.chroot/usr/share/iso-x/isox_welcome.py
-install -m 0644 "$PROJECT_DIR/assets/iso-x-start.html" config/includes.chroot/usr/share/iso-x/start.html
+install -m 0644 "$PROJECT_DIR/assets/iso-x.html" config/includes.chroot/usr/share/iso-x/start.html
 install -m 0644 "$PROJECT_DIR/README.md" config/includes.chroot/usr/share/doc/iso-x/README.md
 install -m 0644 "$PROJECT_DIR/README_AR.md" config/includes.chroot/usr/share/doc/iso-x/README_AR.md
 install -m 0644 "$PROJECT_DIR/THIRD_PARTY_NOTICES.md" config/includes.chroot/usr/share/doc/iso-x/THIRD_PARTY_NOTICES.md

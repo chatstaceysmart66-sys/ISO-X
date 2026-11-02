@@ -150,8 +150,8 @@ PY
 }
 
 main() {
-  local iso="${1:-}" mode="${2:-no}" disk device capacity model confirmation
-  [[ -n "$iso" ]] || { echo "الاستخدام: $0 /path/to/ISO-X-0.4.0-live-amd64.iso [no|persistence]" >&2; return 2; }
+  local iso="${1:-}" mode="${2:-persistence}" disk device capacity model confirmation
+  [[ -n "$iso" ]] || { echo "الاستخدام: $0 /path/to/ISO-X-0.4.0-live-amd64.iso [persistence|no]" >&2; return 2; }
   [[ "$mode" == "no" || "$mode" == "persistence" ]] || {
     echo "الوضع يقبل no أو persistence فقط." >&2; return 3;
   }

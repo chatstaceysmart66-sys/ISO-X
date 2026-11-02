@@ -35,7 +35,7 @@ grep -Eq '^[[:space:]]*default[[:space:]]+vesamenu\.c32[[:space:]]*$' "$isolinux
 
 awk '
   /^[[:space:]]*label[[:space:]]/ { label = $2 }
-  /^[[:space:]]*menu[[:space:]]+default[[:space:]]*$/ && label ~ /^live-/ && label !~ /-persistence$/ { default_live = 1 }
+  /^[[:space:]]*menu[[:space:]]+default[[:space:]]*$/ && label ~ /^live-/ && label ~ /-persistence$/ { default_persistence = 1 }
   /^[[:space:]]*append[[:space:]]/ && label ~ /^live-/ && label !~ /failsafe/ {
     if (label ~ /-persistence$/) {
       if ($0 ~ /(^|[[:space:]])persistence([[:space:]]|$)/) persistence = 1
@@ -45,11 +45,13 @@ awk '
       else invalid = 1
     }
   }
-  END { if (!default_live || !normal || !persistence || invalid) exit 1 }
-' "$live_cfg" || fail "BIOS normal and persistence entries are invalid" "$live_cfg"
+  END { if (!default_persistence || !normal || !persistence || invalid) exit 1 }
+' "$live_cfg" || fail "BIOS normal and default persistence entries are invalid" "$live_cfg"
 
 grep -Eq '^set timeout=[1-9][0-9]*$' "$grub_cfg" ||
   fail "UEFI GRUB timeout must be finite and non-zero" "$grub_cfg"
+grep -Fqx 'set default="Live system (amd64) with Persistence"' "$grub_cfg" ||
+  fail "UEFI persistent live entry must be the default" "$grub_cfg"
 awk '
   /^menuentry / {
     in_live = ($0 ~ /Live system/)

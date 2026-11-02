@@ -39,7 +39,7 @@ PREFERRED_IDS = (
     "vlc.desktop",
     "xfce4-screenshooter.desktop",
 )
-PAGE_SIZE = 48
+PAGE_SIZE = 8
 INTERNAL_DESKTOP_IDS = frozenset({"iso-x.desktop", "isox-launcher.desktop"})
 
 
