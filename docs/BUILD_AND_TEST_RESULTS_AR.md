@@ -1,28 +1,46 @@
 # نتائج البناء والاختبارات — ISO-X 0.4.0
 
+## إعادة التحقق بعد إصلاحات CI — 2026-11-06
+
+| الاختبار | الأمر/الطريقة | النتيجة | Exit Code | الدليل/السجل | الملاحظات |
+|---|---|---|---:|---|---|
+| مجموعة المصدر في CI | `scripts/run-source-checks.py` ضمن `42212462133` | PASS — 90 ناجحاً، 0 فشل، 0 تخطٍ أو NOT_RUN | 0 | artifact `isox-source-check-42212462133-1` | شمل GTK/Xvfb وShellCheck وdesktop-file validation. |
+| بناء ISO وفحص البنية | Debian Trixie live-build وxorriso في CI | PASS | 0 | artifact `isox-build-evidence-42212462133-1` | Diagnostic ISO، 2,785,017,856 بايت، SHA-256 `a35e05baabc8292b1cbf0a50fb31cacb59584d09bec2dff15cf5859302765a9c`؛ ليست إصداراً. |
+| BIOS diagnostic boot | QEMU TCG، إقلاع nonce/readiness | PASS_BOOT — 206.545s | 0 | artifact `isox-bios-evidence-42212462133-1` | marker جديد، لقطة نهائية صالحة، لا segfault في السجل. |
+| UEFI diagnostic boot | QEMU TCG + OVMF، إقلاع nonce/readiness | PASS_BOOT — 154.110s | 0 | artifact `isox-uefi-evidence-42212462133-1` | marker جديد، لقطة نهائية صالحة، لا wmctrl/Tint2 segfault. |
+| BIOS normal-boot desktop | QEMU TCG، كشف سطح المكتب من اللقطة | PASS_BOOT، `desktop_seen=true` — 217.556s | 0 | سجل `promote` للتشغيل؛ لقطات ضمن artifact `ISO-X-0.4.0-live-amd64-candidate-42212462133-1` | `shutdown_reason=desktop_rendered` واللقطة النهائية صالحة. |
+| UEFI normal-boot desktop | QEMU TCG + OVMF، كشف سطح المكتب من اللقطة | PASS_BOOT، `desktop_seen=true` — 220.964s | 0 | سجل `promote` للتشغيل؛ لقطات ضمن artifact المرشح أعلاه | `shutdown_reason=desktop_rendered` واللقطة النهائية صالحة. |
+| نسخة normal-boot المرشحة | إعادة إنشاء ISO ثم SHA-256 وفحص BIOS/UEFI | PASS | 0 | `promote` في `42212462133` | 2,781,609,984 بايت؛ SHA-256 `3efbd25cacb7b23e0fa49066c2c04995bc5753b8837274ce392b54be0db8d2f2`؛ artifact CI، وليس إصداراً. |
+| اكتمال الـworkflow | `gh run view 42212462133` | SUCCESS، نحو 48 دقيقة و46 ثانية | 0 | https://github.com/chatstaceysmart66-sys/ISO-X/actions/runs/42212462133 | source-check/build/BIOS/UEFI/promote/acceptance-summary كلها success. |
+| Persistence بعد reboot وعتاد حقيقي | اختبار USB افتراضي بإعادة تشغيل، ثم جهاز مادي | NOT_RUN | — | التقرير `results.json` يذكر Persistence `NOT_RUN` | نجاح اختبار كتابة قسم persistence لا يثبت بقاء البيانات بعد إعادة التشغيل. |
+
 ## تدقيق الحالة والبوابة — 2026-11-06
 
 | الأمر/الفحص | النتيجة | الدليل/القيد |
 |---|---|---|
 | `python3 -m pytest -q` | **PASS**, exit 0 — 65 passed، 1 skipped، 4 subtests passed | `/tmp/isox-source-audit-final.NAU83z/pytest.log` |
 | `bash tests/smoke.sh` | **PASS**, exit 0 — 27 اختبارًا | `/tmp/isox-source-audit-final.NAU83z/smoke.log` |
-| `python3 scripts/run-source-checks.py /tmp/isox-source-audit-final.NAU83z /tmp/isox-source-audit-final.NAU83z/pycache` | **89 PASS، 0 FAIL، 1 SKIP، 4 NOT_RUN**؛ exit 1 بسبب NOT_RUN | `source-tests.json` وسجلات الأوامر في مجلد الأدلة نفسه. المفقود: `sfdisk` و`xvfb-run`/`xdotool`/`wmctrl`/`openbox` و`shellcheck` و`desktop-file-validate`. |
+| `python3 scripts/run-source-checks.py /tmp/isox-source-audit-final.NAU83z /tmp/isox-source-audit-final.NAU83z/pycache` | **89 PASS، 0 FAIL، 1 SKIP، 4 NOT_RUN**؛ exit 1 بسبب NOT_RUN | فحص محلي سابق قبل CI؛ قيد الأدوات موضح في سجلاته. CI اللاحق `42212462133` شغّل كل الأدوات واجتاز 90 فحصاً. |
 | `bash tests/test_desktop_readiness.sh` | **PASS**, exit 0 | يشترط وجود Openbox وTint2 وتطبيق ISO-X ونافذته؛ سيناريو غياب Tint2 يجب أن يفشل. |
 | `bash tests/test_qemu_headless_validation.sh` | **PASS**, exit 0 | يثبت أن وجود `segfault` في سجل الضيف يفشل التصنيف كـ`GUEST_RUNTIME_CRASH` حتى بعد علامة الجاهزية. |
 | `git diff --check` | **PASS**, exit 0 | لا يثبت صحة build أو تشغيل ISO. |
 | CI `42172193542` على `be001c0` | jobs كلها **SUCCESS** | أقدم من التغييرات غير الملتزمة الحالية. سجلا BIOS/UEFI يثبتان segfault لـTint2 قبل readiness رغم نجاح البوابتين؛ لا يُحتسب هذا دليلاً على حالة التغييرات الحالية. |
-| بناء ISO محلي وفحص SquashFS | **NOT_RUN** | UID 1000، مساحة متاحة 18 GiB مقابل 20 GiB حد البناء، وأدوات `lb`, `xorriso`, `debootstrap`, `mksquashfs`, `qemu-system-x86_64` غير موجودة. |
-| BIOS/UEFI للتغييرات المحلية | **NOT_RUN** | يتطلب CI/build جديدًا؛ يجب التحقق من بقاء Tint2 حيًا بعد readiness، وأن سجل segfault يفشل البوابة. |
+| بناء ISO محلي وفحص SquashFS | **NOT_RUN محلياً؛ PASS في CI** | بني وفُحص ISO التشخيصي داخل CI؛ لم يُبنَ داخل Codespace المحلي. |
+| BIOS/UEFI للتغييرات المحلية | **PASS في CI** | التشغيل `42212462133` اجتاز diagnostic وnormal-boot BIOS/UEFI؛ readiness اشترط Tint2 وظهرت صور سطح المكتب العادي. |
 
 ## تحقيق CI — 2026-11-06، التشغيل 42206164401
 
+> أُغلقت بوابات الإقلاع لهذا الخلل في التشغيل اللاحق `42212462133`؛ النتائج النهائية موثقة أعلاه. يحتفظ هذا القسم بسجل التشخيص التاريخي للفشل.
+
 | المسألة | الدليل | الاستنتاج/التغيير |
 |---|---|---|
-| UEFI `wmctrl` segfault | `evidence/uefi/qemu-uefi-headless-serial.log` يسجل عمليتي segfault عند 134.222499 و138.077028 ثانية. مسبار الجاهزية يستدعي `wmctrl -l -G` كل ثانية أثناء الانتظار. | الارتباط بين الانهيار والاستدعاء مثبت بالتوقيت والسياق، لكن سبباً داخلياً في wmctrl أو libc غير مثبت. استبدل فحص النافذة بـ`xwininfo -root -tree` وأضيفت حزمة `x11-utils`؛ الاختبار الحقيقي ينتظر إعادة CI. |
-| BIOS cancelled | `bios-job.log` يبين أن apt كان ينزل `qemu-system-x86` والتبعيات، وانتهى الأمر بـ`The operation was canceled` عند 20 دقيقة قبل تنزيل ISO. أظهر الحل 85 حزمة و46.3MB، منها توصيات رسومية. | السبب مهلة الوظيفة أثناء تثبيت QEMU، لا فشل BIOS boot. أضيف `--no-install-recommends` ورفعت المهلة إلى 30 دقيقة؛ يلزم إعادة CI للتحقق. |
+| UEFI `wmctrl` segfault | `evidence/uefi/qemu-uefi-headless-serial.log` يسجل عمليتي segfault عند 134.222499 و138.077028 ثانية. مسبار الجاهزية يستدعي `wmctrl -l -G` كل ثانية أثناء الانتظار. | الارتباط بين الانهيار والاستدعاء مثبت بالتوقيت والسياق، لكن سبباً داخلياً في wmctrl أو libc غير مثبت. استبدل فحص النافذة بـ`xwininfo -root -tree` وأضيفت حزمة `x11-utils`؛ اجتاز البديل BIOS/UEFI في التشغيل اللاحق `42212462133`. |
+| BIOS cancelled | `bios-job.log` يبين أن apt كان ينزل `qemu-system-x86` والتبعيات، وانتهى الأمر بـ`The operation was canceled` عند 20 دقيقة قبل تنزيل ISO. أظهر الحل 85 حزمة و46.3MB، منها توصيات رسومية. | السبب مهلة الوظيفة أثناء تثبيت QEMU، لا فشل BIOS boot. أضيف `--no-install-recommends` ورفعت المهلة إلى 30 دقيقة؛ اكتمل التثبيت ثم BIOS boot في `42212462133`. |
 | تثبيت الأصول وصحة البناء | artifact `results.json`: البناء وفحص البنية PASS، الحجم 2,785,017,856 بايت، SHA-256 `d3330d055e006f02096d931bf2eb634dc20834b4bf67af390ffc3359eb808453`. | ISO مرشح CI تشخيصي فقط. لا تعني نتيجة البناء أن UEFI/BIOS اجتازا. |
 
 ## جولة أصول المرجع — 2026-11-06
+
+> سجلات هذه الجولة توثق فحوص المصدر السابقة على بناء CI. الحالة الأحدث لبناء/إقلاع CI موثقة في ملحق إعادة التحقق أعلاه.
 
 | الأمر/الفحص | الحالة | الدليل/القيد |
 |---|---|---|

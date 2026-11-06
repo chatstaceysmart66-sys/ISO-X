@@ -3,9 +3,10 @@
 - At audit start the branch was `fix/isox-build-and-runtime` at `be001c0f7b4669f1886e7624a1d257de07b0992b`, equal to origin. The stash was preserved and not applied.
 - Source dependency path: `design/reference/iso-x-reference.html` → `scripts/extract-reference-assets.py` → `assets/reference/*` and manifest → `scripts/generate-brand-assets.py` → `scripts/build-iso.sh` staging → Plymouth/LightDM/GTK consumers. Local asset/hash tests pass, but there is no local rootfs, SquashFS, or ISO to inspect.
 - Desktop readiness path: `systemd/isox-ci-ready.service` → `scripts/isox-ci-ready.sh` → `scripts/isox-desktop-window-ready.sh` → active user, ISO-X window, Openbox, and Tint2 process. `tests/test_desktop_readiness.sh` rejects a missing Tint2 process; `tests/qemu-runner.py` now rejects any logged `segfault`, even after the marker.
-- Latest existing CI run `42172193542` is on the base commit, not the current edits. Its BIOS and UEFI serial logs show Tint2 segfaults at 83.005462s and 134.285954s respectively, before readiness, while CI nevertheless passed. This is a gate defect, not an established Tint2 root cause.
-- Local verification: pytest 65 passed/1 skipped/4 subtests; smoke 27 tests; desktop readiness regression passed. The source runner recorded 89 passed, 0 failed, 1 skipped, 4 NOT_RUN and exited 1 because tools were missing. ISO build and local BIOS/UEFI boots remain NOT_RUN; the source HTML attachment `iso-x (1).txt` remains unavailable.
-- Decision: **NOT READY** until a new CI/build tests the changed readiness gate and confirms Tint2 does not crash after the marker; inspect the resulting ISO and complete the remaining hardware/persistence checks.
+- CI run `42212462133` on commit `246f4555745d9dd5f1e73977d2f27e527fecf3a2` completed successfully: 90 source checks passed; diagnostic ISO structure passed; diagnostic and normal-boot QEMU tests passed for BIOS and UEFI. The normal-boot screenshots showed the ISO-X desktop (`desktop_seen=true`) in both modes.
+- The diagnostic ISO was 2,785,017,856 bytes, SHA-256 `a35e05baabc8292b1cbf0a50fb31cacb59584d09bec2dff15cf5859302765a9c`. The normal-boot candidate was 2,781,609,984 bytes, SHA-256 `3efbd25cacb7b23e0fa49066c2c04995bc5753b8837274ce392b54be0db8d2f2`. Both are CI candidates, not releases.
+- BIOS/UEFI diagnostic serial logs on the repaired commit show the readiness marker, no `wmctrl` or Tint2 segfault, and valid final screenshots. The readiness check requires a live Tint2 process. This demonstrates that the former wmctrl path and BIOS package-install timeout no longer block these gates; it does not identify a root cause for the earlier wmctrl/Tint2 crashes.
+- The source attachment `iso-x (1).txt` remains unavailable; the checked-in HTML is only a repository candidate. Persistence reboot and physical hardware acceptance remain unverified. Overall release/hardware status remains **NOT READY**.
 
 ## CI Failure Investigation — 2026-11-06
 
@@ -13,6 +14,14 @@
 - UEFI serial evidence records two `wmctrl` segfaults at 134.222499s and 138.077028s while the readiness probe repeatedly invoked `wmctrl -l -G`; both precede the nonce marker. The log shows the failing process and libc instruction address but is insufficient to identify an internal wmctrl/libc root cause. The probe now uses `xwininfo -root -tree`, and `x11-utils` is included in the live package list; regression coverage includes a failing xwininfo process.
 - BIOS did not boot: the 20-minute job timeout cancelled apt while installing QEMU, before downloading the ISO. Apt planned 85 packages/46.3MB with recommends. Both QEMU install commands now use `--no-install-recommends`; BIOS/UEFI job limits are 30 minutes.
 - Acceptance summary failed, promote was skipped. No Tint2 segfault appeared in the UEFI log for this run, but post-readiness panel stability still requires an end-to-end rerun.
+
+## Verification after CI fixes — 2026-11-06
+
+- CI `42212462133` on commit `246f4555745d9dd5f1e73977d2f27e527fecf3a2` completed with workflow conclusion **SUCCESS**: source-check, build, BIOS, UEFI, promote/normal-boot acceptance, and acceptance-summary all succeeded.
+- The readiness probe no longer invokes wmctrl. BIOS diagnostic QEMU installed and downloaded the ISO successfully; the full UEFI job also completed within its 30-minute limit.
+- Diagnostic BIOS: `PASS_BOOT`, 206.545s, fresh readiness marker, valid final screenshot. Diagnostic UEFI: `PASS_BOOT`, 154.110s, fresh marker, valid screenshot. Neither serial log contains a `segfault` line; both gates require Openbox, Tint2, the ISO-X process and a sufficiently sized ISO-X window.
+- Normal-boot BIOS: `PASS_BOOT`, `desktop_seen=true`, `shutdown_reason=desktop_rendered`, valid screenshot, 217.556s. Normal-boot UEFI: `PASS_BOOT`, `desktop_seen=true`, valid screenshot, 220.964s. The CI gate enforces both desktop detection and final screenshot validation.
+- This closes the CI regression for the wmctrl readiness crash and QEMU installer timeout for this run. The historical Tint2 crash did not recur in the repaired diagnostic boot; its internal root cause remains unknown, and hardware, persistence, the unavailable original HTML attachment, and release eligibility remain open.
 
 ## نتيجة جولة مرجع التصميم — 2026-11-06
 

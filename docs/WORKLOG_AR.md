@@ -15,6 +15,15 @@
 - فشل Acceptance Summary لأن UEFI فشلت وBIOS أُلغيت؛ promote skipped. لم يتكرر دليل Tint2 في UEFI لهذا التشغيل، لكن ثباته بعد readiness لا يزال بحاجة إلى تحقق.
 - التغييرات التصحيحية جاهزة للفحص المصدري ثم النشر لإطلاق CI جديد. لا يعتبر هذا التشغيل إعادة قبول، والحالة تظل **NOT READY** حتى نجاح BIOS وUEFI وفحص السجلات واللقطات.
 
+## نتيجة إعادة CI بعد الإصلاح — 2026-11-06
+
+- دُفعت الإصلاحات في الالتزام `246f4555745d9dd5f1e73977d2f27e527fecf3a2`، وتشغيل Actions `42212462133` انتهى **SUCCESS** في جميع jobs: source-check، build، BIOS، UEFI، promote وacceptance-summary.
+- فحوص المصدر: 90 PASS، 0 FAIL، 0 SKIP، 0 NOT_RUN. بناء ISO التشخيصية وفحص SHA/El Torito/System Area اجتازا؛ الحجم 2,785,017,856 بايت وSHA-256 `a35e05baabc8292b1cbf0a50fb31cacb59584d09bec2dff15cf5859302765a9c`.
+- Diagnostic BIOS/UEFI: PASS_BOOT؛ 206.545s و154.110s. العلامة أُصدرت بعد تحقق وجود Openbox وTint2 ونافذة ISO-X، واللقطات النهائية صالحة. لا segfault لـwmctrl أو Tint2 في سجلي serial لهذين الإقلاعين.
+- Normal-boot ISO: BIOS PASS_BOOT و`desktop_seen=true` خلال 217.556s؛ UEFI PASS_BOOT و`desktop_seen=true` خلال 220.964s؛ كلاهما أظهر لقطة نهائية صالحة واجتاز enforce gate. حجمها 2,781,609,984 بايت؛ SHA-256 `3efbd25cacb7b23e0fa49066c2c04995bc5753b8837274ce392b54be0db8d2f2`. هي artifact مرشح CI وليست إصداراً.
+- انتهت مشكلة wmctrl على مسار الاستعداد ومهلة تثبيت QEMU في هذا التشغيل. لا نعرف السبب الداخلي للانهيارين التاريخيين ولا ندعي تشخيصه؛ عطل Tint2 السابق لم يتكرر في السجلات الجديدة لكن جذره غير مثبت.
+- لا يزال هذا **اختبار QEMU وليس قبول عتاد**. persistence بعد reboot، اختبار أجهزة فعلية، والتحقق من مطابقة ملف `iso-x (1).txt` الأصلي غير متاحة/غير منفذة. الحالة: بوابات CI للتمهيد وسطح المكتب **PASS**؛ الإصدار والعتاد **NOT READY / UNVERIFIED**.
+
 ### جولة ربط مرجع التصميم المرشح — 2026-11-06
 
 - بدأ الاستكمال على الفرع `fix/isox-build-and-runtime` عند HEAD `be001c0f7b4669f1886e7624a1d257de07b0992b` المطابق للمرجع البعيد، مع إبقاء stash المستخدم السابق دون تطبيق.
