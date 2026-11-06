@@ -28,13 +28,13 @@ class UserIsoTests(unittest.TestCase):
             "label live-amd64-failsafe\n"
             f"append boot=live components username=user console=tty0 "
             f"console=ttyS0,115200n8 loglevel=7 isox.ci=1 "
-            f"isox.ci.nonce={NONCE} nomodeset\n"
+            f"isox.ci.nonce={NONCE} isox.ci.stability=30 nomodeset\n"
         )
         grub = (
             'menuentry "Verify integrity of the boot medium" {\n'
             f" linux /live/vmlinuz boot=live components verify-checksums console=tty0 "
             f"console=ttyS0,115200n8 loglevel=7 isox.ci=1 "
-            f"isox.ci.nonce={NONCE}\n}}\n"
+            f"isox.ci.nonce={NONCE} isox.ci.stability=30\n}}\n"
         )
         with tempfile.TemporaryDirectory() as temporary:
             cases = (
@@ -168,11 +168,13 @@ class UserIsoTests(unittest.TestCase):
             "label live-amd64\nmenu default\n"
             f"append boot=live config components username=user hostname=iso-x console=tty0 "
             f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE}\n"
+            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} "
+            f"isox.ci.stability=30\n"
             "label live-amd64-persistence\n"
             f"append boot=live config components username=user hostname=iso-x console=tty0 "
             f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} persistence\n"
+            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} "
+            f"isox.ci.stability=30 persistence\n"
             "label live-amd64-failsafe\nappend boot=live components username=user nomodeset\n"
         )
         with tempfile.TemporaryDirectory() as temporary:
@@ -191,12 +193,14 @@ class UserIsoTests(unittest.TestCase):
             f'menuentry "Live system (amd64)" {{\n linux /live/vmlinuz '
             f'{" ".join(MODULE.EXPECTED_BASE[:3] + MODULE.EXPECTED_BASE[5:7])} '
             f"console=tty0 console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} findiso=${{iso_path}}\n}}\n"
+            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} "
+            f"isox.ci.stability=30 findiso=${{iso_path}}\n}}\n"
             f'menuentry "Live system (amd64) with Persistence" {{\n'
             f" linux /live/vmlinuz "
             f"{' '.join(MODULE.EXPECTED_BASE[:3] + MODULE.EXPECTED_BASE[5:7])} console=tty0 "
             f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} findiso=${{iso_path}} persistence\n}}\n"
+            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} "
+            f"isox.ci.stability=30 findiso=${{iso_path}} persistence\n}}\n"
         )
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "grub.cfg"
@@ -226,26 +230,49 @@ class UserIsoTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unexpected boot arguments"):
                 MODULE.normalize_config(path, NONCE, "syslinux")
 
+    def test_rejects_invalid_or_duplicate_stability_argument(self):
+        for stability_args in (
+            "isox.ci.stability=31",
+            "isox.ci.stability=30 isox.ci.stability=30",
+        ):
+            content = (
+                "label live-amd64\n"
+                f"append {' '.join(MODULE.EXPECTED_BASE)} isox.ci=1 "
+                f"isox.ci.nonce={NONCE} {stability_args}\n"
+                "label live-amd64-persistence\n"
+                f"append {' '.join(MODULE.EXPECTED_BASE)} isox.ci=1 "
+                f"isox.ci.nonce={NONCE} {stability_args} persistence\n"
+            )
+            with self.subTest(stability_args=stability_args), tempfile.TemporaryDirectory() as temporary:
+                path = Path(temporary) / "live.cfg"
+                path.write_text(content, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "stability"):
+                    MODULE.normalize_config(path, NONCE, "syslinux")
+
     def test_normalizes_read_only_extracted_syslinux_and_grub_configs(self):
         syslinux = (
             "label live-amd64\nmenu default\n"
             f"append boot=live config components username=user hostname=iso-x console=tty0 "
             f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE}\n"
+            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} "
+            f"isox.ci.stability=30\n"
             "label live-amd64-persistence\n"
             f"append boot=live config components username=user hostname=iso-x console=tty0 "
             f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} persistence\n"
+            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} "
+            f"isox.ci.stability=30 persistence\n"
         )
         grub = (
             'menuentry "Live system (amd64)" {\n'
             f" linux /live/vmlinuz boot=live config components username=user hostname=iso-x console=tty0 "
             f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} findiso=${{iso_path}}\n}}\n"
+            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} "
+            f"isox.ci.stability=30 findiso=${{iso_path}}\n}}\n"
             'menuentry "Live system (amd64) with Persistence" {\n'
             f" linux /live/vmlinuz boot=live config components username=user hostname=iso-x console=tty0 "
             f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} findiso=${{iso_path}} persistence\n}}\n"
+            f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} "
+            f"isox.ci.stability=30 findiso=${{iso_path}} persistence\n}}\n"
         )
         with tempfile.TemporaryDirectory() as temporary:
             for name, content, kind in (
@@ -312,11 +339,13 @@ class UserIsoTests(unittest.TestCase):
                 "label live-amd64\n"
                 f"\tappend boot=live config components username=user hostname=iso-x console=tty0 "
                 f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-                f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE}\n"
+                f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} "
+                f"isox.ci.stability=30\n"
                 "label live-amd64-persistence\n\tmenu default\n"
                 f"\tappend boot=live config components username=user hostname=iso-x console=tty0 "
                 f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-                f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} persistence\n"
+                f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} "
+                f"isox.ci.stability=30 persistence\n"
                 "label live-amd64-failsafe\n\tappend boot=live components username=user nomodeset\n"
             )
             (tree / "isolinux/live.cfg").write_text(syslinux, encoding="utf-8")
@@ -325,11 +354,13 @@ class UserIsoTests(unittest.TestCase):
                 'set timeout=10\nmenuentry "Live system (amd64)" {\n'
                 f" linux /live/vmlinuz boot=live config components username=user hostname=iso-x console=tty0 "
                 f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-                f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} findiso=${{iso_path}}\n}}\n"
+                f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} "
+                f"isox.ci.stability=30 findiso=${{iso_path}}\n}}\n"
                 'menuentry "Live system (amd64) with Persistence" {\n'
                 f" linux /live/vmlinuz boot=live config components username=user hostname=iso-x console=tty0 "
                 f"console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes "
-                f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} findiso=${{iso_path}} persistence\n}}\n"
+                f"systemd.log_target=console isox.ci=1 isox.ci.nonce={NONCE} "
+                f"isox.ci.stability=30 findiso=${{iso_path}} persistence\n}}\n"
                 'menuentry "Live system (amd64 fail-safe mode)" {\n'
                 " linux /live/vmlinuz boot=live components username=user nomodeset\n}\n"
             )

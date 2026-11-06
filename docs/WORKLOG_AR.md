@@ -318,3 +318,10 @@
 - أضيف معامل CI `isox.ci.stability=30`، وخدمة readiness تصدر marker الجاهزية ثم تراقب Openbox وTint2 وعملية ISO-X وحجم النافذة كل ثانية؛ فقدان أي عنصر يصدر failure marker. ينتظر QEMU runner stable/failure marker ويصنف timeout أو الفشل كعدم قبول.
 - اجتازت اختبارات الجاهزية وQEMU المصدرية، واختبار fake-runtime يغطي markers الصحيحة والمبكرة/الخاطئة. بعد تثبيت أدوات البيئة ومحدد مفسر GTK أعيد `scripts/run-source-checks.py`: **93 PASS، 0 FAIL، 1 SKIP، 0 NOT_RUN**؛ pytest ‏70 tests مع skipped واحد، وGTK/Openbox/XKB/xterm وقسم ext4 الافتراضي PASS. السجل تحت `/tmp/isox-source-audit-final-L349pm`.
 - لم يُبنَ ISO ولم يُجر QEMU/BIOS/UEFI على هذه التغييرات بعد، ولم يُختبر persistence reboot أو 6 نوافذ/الأداء. السبب الداخلي التاريخي لانهيارات `wmctrl` وTint2 لا يزال غير محسوم؛ لا تُعلن الجاهزية قبل CI جديد وأدلة guest.
+
+## إصلاح ترقية normal-boot بعد معامل الاستقرار — 2026-11-06
+
+- CI `42234381984` على `913266c4d219a3c62182d78f4dd6f7beeb0fdbb1` نجح في source-check وbuild وإقلاعي BIOS/UEFI التشخيصيين. فشل `promote` عند تطبيع إعداد Syslinux؛ `create-user-iso.py` لم يكن يسمح بالمعامل المضاف حديثاً `isox.ci.stability=30`، لذا لم تُنشأ أو تُختبر ISO normal-boot. لا يُعد هذا نجاح قبول كامل.
+- أضيف `isox.ci.stability=30` إلى قائمة معاملات التشخيص المعروفة التي تُزال عند التطبيع، وظل رفض أي معامل CI غير معروف قائماً. أضيفت قيمة المعامل إلى fixtures Syslinux/GRUB، بما فيها مسار بناء ISO كامل.
+- `python3 -m pytest -q tests/test_user_iso.py`: **11 passed، 1 skipped، 6 subtests passed**؛ `python3 -m pytest -q`: **66 passed، 1 skipped، 6 subtests passed**. اختبار ISO end-to-end المتخطى يعتمد على `xorriso` غير المتاح محلياً، ولا يمكن تثبيته بحساب غير root؛ syntax و`git diff --check` اجتازا.
+- يلزم دفع الإصلاح وإعادة CI لإثبات create/promote وإقلاع normal-boot عبر BIOS وUEFI. الحالة تبقى **NOT READY** حتى ذلك وإغلاق فجوات Persistence/performance/HTML الموثقة.

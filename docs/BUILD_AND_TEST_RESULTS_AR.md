@@ -4,13 +4,16 @@
 
 | الفحص | النتيجة | الدليل والحد |
 |---|---|---|
+| CI `42234381984` على `913266c4d219a3c62182d78f4dd6f7beeb0fdbb1` | source-check/build/BIOS/UEFI نجحت؛ **promote فشل** | فشل إنشاء normal-boot ISO لأن `create-user-iso.py` لم يتعرف على `isox.ci.stability=30`. لم يُشغّل BIOS/UEFI للنسخة العادية؛ لا تُحتسب محاولة promote نجاحاً. أضيف إصلاح واختبار regression في التغيير اللاحق؛ يلزم CI جديد. |
 | CI `42221229398` على `b15647056fc609fba9e2d26748864dcc5ec50487` | workflow **SUCCESS**؛ source-check/build/BIOS/UEFI/promote/acceptance-summary كلها ناجحة | [تشغيل CI](https://github.com/chatstaceysmart66-sys/ISO-X/actions/runs/42221229398). يسبق التعديلات المحلية الحالية. |
 | source checks في ذلك CI | 90 PASS، 0 FAIL، 0 SKIP، 0 NOT_RUN | artifact `isox-source-check-42221229398-1`. |
 | ISO التشخيصية في ذلك CI | 2,785,017,856 بايت؛ SHA-256 `ada797696e3ea9cbee4367bcfe8befa914cbf06ab0b876ebfd029299883c37fd` | artifact `isox-build-evidence-42221229398-1`؛ `release_eligible=false`. |
 | BIOS / UEFI في ذلك CI | `PASS_BOOT`؛ 123.886s / 197.834s؛ لقطات نهائية صالحة | artifacts `isox-bios-evidence-42221229398-1` و`isox-uefi-evidence-42221229398-1`. تشغيلهما لا يختبر مسار stability marker الذي أضيف لاحقاً؛ تقرير Persistence يسجل `NOT_RUN`. |
 | source checks على شجرة العمل الحالية | 93 PASS، 0 FAIL، 1 SKIP، 0 NOT_RUN؛ exit 0 | `ISOX_GTK_TEST_PYTHON=/usr/bin/python3 python3 scripts/run-source-checks.py ...`؛ السجل `/tmp/isox-source-audit-final-L349pm`. يستخدم GTK test مفسر النظام لأن Python المختار افتراضياً 3.14 لا يحتوي PyGObject؛ الفحص اليدوي/المتكامل ببايثون النظام نجح. |
 | pytest / GTK / persistence partition | pytest: 70 tests، 0 failures، 1 skipped؛ GTK/Openbox/XKB/xterm PASS؛ قسم ext4 الافتراضي PASS | artifacts المحلية في `/tmp/isox-source-audit-final-L349pm`. اختبار القسم ينشئ raw disk مؤقتاً؛ لا يختبر persistence بعد reboot للضيف. |
-| بناء/إقلاع الشجرة الحالية بعد إضافة مراقبة 30 ثانية | **NOT_RUN** | يلزم CI جديد على التغييرات الحالية. لذلك لا تُنسب نتائج `42221229398` لهذه الشجرة. |
+| إعادة تطبيع boot arguments بعد إضافة مراقبة 30 ثانية | **PASS محلياً** | `python3 -m pytest -q tests/test_user_iso.py`: ‏11 passed، 1 skipped، 6 subtests؛ اختبار إنشاء ISO كاملاً يتطلب `xorriso` وتخطى محلياً لعدم توفر الأداة/صلاحية تثبيتها. أضيف CI end-to-end fixture لتغطية معامل الاستقرار. |
+| pytest بعد إصلاح التطبيع | **PASS محلياً** | 66 passed، 1 skipped، 6 subtests؛ لا يشمل تشغيل ISO أو guest boot. |
+| بناء/إقلاع الشجرة الحالية بعد إصلاح التطبيع | **NOT_RUN** | يلزم CI جديد على التغيير اللاحق. لا تُنسب نتائج `42234381984` أو `42221229398` إلى هذا الإصلاح. |
 | قرار الإصدار | **NOT READY** | واجهة HTML الأساسية، persistence عبر reboot، اختبار 6 نوافذ/الأداء، والمرفق الأصلي ما زالت فجوات مفتوحة. |
 
 ## إعادة التحقق بعد إصلاحات CI — 2026-11-06

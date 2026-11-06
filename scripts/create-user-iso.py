@@ -82,7 +82,15 @@ def normalize_config(path: Path, nonce: str, kind: str) -> None:
         nonce_token = f"isox.ci.nonce={nonce}"
         if args.count("isox.ci=1") != 1 or args.count(nonce_token) != 1:
             raise ValueError(f"{path}: expected exactly one CI flag and the supplied nonce")
-        forbidden = {"isox.ci=1", nonce_token, "console=tty0", "loglevel=7"}
+        stability_tokens = [
+            argument for argument in args if argument.startswith("isox.ci.stability")
+        ]
+        if stability_tokens not in ([], ["isox.ci.stability=30"]):
+            raise ValueError(f"{path}: unexpected ISO-X CI stability arguments")
+        forbidden = {
+            "isox.ci=1", nonce_token, "isox.ci.stability=30",
+            "console=tty0", "loglevel=7",
+        }
         args = [argument for argument in args if argument not in forbidden]
         if "quiet" not in args:
             args.insert(args.index("components") + 1, "quiet")
@@ -109,7 +117,7 @@ def strip_ci_arguments_from_kernel_entries(path: Path, nonce: str, kind: str) ->
         raise ValueError(f"unsupported boot configuration kind: {kind}")
 
     nonce_token = f"isox.ci.nonce={nonce}"
-    known_ci_tokens = {"isox.ci=1", nonce_token}
+    known_ci_tokens = {"isox.ci=1", nonce_token, "isox.ci.stability=30"}
     diagnostic_tokens = {"console=tty0", "loglevel=7"}
     rewritten = []
     removed = 0
@@ -145,6 +153,8 @@ def strip_ci_arguments_from_kernel_entries(path: Path, nonce: str, kind: str) ->
         unexpected = [arg for arg in ci_tokens if arg not in known_ci_tokens]
         if unexpected:
             raise ValueError(f"{path}: unexpected ISO-X CI arguments: {unexpected!r}")
+        if args.count("isox.ci.stability=30") > 1:
+            raise ValueError(f"{path}: duplicate ISO-X CI stability argument")
 
         args = [
             arg for arg in args

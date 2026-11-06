@@ -2,6 +2,7 @@
 
 ## تحديث — 2026-11-06
 
+- CI `42234381984` على `913266c` اجتاز source-check وbuild وBIOS/UEFI التشخيصيين، لكن promote فشل لأن normal-boot ISO رفض معامل `isox.ci.stability=30`. لا يوجد اختبار BIOS/UEFI للنسخة العادية من ذلك التشغيل. أضيف قبول آمن لهذا المعامل المحدد وإزالته مع بقية معاملات CI، مع regression tests؛ نتيجة الإصلاح تنتظر CI جديداً.
 - اكتمل أحدث CI متاح `42221229398` على commit الأساس `b156470`: source/build/BIOS/UEFI/promote/acceptance-summary نجحت، مع 90 فحص مصدر. ISO التشخيصية 2,785,017,856 بايت وSHA-256 `ada797696e3ea9cbee4367bcfe8befa914cbf06ab0b876ebfd029299883c37fd`؛ ليست إصداراً. هذا التشغيل يسبق التغييرات المحلية الحالية.
 - فحوص الشجرة الحالية: 93 PASS، 0 FAIL، 1 SKIP، 0 NOT_RUN؛ `pytest` سجل 70 test وواحد skipped، واختبار GTK/Openbox/XKB/xterm واختبار قسم persistence الافتراضي نجحا. استخدم GTK check `/usr/bin/python3` لأن interpreter الافتراضي 3.14 لا يحتوي PyGObject؛ يتيح runner اختيار المفسر عبر `ISOX_GTK_TEST_PYTHON`.
 - أضيفت مراقبة مصدرية تستمر 30 ثانية بعد readiness وتراقب Openbox وTint2 ونافذة ISO-X؛ اختبارات fake-runtime تكشف فقدان Tint2 وتتحقق من stable/failure markers. لم تُختبر هذه النسخة في ISO/guest بعد، لذلك لا تُعد المشكلة التاريخية مغلقة بسبب هذا التغيير وحده.
