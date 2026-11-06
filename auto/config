@@ -9,7 +9,7 @@ if [ "${ISOX_CI_BOOT:-0}" = 1 ]; then
     *[!a-f0-9]*|'') echo "ISOX_CI_BOOT requires a lowercase hexadecimal nonce." >&2; exit 2 ;;
   esac
   [ "${#ISOX_CI_NONCE}" -eq 32 ] || { echo "ISOX_CI_NONCE must contain 32 hexadecimal characters." >&2; exit 2; }
-  BOOTAPPEND_LIVE="boot=live config components username=user hostname=iso-x console=tty0 console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes systemd.log_target=console isox.ci=1 isox.ci.nonce=${ISOX_CI_NONCE}"
+  BOOTAPPEND_LIVE="boot=live config components username=user hostname=iso-x console=tty0 console=ttyS0,115200n8 loglevel=7 systemd.show_status=yes systemd.log_target=console isox.ci=1 isox.ci.nonce=${ISOX_CI_NONCE} isox.ci.stability=30"
 fi
 # Keep repository indexes in the live filesystem so the store can browse
 # the configured Debian catalog before the user has network access.

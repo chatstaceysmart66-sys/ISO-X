@@ -96,6 +96,22 @@ elif kind in ("success", "success-zero-on-term", "small-boot-frame", "isox-windo
     time.sleep(1)
     with open(serial, "a", encoding="utf-8") as stream:
         stream.write(f"ISOX_CI_READY nonce={os.environ['FAKE_QEMU_NONCE']}\n")
+    time.sleep(1.1)
+    with open(serial, "a", encoding="utf-8") as stream:
+        stream.write(
+            f"ISOX_CI_STABLE nonce={os.environ['FAKE_QEMU_NONCE']} "
+            f"seconds={os.environ.get('ISOX_QEMU_STABILITY_SECONDS', '30')}\n"
+        )
+elif kind in ("early-stable", "wrong-stability-duration"):
+    with open(serial, "a", encoding="utf-8") as stream:
+        stream.write(f"ISOX_CI_READY nonce={os.environ['FAKE_QEMU_NONCE']}\n")
+    time.sleep(0.1)
+    reported_seconds = "1" if kind == "early-stable" else "2"
+    with open(serial, "a", encoding="utf-8") as stream:
+        stream.write(
+            f"ISOX_CI_STABLE nonce={os.environ['FAKE_QEMU_NONCE']} "
+            f"seconds={reported_seconds}\n"
+        )
 elif kind == "marker-exit-error":
     with open(serial, "a", encoding="utf-8") as stream:
         stream.write(f"ISOX_CI_READY nonce={os.environ['FAKE_QEMU_NONCE']}\n")
@@ -104,12 +120,20 @@ elif kind == "marker-exit-error":
 elif kind in ("timeout", "timeout-no-screenshot"):
   with open(serial, "a", encoding="utf-8") as stream:
     stream.write("Boot remains in progress\n")
+elif kind == "unstable":
+    with open(serial, "a", encoding="utf-8") as stream:
+        stream.write(f"ISOX_CI_READY nonce={os.environ['FAKE_QEMU_NONCE']}\n")
+    time.sleep(0.2)
+    with open(serial, "a", encoding="utf-8") as stream:
+        stream.write(f"ISOX_CI_STABILITY_FAIL nonce={os.environ['FAKE_QEMU_NONCE']} elapsed=1\n")
 while True:
     time.sleep(1)
 QEMU
 chmod 0755 "$TMP/bin/qemu-system-x86_64"
 NONCE=0123456789abcdef0123456789abcdef
 export ISOX_QEMU_RENDER_GRACE=0
+export ISOX_QEMU_STABILITY_SECONDS=1
+export ISOX_QEMU_STABILITY_TIMEOUT=2
 
 FAKE_QEMU_KIND=success FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=20 \
   ISOX_QEMU_MEMORY_MIB=6144 ISOX_QEMU_CPUS=4 FAKE_QEMU_ARGS_FILE="$TMP/success-args.json" \
@@ -121,7 +145,8 @@ import json, sys
 from pathlib import Path
 r = json.loads(Path(sys.argv[1]).read_text())
 assert r["status"] == "PASS_BOOT", r
-assert r["marker_seen"] is True and r["process_group_clean"] is True, r
+assert r["marker_seen"] is True and r["stability_seen"] is True and r["process_group_clean"] is True, r
+assert r["stability_seconds_required"] == 1, r
 assert r["shutdown_reason"] == "readiness_marker" and r["termination_requested"] is True, r
 assert r["final_screenshot_valid"] is True, r
 assert r["serial_indicators"]["graphical_target"] is True, r
@@ -145,7 +170,7 @@ python3 - "$TMP/isox-window/qemu-bios-headless-result.json" <<'PY'
 import json, sys
 from pathlib import Path
 r = json.loads(Path(sys.argv[1]).read_text())
-assert r["status"] == "PASS_BOOT" and r["final_screenshot_valid"] is True, r
+assert r["status"] == "PASS_BOOT" and r["stability_seen"] is True and r["final_screenshot_valid"] is True, r
 assert r["serial_indicators"]["graphical_target"] is True, r
 PY
 
@@ -226,7 +251,48 @@ assert classify(
     "[  83.005462] tint2[1343]: segfault at 660000000000841f",
     False, -signal.SIGTERM, True, "readiness_marker", True, False, False, True,
 ) == "GUEST_RUNTIME_CRASH"
+assert classify(
+    "ISOX_CI_STABILITY_FAIL nonce=0123456789abcdef0123456789abcdef elapsed=1",
+    False, -signal.SIGTERM, True, "stability_failure", True, False, False, True,
+) == "GUEST_RUNTIME_UNSTABLE"
+assert classify(
+    "", False, -signal.SIGTERM, True, "stability_failure", True, False, False, True, True,
+) == "GUEST_RUNTIME_UNSTABLE"
 PY
+
+if FAKE_QEMU_KIND=unstable FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=5 \
+  ISOX_QEMU_NONCE="$NONCE" PATH="$TMP/bin:$PATH" \
+  bash "$ROOT/tests/qemu-acceptance.sh" bios-headless "$TMP/test.iso" "$TMP/unstable" \
+  >"$TMP/unstable.log" 2>&1; then
+  echo "FAIL: a guest that became unhealthy after readiness was accepted." >&2
+  exit 1
+fi
+python3 - "$TMP/unstable/qemu-bios-headless-result.json" <<'PY'
+import json, sys
+from pathlib import Path
+r = json.loads(Path(sys.argv[1]).read_text())
+assert r["status"] == "GUEST_RUNTIME_UNSTABLE", r
+assert r["marker_seen"] is True and r["stability_failure_seen"] is True, r
+assert r["stability_seen"] is False, r
+PY
+
+for unstable_kind in early-stable wrong-stability-duration; do
+  if FAKE_QEMU_KIND="$unstable_kind" FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=5 \
+    ISOX_QEMU_NONCE="$NONCE" PATH="$TMP/bin:$PATH" \
+    bash "$ROOT/tests/qemu-acceptance.sh" bios-headless "$TMP/test.iso" "$TMP/$unstable_kind" \
+    >"$TMP/$unstable_kind.log" 2>&1; then
+    echo "FAIL: a premature or wrong-duration stable marker was accepted ($unstable_kind)." >&2
+    exit 1
+  fi
+  python3 - "$TMP/$unstable_kind/qemu-bios-headless-result.json" <<'PY'
+import json, sys
+from pathlib import Path
+r = json.loads(Path(sys.argv[1]).read_text())
+assert r["status"] == "GUEST_RUNTIME_UNSTABLE", r
+assert r["marker_seen"] is True and r["stability_failure_seen"] is True, r
+assert r["stability_seen"] is False, r
+PY
+done
 
 if FAKE_QEMU_KIND=marker-exit-error FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=5 \
   ISOX_QEMU_NONCE="$NONCE" PATH="$TMP/bin:$PATH" \

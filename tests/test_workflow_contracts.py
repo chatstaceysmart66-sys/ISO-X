@@ -34,6 +34,7 @@ assert "usb-persistence-partition" in source_runner
 assert "libxml2-utils fdisk" in source
 assert "source-tests.json" in summary
 assert "Reclaim unused hosted-runner toolchains" in build
+assert "ISOX_GTK_TEST_PYTHON" in source_runner
 assert build.index("Reclaim unused hosted-runner toolchains") < build.index("Check runner capacity")
 for runner_path in ("/usr/local/lib/android", "/usr/share/dotnet", "/opt/ghc",
                     "/usr/local/share/boost", "/usr/local/share/chromium",
@@ -114,7 +115,12 @@ for ref in re.findall(r"uses: actions/[^\s@]+@([0-9a-f]{40})", workflow):
     assert len(ref) == 40
 assert workflow.count("Node.js 24") >= 3
 assert "deadline=$(( $(date +%s) + 120 ))" in ready_probe
-assert "TimeoutStartSec=130s" in ready_service
+assert "TimeoutStartSec=180s" in ready_service
+assert "isox.ci.stability=30" in (Path(__file__).resolve().parents[1] / "auto/config").read_text()
+assert "isox-ci-stability.sh" in ready_probe
+qemu_acceptance = (Path(__file__).resolve().parents[1] / "tests/qemu-acceptance.sh").read_text()
+assert "ISOX_QEMU_STABILITY_SECONDS" in qemu_acceptance
+assert "--stability-seconds \"$QEMU_STABILITY_SECONDS\"" in qemu_acceptance
 gtk_screen = re.search(r"-screen 0 1366x(\d+)x24", source_runner)
 assert gtk_screen and int(gtk_screen.group(1)) >= 900, (
     "GTK runtime Xvfb must leave room for the window minimum height and Openbox bottom margin"

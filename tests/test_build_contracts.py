@@ -115,12 +115,21 @@ def test_browser_homepage_is_staged_and_configured():
     build_script = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
     hook = (ROOT / "config/hooks/live/0400-isox-firefox-defaults.hook.chroot").read_text(encoding="utf-8")
     page = (ROOT / "assets/iso-x.html").read_text(encoding="utf-8")
+    local_paths = set(re.findall(r"""(?:src|href)\s*=\s*["']file:///([^"']+)["']""", page))
     assert 'assets/iso-x.html" config/includes.chroot/usr/share/iso-x/start.html' in build_script
     assert '0400-isox-firefox-defaults.hook.chroot' in build_script
     assert 'pref("browser.startup.homepage", "%s");' in hook
     assert 'file:///usr/share/iso-x/start.html' in hook
     assert 'lang="ar" dir="rtl"' in page
     assert 'name="q"' in page and 'action="https://duckduckgo.com/"' in page
+    assert local_paths == {
+        "usr/share/iso-x/assets/reference-dragon-mark.jpg",
+        "usr/share/doc/iso-x/README_AR.md",
+    }
+    for path in local_paths:
+        assert f"config/includes.chroot/{path}" in build_script, (
+            f"Local browser-page resource is not staged: /{path}"
+        )
 
 
 def test_pipewire_user_session_and_saved_network_profiles_are_configured():

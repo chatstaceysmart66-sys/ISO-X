@@ -16,6 +16,8 @@ from pathlib import Path
 
 
 MARKER_PREFIX = "ISOX_CI_READY nonce="
+STABLE_MARKER_PREFIX = "ISOX_CI_STABLE nonce="
+STABILITY_FAILURE_PREFIX = "ISOX_CI_STABILITY_FAIL nonce="
 MIN_SCREENSHOT_WIDTH = 320
 MIN_SCREENSHOT_HEIGHT = 200
 ANSI_ESCAPE = re.compile(r"\x1B(?:\[[0-?]*[ -/]*[@-~]|[@-_])")
@@ -146,12 +148,15 @@ def classify(
     termination_escalated: bool,
     desktop_seen: bool,
     final_screenshot_valid: bool,
+    stability_failed: bool = False,
 ) -> str:
     serial = ANSI_ESCAPE.sub("", serial)
     if returncode not in (None, 0, -signal.SIGTERM, -signal.SIGKILL):
         return "QEMU_INFRASTRUCTURE_FAILURE"
     if re.search(r"\bsegfault\b", serial, re.I):
         return "GUEST_RUNTIME_CRASH"
+    if stability_failed or STABILITY_FAILURE_PREFIX in serial:
+        return "GUEST_RUNTIME_UNSTABLE"
     if marker_seen or desktop_seen:
         expected_shutdown = "readiness_marker" if marker_seen else "desktop_rendered"
         if (
@@ -265,6 +270,8 @@ def main() -> int:
     parser.add_argument("--readiness", choices=("nonce", "desktop"), default="nonce")
     parser.add_argument("--timeout", required=True, type=int)
     parser.add_argument("--render-grace", type=float, default=3.0)
+    parser.add_argument("--stability-seconds", type=int, default=30)
+    parser.add_argument("--stability-timeout", type=int, default=60)
     parser.add_argument("--accelerator", required=True)
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -274,6 +281,12 @@ def main() -> int:
         parser.error("timeout must be a positive integer")
     if args.render_grace < 0:
         parser.error("render grace must not be negative")
+    if not 1 <= args.stability_seconds <= 300:
+        parser.error("stability interval must be between 1 and 300 seconds")
+    if args.stability_timeout < 1:
+        parser.error("stability timeout must be a positive integer")
+    if args.stability_timeout < args.stability_seconds:
+        parser.error("stability timeout must be at least the stability interval")
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("a QEMU command is required after --")
@@ -312,6 +325,22 @@ def main() -> int:
     serial_path.write_bytes(b"")
     nonce_marker = (
         re.compile(rb"(?m)^" + re.escape(MARKER_PREFIX.encode()) + re.escape(args.nonce.encode()) + rb"\r?$")
+        if args.readiness == "nonce"
+        else None
+    )
+    stable_marker = (
+        re.compile(
+            rb"(?m)^" + re.escape(STABLE_MARKER_PREFIX.encode()) +
+            re.escape(args.nonce.encode()) + rb" seconds=([1-9][0-9]*)\r?$"
+        )
+        if args.readiness == "nonce"
+        else None
+    )
+    stability_failure_marker = (
+        re.compile(
+            rb"(?m)^" + re.escape(STABILITY_FAILURE_PREFIX.encode()) +
+            re.escape(args.nonce.encode()) + rb" elapsed=[1-9][0-9]*\r?$"
+        )
         if args.readiness == "nonce"
         else None
     )
@@ -362,6 +391,9 @@ def main() -> int:
             qmp_available = False
             screenshots: list[str] = []
             marker_seen = False
+            stability_seen = False
+            stability_failure_seen = False
+            readiness_marker_at: float | None = None
             desktop_seen = False
             timed_out = False
             shutdown_reason = "qemu_exit"
@@ -384,9 +416,38 @@ def main() -> int:
                     serial_bytes = serial_path.read_bytes()
                     if nonce_marker and nonce_marker.search(serial_bytes):
                         marker_seen = True
-                        shutdown_reason = "readiness_marker"
-                        if args.render_grace:
-                            time.sleep(args.render_grace)
+                        readiness_marker_at = time.monotonic()
+                        stability_deadline = min(
+                            started + args.timeout,
+                            time.monotonic() + args.stability_timeout,
+                        )
+                        while process.poll() is None:
+                            serial_bytes = serial_path.read_bytes()
+                            if stability_failure_marker and stability_failure_marker.search(serial_bytes):
+                                stability_failure_seen = True
+                                shutdown_reason = "stability_failure"
+                                break
+                            stable_match = stable_marker.search(serial_bytes) if stable_marker else None
+                            if stable_match:
+                                reported_seconds = int(stable_match.group(1))
+                                observed_seconds = time.monotonic() - readiness_marker_at
+                                if (
+                                    reported_seconds != args.stability_seconds
+                                    or observed_seconds < max(0.0, args.stability_seconds - 0.5)
+                                ):
+                                    stability_failure_seen = True
+                                    shutdown_reason = "stability_failure"
+                                else:
+                                    stability_seen = True
+                                    shutdown_reason = "readiness_marker"
+                                    if args.render_grace:
+                                        time.sleep(args.render_grace)
+                                break
+                            if time.monotonic() >= stability_deadline:
+                                timed_out = True
+                                shutdown_reason = "stability_timeout"
+                                break
+                            time.sleep(0.2)
                         break
                     now = time.monotonic()
                     if args.readiness == "desktop" and now >= next_desktop_probe_at and qmp_available:
@@ -446,6 +507,7 @@ def main() -> int:
                 termination_escalated,
                 desktop_seen,
                 final_screenshot_valid,
+                stability_failure_seen,
             )
             timed_out_without_boot_proof = timed_out and not marker_seen and not desktop_seen
             if (
@@ -467,6 +529,10 @@ def main() -> int:
                 "duration_seconds": duration,
                 "serial_bytes": len(serial_content),
                 "marker_seen": marker_seen,
+                "stability_required": args.readiness == "nonce",
+                "stability_seconds_required": args.stability_seconds if args.readiness == "nonce" else None,
+                "stability_seen": stability_seen,
+                "stability_failure_seen": stability_failure_seen,
                 "desktop_seen": desktop_seen,
                 "serial_indicators": serial_indicators(
                     serial_text,

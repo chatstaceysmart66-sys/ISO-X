@@ -1,6 +1,21 @@
 # نتائج البناء والاختبارات — ISO-X 0.4.0
 
+## أحدث CI متاح وحالة التعديلات المحلية — 2026-11-06
+
+| الفحص | النتيجة | الدليل والحد |
+|---|---|---|
+| CI `42221229398` على `b15647056fc609fba9e2d26748864dcc5ec50487` | workflow **SUCCESS**؛ source-check/build/BIOS/UEFI/promote/acceptance-summary كلها ناجحة | [تشغيل CI](https://github.com/chatstaceysmart66-sys/ISO-X/actions/runs/42221229398). يسبق التعديلات المحلية الحالية. |
+| source checks في ذلك CI | 90 PASS، 0 FAIL، 0 SKIP، 0 NOT_RUN | artifact `isox-source-check-42221229398-1`. |
+| ISO التشخيصية في ذلك CI | 2,785,017,856 بايت؛ SHA-256 `ada797696e3ea9cbee4367bcfe8befa914cbf06ab0b876ebfd029299883c37fd` | artifact `isox-build-evidence-42221229398-1`؛ `release_eligible=false`. |
+| BIOS / UEFI في ذلك CI | `PASS_BOOT`؛ 123.886s / 197.834s؛ لقطات نهائية صالحة | artifacts `isox-bios-evidence-42221229398-1` و`isox-uefi-evidence-42221229398-1`. تشغيلهما لا يختبر مسار stability marker الذي أضيف لاحقاً؛ تقرير Persistence يسجل `NOT_RUN`. |
+| source checks على شجرة العمل الحالية | 93 PASS، 0 FAIL، 1 SKIP، 0 NOT_RUN؛ exit 0 | `ISOX_GTK_TEST_PYTHON=/usr/bin/python3 python3 scripts/run-source-checks.py ...`؛ السجل `/tmp/isox-source-audit-final-L349pm`. يستخدم GTK test مفسر النظام لأن Python المختار افتراضياً 3.14 لا يحتوي PyGObject؛ الفحص اليدوي/المتكامل ببايثون النظام نجح. |
+| pytest / GTK / persistence partition | pytest: 70 tests، 0 failures، 1 skipped؛ GTK/Openbox/XKB/xterm PASS؛ قسم ext4 الافتراضي PASS | artifacts المحلية في `/tmp/isox-source-audit-final-L349pm`. اختبار القسم ينشئ raw disk مؤقتاً؛ لا يختبر persistence بعد reboot للضيف. |
+| بناء/إقلاع الشجرة الحالية بعد إضافة مراقبة 30 ثانية | **NOT_RUN** | يلزم CI جديد على التغييرات الحالية. لذلك لا تُنسب نتائج `42221229398` لهذه الشجرة. |
+| قرار الإصدار | **NOT READY** | واجهة HTML الأساسية، persistence عبر reboot، اختبار 6 نوافذ/الأداء، والمرفق الأصلي ما زالت فجوات مفتوحة. |
+
 ## إعادة التحقق بعد إصلاحات CI — 2026-11-06
+
+> النتائج في هذا القسم تخص run `42212462133`. أحدث run على commit الأساس هو `42221229398` أعلاه؛ ولا واحد منهما يشمل التغييرات المحلية المضافة بعد `b156470`.
 
 | الاختبار | الأمر/الطريقة | النتيجة | Exit Code | الدليل/السجل | الملاحظات |
 |---|---|---|---:|---|---|
@@ -20,13 +35,13 @@
 |---|---|---|
 | `python3 -m pytest -q` | **PASS**, exit 0 — 65 passed، 1 skipped، 4 subtests passed | `/tmp/isox-source-audit-final.NAU83z/pytest.log` |
 | `bash tests/smoke.sh` | **PASS**, exit 0 — 27 اختبارًا | `/tmp/isox-source-audit-final.NAU83z/smoke.log` |
-| `python3 scripts/run-source-checks.py /tmp/isox-source-audit-final.NAU83z /tmp/isox-source-audit-final.NAU83z/pycache` | **89 PASS، 0 FAIL، 1 SKIP، 4 NOT_RUN**؛ exit 1 بسبب NOT_RUN | فحص محلي سابق قبل CI؛ قيد الأدوات موضح في سجلاته. CI اللاحق `42212462133` شغّل كل الأدوات واجتاز 90 فحصاً. |
+| `python3 scripts/run-source-checks.py /tmp/isox-source-audit-final.NAU83z /tmp/isox-source-audit-final.NAU83z/pycache` | **89 PASS، 0 FAIL، 1 SKIP، 4 NOT_RUN**؛ exit 1 بسبب NOT_RUN | تشغيل محلي سابق قبل تثبيت أدوات الفحص؛ superseded بنتيجة 93 PASS أعلاه. |
 | `bash tests/test_desktop_readiness.sh` | **PASS**, exit 0 | يشترط وجود Openbox وTint2 وتطبيق ISO-X ونافذته؛ سيناريو غياب Tint2 يجب أن يفشل. |
 | `bash tests/test_qemu_headless_validation.sh` | **PASS**, exit 0 | يثبت أن وجود `segfault` في سجل الضيف يفشل التصنيف كـ`GUEST_RUNTIME_CRASH` حتى بعد علامة الجاهزية. |
 | `git diff --check` | **PASS**, exit 0 | لا يثبت صحة build أو تشغيل ISO. |
 | CI `42172193542` على `be001c0` | jobs كلها **SUCCESS** | أقدم من التغييرات غير الملتزمة الحالية. سجلا BIOS/UEFI يثبتان segfault لـTint2 قبل readiness رغم نجاح البوابتين؛ لا يُحتسب هذا دليلاً على حالة التغييرات الحالية. |
 | بناء ISO محلي وفحص SquashFS | **NOT_RUN محلياً؛ PASS في CI** | بني وفُحص ISO التشخيصي داخل CI؛ لم يُبنَ داخل Codespace المحلي. |
-| BIOS/UEFI للتغييرات المحلية | **PASS في CI** | التشغيل `42212462133` اجتاز diagnostic وnormal-boot BIOS/UEFI؛ readiness اشترط Tint2 وظهرت صور سطح المكتب العادي. |
+| BIOS/UEFI للتغييرات المحلية | **NOT_RUN على التغييرات الحالية** | التشغيلان `42212462133` و`42221229398` يخصان commits سابقة؛ لا تُنسب نتائجهما إلى الملفات المحلية. |
 
 ## تحقيق CI — 2026-11-06، التشغيل 42206164401
 

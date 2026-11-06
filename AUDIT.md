@@ -1,4 +1,11 @@
-## Current Audit Addendum — 2026-11-06
+## Current Follow-up — 2026-11-06
+
+- The latest base-commit CI, `42221229398` on `b15647056fc609fba9e2d26748864dcc5ec50487`, has completed successfully: source-check, build, BIOS, UEFI, promote, and acceptance-summary all succeeded. The diagnostic ISO is 2,785,017,856 bytes with SHA-256 `ada797696e3ea9cbee4367bcfe8befa914cbf06ab0b876ebfd029299883c37fd`; it is not release-eligible. This run predates the current local edits.
+- The source now requires a 30-second post-readiness health interval and QEMU waits for a stable/failure marker. Fake-runtime/readiness regressions pass locally; an ISO/guest CI run on these edits has not yet been performed.
+- Current local source-check totals are 93 PASS, 0 FAIL, 1 SKIP, and 0 NOT_RUN (pytest: 70 tests, one skipped). GTK/Openbox/XKB/xterm and the virtual-disk persistence-partition test passed; the GTK check used `ISOX_GTK_TEST_PYTHON=/usr/bin/python3` because the default Python 3.14 lacks PyGObject.
+- Persistence reboot, six-window/performance acceptance, physical hardware, and use of the unavailable original HTML attachment remain unverified. Overall status is **NOT READY**.
+
+## Historical Audit Addendum — 2026-11-06 (run 42212462133)
 
 - At audit start the branch was `fix/isox-build-and-runtime` at `be001c0f7b4669f1886e7624a1d257de07b0992b`, equal to origin. The stash was preserved and not applied.
 - Source dependency path: `design/reference/iso-x-reference.html` → `scripts/extract-reference-assets.py` → `assets/reference/*` and manifest → `scripts/generate-brand-assets.py` → `scripts/build-iso.sh` staging → Plymouth/LightDM/GTK consumers. Local asset/hash tests pass, but there is no local rootfs, SquashFS, or ISO to inspect.

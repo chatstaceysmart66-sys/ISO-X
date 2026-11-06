@@ -11,6 +11,14 @@ case "$NONCE" in
   ''|*[!a-f0-9]*) exit 1 ;;
 esac
 [ "${#NONCE}" -eq 32 ] || exit 1
+STABILITY_SECONDS="$(printf '%s\n' "$CMDLINE" | sed -n 's/.*isox\.ci\.stability=\([0-9]*\).*/\1/p')"
+case "$STABILITY_SECONDS" in
+  ''|*[!0-9]*) echo "ISO-X CI stability interval is missing or invalid." >&2; exit 1 ;;
+esac
+[ "$STABILITY_SECONDS" -ge 1 ] && [ "$STABILITY_SECONDS" -le 300 ] || {
+  echo "ISO-X CI stability interval must be between 1 and 300 seconds." >&2
+  exit 1
+}
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 DESKTOP_READY_CHECK="$SCRIPT_DIR/isox-desktop-window-ready.sh"
 
@@ -31,6 +39,7 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
           marker="ISOX_CI_READY nonce=$NONCE"
           printf '%s\n' "$marker" > /dev/ttyS0
           printf '%s\n' "$marker" > /dev/console
+          "$SCRIPT_DIR/isox-ci-stability.sh" user "$display" "$xauthority" "$NONCE" "$STABILITY_SECONDS" || exit 1
           exit 0
         fi
       fi

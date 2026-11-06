@@ -44,10 +44,3 @@ assert "Icon=iso-x" in desktop_text
 assert "gir1.2-gtk-3.0" in packages and "network-manager-gnome" in packages
 
 print("PASS: source-repo findings are documented, nonportable/unsafe Windows preset and ISO artifacts are not imported, and ISO-X-branded onboarding is wired into the build and desktop menu.")
-
-# Historical SVG assets remain in the source tree, but are no longer staged.
-for vector in (ROOT / "assets/iso-x-dragon.svg", ROOT / "assets/iso-x-boot.svg"):
-    ET.parse(vector)
-assert "assets/iso-x-dragon.svg" not in build
-assert "assets/iso-x-desktop-wallpaper.png" not in build
-print("PASS: legacy SVG sources remain valid but the ISO build stages artwork extracted from the reference.")

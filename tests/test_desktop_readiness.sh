@@ -24,9 +24,15 @@ cat > "$TMP/bin/xwininfo" <<'XWININFO'
 #!/bin/sh
 [ "${1:-}" = "-root" ] && [ "${2:-}" = "-tree" ] || exit 2
 [ "${FAKE_XWININFO_STATUS:-0}" = 0 ] || exit "${FAKE_XWININFO_STATUS}"
+[ -z "${FAKE_XWININFO_LOG:-}" ] || printf x >> "$FAKE_XWININFO_LOG"
 printf '%s\n' "${FAKE_WINDOWS:-}"
 XWININFO
+cat > "$TMP/bin/sleep" <<'SLEEP'
+#!/bin/sh
+exit 0
+SLEEP
 chmod 0755 "$TMP/bin/id" "$TMP/bin/pgrep" "$TMP/bin/xwininfo"
+chmod 0755 "$TMP/bin/sleep"
 
 VALID_WINDOW='     0x03a00007 "ISO-X Desktop": ("iso-x" "ISO-X")  1160x740+0+0  +0+0'
 if ! FAKE_APP_PRESENT=1 FAKE_OPENBOX_PRESENT=1 FAKE_TINT2_PRESENT=1 FAKE_WINDOWS="$VALID_WINDOW" PATH="$TMP/bin:$PATH" \
@@ -59,4 +65,29 @@ for scenario in missing-app missing-openbox missing-tint2 missing-window small-w
   fi
 done
 
-echo 'PASS: readiness requires Openbox, tint2, the ISO-X process, and a titled desktop-sized X11 window.'
+NONCE=0123456789abcdef0123456789abcdef
+FAKE_XWININFO_LOG="$TMP/stability-checks" \
+ISOX_CI_STABILITY_SERIAL="$TMP/stability-serial" \
+ISOX_CI_STABILITY_CONSOLE="$TMP/stability-console" \
+FAKE_APP_PRESENT=1 FAKE_OPENBOX_PRESENT=1 FAKE_TINT2_PRESENT=1 FAKE_WINDOWS="$VALID_WINDOW" PATH="$TMP/bin:$PATH" \
+  sh "$ROOT/scripts/isox-ci-stability.sh" user :0 "$TMP/xauthority" "$NONCE" 3
+grep -Fq "ISOX_CI_STABLE nonce=$NONCE seconds=3" "$TMP/stability-serial"
+grep -Fq "ISOX_CI_STABLE nonce=$NONCE seconds=3" "$TMP/stability-console"
+[[ "$(wc -c < "$TMP/stability-checks")" -eq 3 ]]
+
+if ISOX_CI_STABILITY_SERIAL="$TMP/unstable-serial" \
+  ISOX_CI_STABILITY_CONSOLE="$TMP/unstable-console" \
+  FAKE_APP_PRESENT=1 FAKE_OPENBOX_PRESENT=1 FAKE_TINT2_PRESENT=0 FAKE_WINDOWS="$VALID_WINDOW" PATH="$TMP/bin:$PATH" \
+  sh "$ROOT/scripts/isox-ci-stability.sh" user :0 "$TMP/xauthority" "$NONCE" 3; then
+  echo "FAIL: stability monitor accepted a desktop after Tint2 exited." >&2
+  exit 1
+fi
+grep -Fq "ISOX_CI_STABILITY_FAIL nonce=$NONCE elapsed=1" "$TMP/unstable-serial"
+grep -Fq "ISOX_CI_STABILITY_FAIL nonce=$NONCE elapsed=1" "$TMP/unstable-console"
+
+if PATH="$TMP/bin:$PATH" sh "$ROOT/scripts/isox-ci-stability.sh" user :0 "$TMP/xauthority" "$NONCE" 0; then
+  echo "FAIL: stability monitor accepted a zero-second interval." >&2
+  exit 1
+fi
+
+echo 'PASS: readiness requires Openbox, tint2, the ISO-X process, and a titled desktop-sized X11 window; post-marker monitoring detects loss.'

@@ -24,6 +24,8 @@ done
 install -D -m 0755 scripts/isox-preload.py "$rootfs/usr/local/bin/isox-preload"
 install -D -m 0755 scripts/isox-zram-setup "$rootfs/usr/local/sbin/isox-zram-setup"
 install -D -m 0755 scripts/isox-ci-ready.sh "$rootfs/usr/local/sbin/isox-ci-ready"
+install -D -m 0755 scripts/isox-desktop-window-ready.sh "$rootfs/usr/local/sbin/isox-desktop-window-ready.sh"
+install -D -m 0755 scripts/isox-ci-stability.sh "$rootfs/usr/local/sbin/isox-ci-stability.sh"
 systemd-analyze verify --root="$rootfs" \
   isox-preload.service isox-preload.timer isox-zram.service \
   isox-ci-ready.service isox-ci-ready.timer

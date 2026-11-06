@@ -53,10 +53,7 @@ assert not any(ROOT.rglob("*.key")), "Private key must not be stored in the sour
 assert (ROOT / "build.sh").stat().st_mode & 0o111, "Root one-command build entry point must be executable"
 
 for asset in (
-    "assets/iso-x-dragon.svg", "assets/iso-x-dragon.png",
-    "assets/iso-x-boot.svg", "assets/iso-x-boot.png",
-    "assets/iso-x-desktop-wallpaper.svg", "assets/iso-x-desktop-wallpaper.png",
-    "assets/iso-x-plymouth.png", "docs/QEMU_ACCEPTANCE_AR.md", "tests/qemu-acceptance.sh",
+    "docs/QEMU_ACCEPTANCE_AR.md", "tests/qemu-acceptance.sh",
     "plymouth/isox/isox.plymouth", "plymouth/isox/isox.script",
     "config/hooks/live/0050-isox-locales.hook.chroot",
     "config/hooks/live/0100-isox-watermark.hook.chroot",
@@ -87,6 +84,16 @@ for asset in (
 ):
     assert (ROOT / asset).is_file(), f"Missing feature/integration asset: {asset}"
 
+legacy_artwork = (
+    "assets/iso-x-boot.png", "assets/iso-x-boot.svg",
+    "assets/iso-x-desktop-wallpaper.png", "assets/iso-x-desktop-wallpaper.svg",
+    "assets/iso-x-dragon.png", "assets/iso-x-dragon.svg",
+    "assets/iso-x-plymouth.png",
+)
+for asset in legacy_artwork:
+    assert not (ROOT / asset).exists(), f"Superseded artwork must not be retained: {asset}"
+    assert asset not in build, f"Superseded artwork must not be staged: {asset}"
+
 brand_generator = (ROOT / "scripts/generate-brand-assets.py").read_text(encoding="utf-8")
 brand_extractor = (ROOT / "scripts/extract-reference-assets.py").read_text(encoding="utf-8")
 assert "generate-brand-assets.py" in build and "BRAND_ASSET_DIR" in build
@@ -102,6 +109,7 @@ assert "x11-xserver-utils" in packages, "Openbox snap shortcuts require xrandr f
 assert "user-setup" in packages, "live-config needs user-setup to create the configured live account."
 assert "pkexec" in packages, "The store backend requires the pkexec package for privileged APT operations."
 assert "isox-desktop-window-ready.sh" in build, "CI readiness must verify the ISO-X application window."
+assert "isox-ci-stability.sh" in build, "CI readiness must monitor desktop stability after its marker."
 assert "x11-utils" in packages, "Desktop readiness requires xwininfo from x11-utils."
 readiness = (ROOT / "scripts/isox-desktop-window-ready.sh").read_text(encoding="utf-8")
 assert "xwininfo -root -tree" in readiness and "wmctrl" not in readiness
@@ -136,8 +144,7 @@ assert 'usr/share/plymouth/themes/isox/iso-x-plymouth.png' in build
 assert "images/iso-x-dragon.png" in (ROOT / "three-d-login/src/main.rs").read_text()
 assert "png" in cargo["dependencies"]["bevy"]["features"]
 for xml in (ROOT / "desktop/openbox-menu.xml", ROOT / "desktop/openbox-rc.xml",
-            ROOT / "plymouth/isox/isox.plymouth", ROOT / "assets/iso-x-dragon.svg",
-            ROOT / "assets/iso-x-boot.svg", ROOT / "assets/iso-x-desktop-wallpaper.svg"):
+            ROOT / "plymouth/isox/isox.plymouth"):
     if xml.suffix == ".xml" or xml.suffix == ".svg":
         ET.parse(xml)
 

@@ -1,5 +1,7 @@
 # ISO-X File Inventory
 
+> Historical inventory, superseded by `FILE_BY_FILE_AUDIT_AR.md` and the current relationship/requirements matrices. Its file counts and some asset-staging claims describe an older tree.
+
 ## Snapshot
 
 - Repository: `chatstaceysmart66-sys/ISO-X`
@@ -168,4 +170,4 @@
 
 - Ignored `tests/__pycache__/test_gtk_window_runtime.cpython-314.pyc` was present at the initial snapshot; it is generated and not tracked.
 - CI results and logs were written to `/tmp/isox-audit-source-checks-final/`; pytest was installed under `/tmp/isox-audit-pytest/`. Neither is a project source file or an ISO artifact.
-- The complete tracked-path list above reflects HEAD at audit start. This report and other `docs/audit/` records are new files created by this audit and are not part of the original 130-path count.
+- The complete tracked-path list above reflects HEAD at audit start. The current change removes seven verified-unused legacy assets and adds three audit documents plus the stability monitor, for 160 paths after the change; the original path inventory above is historical.

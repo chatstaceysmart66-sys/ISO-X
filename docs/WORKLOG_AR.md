@@ -3,7 +3,7 @@
 - بدأ التدقيق على `fix/isox-build-and-runtime` عند `be001c0f7b4669f1886e7624a1d257de07b0992b`، مطابقًا لـ`origin/fix/isox-build-and-runtime`. بقي stash المستخدم السابق محفوظًا وغير مطبق؛ لم تُبدّل الفروع أو تُحذف تغييرات.
 - راجعت artifacts تشغيل CI `42172193542`: كل الوظائف انتهت بنجاح على HEAD الأساسي، لكن سجل BIOS يسجل `tint2` segfault عند `83.005462` ثانية وسجل UEFI عند `134.285954` ثانية، وكلاهما قبل `ISOX_CI_READY`. الملفات محفوظة محليًا في `/tmp/isox-audit-current/{bios,uefi}`. هذا يثبت قصور بوابة الجاهزية السابقة، لا سبب segfault.
 - أضيف شرط عملية `tint2` إلى `scripts/isox-desktop-window-ready.sh` واختبار `missing-tint2` إلى `tests/test_desktop_readiness.sh`. الاختبار المستهدف نجح؛ لا يثبت ذلك استقرار Tint2 بعد marker أو في ISO.
-- تحقق المجموعة: `python3 -m pytest -q` (65 passed، 1 skipped، 4 subtests)، `bash tests/smoke.sh` (27 tests)، واختبارات الجاهزية وتصنيف segfault كلها exit 0. مشغل المصدر سجل 89 PASS و0 FAIL و1 SKIP و4 NOT_RUN، ورمز خروجه 1 لأن أدوات البيئة ناقصة؛ تفاصيل السجلات في `/tmp/isox-source-audit-final.NAU83z`.
+- تحقق المجموعة في الفحص الأولي: `python3 -m pytest -q` (65 passed، 1 skipped، 4 subtests)، و`bash tests/smoke.sh` (27 tests). سجل source-runner آنذاك 89 PASS و0 FAIL و1 SKIP و4 NOT_RUN بسبب نقص أدوات البيئة؛ تجاوزته إعادة التحقق اللاحقة بعد تثبيت الأدوات، ونتيجتها موثقة في ملحق 2026-11-06 أدناه.
 - لم يُبنَ ISO محليًا: UID 1000، المتاح 18 GiB أقل من حد المشروع 20 GiB، وأدوات live-build وxorriso وdebootstrap وmksquashfs وQEMU غائبة. CI على HEAD الأساسي لا يشمل التغييرات المحلية. المرجع `iso-x (1).txt` ما زال غير متاح؛ المرشح المحفوظ لا يمكن إثبات مطابقته له.
 - الحالة تبقى **NOT READY**: يلزم CI جديد بعد نشر التغييرات، مع فشل readiness إن غاب Tint2، ثم فحص عدم حدوث segfault لاحق وظهور اللوحة في BIOS وUEFI.
 
@@ -311,3 +311,10 @@
 - لم تتوفر `xvfb-run` أو `openbox` أو `xdotool` أو GTK 3 typelib أو `desktop-file-validate` على المضيف. لذلك لم يُنفّذ `tests/test_gtk_window_runtime.py`، ولم تُختبر استجابة النقرة الخارجية/اللمس أو شكل RTL/LTR داخل جلسة فعلية. لم تتوفر صور واجهة عربية/إنجليزية.
 - لم يُنفذ `live-build` أو إقلاع ISO أو اختبار تثبيت/إزالة APT حقيقي. لا تتوفر في هذه الجولة أدلة جديدة على BIOS/UEFI أو صوت HDMI/الأجهزة أو الشبكة. Persistence عبر إعادة التشغيل ما تزال غير منفذة/غير متحققة بحسب حالة المصدر السابقة.
 - لا تُعتبر هذه الجولة استيفاءً كاملاً للملحق؛ يلزم بناء صورة وتشغيل اختبارات القبول الرسومية وPersistence/BIOS/UEFI وتوثيق النتائج قبل اعتماد الإصدار.
+
+## متابعة مراقبة ما بعد الجاهزية — 2026-11-06
+
+- أعدت الاستعلام عن CI `42221229398`: اكتمل workflow بـSUCCESS في build/source/BIOS/UEFI/promote/acceptance-summary على `b15647056fc609fba9e2d26748864dcc5ec50487`. الـISO التشخيصية 2,785,017,856 بايت، SHA-256 `ada797696e3ea9cbee4367bcfe8befa914cbf06ab0b876ebfd029299883c37fd`. التشغيل سابق للتعديلات المحلية؛ BIOS/UEFI لم يشترطا marker استقرار ما بعد readiness، وPersistence مصنفة `NOT_RUN`.
+- أضيف معامل CI `isox.ci.stability=30`، وخدمة readiness تصدر marker الجاهزية ثم تراقب Openbox وTint2 وعملية ISO-X وحجم النافذة كل ثانية؛ فقدان أي عنصر يصدر failure marker. ينتظر QEMU runner stable/failure marker ويصنف timeout أو الفشل كعدم قبول.
+- اجتازت اختبارات الجاهزية وQEMU المصدرية، واختبار fake-runtime يغطي markers الصحيحة والمبكرة/الخاطئة. بعد تثبيت أدوات البيئة ومحدد مفسر GTK أعيد `scripts/run-source-checks.py`: **93 PASS، 0 FAIL، 1 SKIP، 0 NOT_RUN**؛ pytest ‏70 tests مع skipped واحد، وGTK/Openbox/XKB/xterm وقسم ext4 الافتراضي PASS. السجل تحت `/tmp/isox-source-audit-final-L349pm`.
+- لم يُبنَ ISO ولم يُجر QEMU/BIOS/UEFI على هذه التغييرات بعد، ولم يُختبر persistence reboot أو 6 نوافذ/الأداء. السبب الداخلي التاريخي لانهيارات `wmctrl` وTint2 لا يزال غير محسوم؛ لا تُعلن الجاهزية قبل CI جديد وأدلة guest.

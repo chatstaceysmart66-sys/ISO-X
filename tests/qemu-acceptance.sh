@@ -96,6 +96,10 @@ case "$MODE" in
       [[ "$QEMU_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ISOX_QEMU_TIMEOUT must be a positive integer." >&2; exit 3; }
       QEMU_RENDER_GRACE="${ISOX_QEMU_RENDER_GRACE:-3}"
       [[ "$QEMU_RENDER_GRACE" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "ISOX_QEMU_RENDER_GRACE must be a non-negative number of seconds." >&2; exit 3; }
+      QEMU_STABILITY_SECONDS="${ISOX_QEMU_STABILITY_SECONDS:-30}"
+      [[ "$QEMU_STABILITY_SECONDS" =~ ^[1-9][0-9]*$ ]] && (( QEMU_STABILITY_SECONDS <= 300 )) || { echo "ISOX_QEMU_STABILITY_SECONDS must be between 1 and 300." >&2; exit 3; }
+      QEMU_STABILITY_TIMEOUT="${ISOX_QEMU_STABILITY_TIMEOUT:-60}"
+      [[ "$QEMU_STABILITY_TIMEOUT" =~ ^[1-9][0-9]*$ ]] && (( QEMU_STABILITY_TIMEOUT >= QEMU_STABILITY_SECONDS )) || { echo "ISOX_QEMU_STABILITY_TIMEOUT must be at least the stability interval." >&2; exit 3; }
       READINESS=nonce
       QEMU_NONCE="${ISOX_QEMU_NONCE:-}"
       if [[ "$MODE" == *-desktop ]]; then
@@ -145,6 +149,8 @@ case "$MODE" in
         --nonce "$QEMU_NONCE" \
         --timeout "$QEMU_TIMEOUT" \
         --render-grace "$QEMU_RENDER_GRACE" \
+        --stability-seconds "$QEMU_STABILITY_SECONDS" \
+        --stability-timeout "$QEMU_STABILITY_TIMEOUT" \
         --accelerator "$QEMU_ACCEL" \
         -- qemu-system-x86_64 "${ARGS[@]}"
       exit $?

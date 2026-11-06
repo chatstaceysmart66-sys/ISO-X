@@ -1,78 +1,113 @@
-# ISO-X Dependency Graph
+# ISO-X Dependency Graph — current audited paths
 
-## Evidence Context
+## Snapshot
 
-**Historical snapshot:** this graph reflects an earlier audit starting at `22b9fc116ee278be22c5bbe30782f980100d85a1` and CI run `40216891064`. It is not a current full-tree inventory. The current-state evidence and focused dependency paths are in the 2026-11-06 addendum in `AUDIT.md`; build/rootfs edges remain unverified until the current source is built.
+This graph is current to the source audit begun on `b15647056fc609fba9e2d26748864dcc5ec50487` (2026-11-06), plus uncommitted source edits described below. CI `42221229398` completed successfully on `b156470`; it predates the local edits and is not their runtime evidence. Details and limits are in `FILE_BY_FILE_AUDIT_AR.md`, `FILE_RELATIONSHIP_MATRIX_AR.md`, and `REQUIREMENTS_TRACEABILITY_AR.md`.
 
-## Build and Image Assembly
+## Build and acceptance
 
 ```mermaid
 flowchart TD
-  user[build.sh] --> build[scripts/build-iso.sh]
-  build --> config[auto/config]
-  build --> pkg[config/package-lists/iso-x.list.chroot]
-  build --> stage[config/includes.chroot staging]
-  build --> hooks[config/hooks/live/*.hook.chroot]
-  build --> lb[live-build lb build]
-  pkg --> apt[Debian Trixie package resolver]
-  hooks --> rootfs[Live root filesystem]
-  stage --> rootfs
-  config --> iso[hybrid ISO: BIOS + UEFI]
-  rootfs --> iso
-  iso --> validate[xorriso + SHA-256 + manifest]
-  validate --> bios[BIOS QEMU gate]
-  validate --> uefi[UEFI QEMU gate]
-  bios --> normal[normal-boot candidate rewrite]
-  uefi --> normal
-  normal --> desktop[BIOS + UEFI graphical acceptance]
+  entry[build.sh] --> builder[scripts/build-iso.sh]
+  builder --> liveconfig[auto/config]
+  builder --> packages[config/package-lists/iso-x.list.chroot]
+  builder --> boot[config/bootloaders/*]
+  builder --> staged[config/includes.chroot staging]
+  builder --> hooks[config/hooks/live/*.hook.chroot]
+  packages --> apt[Debian Trixie resolver]
+  liveconfig --> livebuild[live-build]
+  boot --> livebuild
+  hooks --> rootfs[rootfs]
+  staged --> rootfs
+  livebuild --> iso[hybrid ISO]
+  iso --> validate[xorriso + boot config + SHA-256]
+  validate --> diag[CI diagnostic ISO + nonce]
+  diag --> bios[QEMU BIOS]
+  diag --> uefi[QEMU UEFI]
+  bios --> promote[normal-boot candidate]
+  uefi --> promote
+  promote --> summary[acceptance summary]
 ```
 
-`build.sh` invokes the guarded build script. The build stages source files, system configuration, package manifest and hooks; live-build resolves packages and produces the image. The CI workflow separately validates structure/hash, boots diagnostic candidate under BIOS and UEFI, rewrites a normal-boot candidate, then performs graphical acceptance. A successful source check or boot diagnostic gate alone does not prove the normal image's desktop.
+The workflow must not promote unless source-check, build validation and both firmware gates succeed. A cancelled/skipped BIOS gate is not PASS. Run `42221229398` completed source/build/BIOS/UEFI/promote/acceptance-summary successfully on the base commit; it did not include this audit's later edits.
 
-## Session and Desktop
+## Brand resources and browser entry
 
 ```mermaid
 flowchart LR
-  lightdm[LightDM + PAM] --> openbox[Openbox session]
-  hook[0300 services hook] --> lightdm
-  openbox --> autostart[generated /etc/skel/.config/openbox/autostart]
-  autostart --> pcmanfm[PCManFM desktop + icons]
-  autostart --> tint2[tint2 panel + launchers + task list]
-  autostart --> keyboard[setxkbmap ara,us]
-  autostart --> app[GTK ISO-X shell]
-  desktop[desktop/openbox-rc.xml] --> openbox
-  menu[desktop/openbox-menu.xml] --> openbox
-  look[scripts/apply-windows-look.sh] --> skel[/etc/skel settings]
-  look --> libfm[~/.config/libfm/libfm.conf]
-  libfm --> touch[PCManFM one-click activation]
-  look --> gtk2[~/.gtkrc-2.0]
-  look --> gtk3[~/.config/gtk-3.0/gtk.css]
-  themehook[0500 menu contrast hook] --> obtheme[Clearlooks themerc]
-  obtheme --> menu
+  reference[design/reference/iso-x-reference.html] --> extract[scripts/extract-reference-assets.py]
+  extract --> generator[scripts/generate-brand-assets.py]
+  generator --> manifest[assets/reference/reference-assets.json]
+  generator --> originals[JPEG + derived PNG]
+  originals --> staging[scripts/build-iso.sh staging]
+  manifest --> verify[scripts/verify-reference-assets.py]
+  staging --> rootfs[rootfs candidate]
+  verify --> staging
+  wallpaper[wallpaper JPEG] --> pcmanfm[PCManFM profile]
+  wallpaper --> lightdm[LightDM greeter]
+  boot[boot PNG] --> plymouth[Plymouth theme]
+  mark[dragon JPEG] --> gtk[GTK/welcome + icon]
+  page[assets/iso-x.html] --> firefox[Firefox homepage hook]
+  page --> mark
+  page --> guide[README_AR.md installed docs]
 ```
 
-The session hook configures LightDM autologin and Openbox; the build generates the user's autostart. PCManFM owns desktop icons, tint2 owns its task list/launcher, and Openbox owns native decorations, window gestures, and root menu. `apply-windows-look.sh` targets `/etc/skel`; this is a source-to-image contract, not proof that existing user homes are migrated.
+The large design HTML is a candidate copied from `iso-x 22.html`, not verified as the named user attachment. The small `assets/iso-x.html` is a local Firefox welcome/search page and does not replace the GTK desktop shell. The seven obsolete `assets/iso-x-*` artwork files were removed after no runtime/build consumer was found. All remaining local page URLs now have source-contract assertions; actual ISO file hashes remain unverified after the current edits.
 
-## Feature Call Paths
+## Desktop session ownership
 
-| User action | Connected call path | External effect | Result verification |
-|---|---|---|---|
-| Open GTK shell | `LightDM -> Openbox autostart -> /usr/local/bin/iso-x -> /usr/share/iso-x/iso_x_gtk.py -> ISOXGtk` | GTK process and native Openbox-managed window | `test_gtk_window_runtime.py`; CI run `40210339242` passed window controls/focus/resize. |
-| Open desktop launcher | `PCManFM -> .desktop Exec -> installed executable` | Launches application by desktop entry | Build generates entries; actual per-entry launch not exhaustively tested. |
-| Single tap desktop icon | `libfm config single_click=1 -> PCManFM activation -> .desktop Exec` | Launches selected desktop item on one click | Temp-HOME config assertion passed; real touch device not tested. |
-| Snap active window | `Super+Left/Right -> Openbox Execute -> isox-snap-window.sh -> xrandr + wmctrl` | Read output geometry and resize/move active window | Script/source trace confirmed; missing `x11-xserver-utils` identified and added locally; new image pending. |
-| Secure Vault menu | `Openbox menu -> xterm -e isox-vault -> secure-vault.sh -> secure-vault.py -> prompt -> ask_secret -> encrypt/decrypt -> OpenSSL+tar` | Encrypted archive or verified extraction | No-argument baseline produced usage/exit 2; interactive routing test plus real OpenSSL round-trip passed after local fix. |
-| Install APT app | `AppCard clicked -> _manage_app -> confirmation -> _begin_operation thread -> backend.install_apt -> apt-cache revalidation -> pkexec /usr/bin/apt-get -> is_installed -> GLib callback/status` | Privileged package installation | Backend fake-runner tests validate argv/result; missing `pkexec` package found and added locally; real package transaction not run. |
-| Install Flatpak app | `AppCard -> confirmation -> worker -> install_flatpak validates remote listing -> flatpak install --user -> refresh catalog` | User-scoped application install | Fake runner tests validate identity/remote; no real remote/network install. |
-| Switch keyboard | `tint2 ExecP click / GTK callback -> isox_keyboard -> XKB/libX11 + setxkbmap -> active group check` | Change current XKB group | CI GTK test verifies Arabic/English typing in GTK and xterm. |
-| Copy/move/delete | `GTK toolbar -> selection validation + confirmation -> worker thread -> copy/move/remove -> GLib completion` | Filesystem mutation for selected paths | Source contracts and code inspection; not all file-operation scenarios exercised in Xvfb. |
-| ZRAM | `build symlink -> systemd isox-zram.service -> isox-zram-setup -> zramctl/modprobe/mkswap/swapon/sysctl` | Kernel zram swap | Staged and syntax-reviewed; no measured guest zram run in this audit. |
-| Preload | `skel user timer -> user service -> isox-preload -> opt-in DB check -> procfs/page cache` | Optional cache warmup | Source path only; not performance-tested. |
-| QEMU readiness | `workflow BIOS/UEFI job -> qemu-acceptance.sh -> qemu-runner.py -> QMP/serial/screenshots/guest nonce` | Boot status and evidence artifacts | Fake tests locally; actual CI boot/desktop evidence available on completed run `40210339242`, not yet for this dirty tree. |
+```mermaid
+flowchart LR
+  lightdm[LightDM autologin: user] --> openbox[Openbox session]
+  openbox --> autostart[/etc/skel/.config/openbox/autostart]
+  autostart --> pcmanfm[PCManFM desktop + wallpaper]
+  autostart --> tint2[Tint2 panel/task list]
+  autostart --> gtk[ISO-X GTK shell]
+  autostart --> helpers[network/audio/power/polkit/keyboard applets]
+  rc[desktop/openbox-rc.xml] --> openbox
+  menu[desktop/openbox-menu.xml] --> openbox
+  config[desktop/tint2rc] --> tint2
+  look[scripts/apply-windows-look.sh] --> skel[/etc/skel theme/profile]
+  skel --> pcmanfm
+  skel --> gtk
+```
 
-## Trust Boundaries
+Ownership is intentionally distinct: Openbox manages native windows and menu, Tint2 is the real panel/task list, PCManFM draws desktop icons/wallpaper, and GTK provides ISO-X application windows. There is no HTML taskbar in the current build. Current HTML UI acceptance is still missing.
 
-- Openbox XML commands run as the logged-in user. Privileged package changes are routed through `pkexec`; shell strings are not built from package IDs in the backend.
-- The App Center reports package operation success from subprocess return codes and re-queries installed state in the UI layer.
-- Vault passphrases are read from a TTY and sent to OpenSSL via an inherited fd; no password is placed in argv. Interactive menu flow now collects paths before asking for the passphrase.
-- CI and local unit fakes establish argv/contract behavior but do not prove repository availability, user authentication, or physical hardware support.
+## Runtime services and launch paths
+
+```mermaid
+flowchart TD
+  openbox --> gtkEntry[/usr/local/bin/iso-x]
+  gtkEntry --> gtkSource[/usr/share/iso-x/iso_x_gtk.py]
+  gtkSource --> appcenter[isox_appcenter.py]
+  appcenter --> backend[isox_store_backend.py]
+  backend --> polkit[pkexec / apt-get / Flatpak]
+  menu[Openbox menu] --> desktops[Desktop Entries / commands]
+  desktops --> userApps[Firefox ESR, Thunar, terminal, settings...]
+  openbox --> preloadUser[isox-preload.timer]
+  preloadUser --> preload[isox-preload.py]
+  boot[systemd boot] --> zram[isox-zram.service]
+  zram --> zramScript[/usr/local/sbin/isox-zram-setup]
+```
+
+Package availability and source-level argv validation do not prove a real package transaction or hardware service.
+
+## CI readiness
+
+```mermaid
+flowchart LR
+  timer[isox-ci-ready.timer] --> ready[isox-ci-ready.service]
+  ready --> probe[scripts/isox-ci-ready.sh]
+  probe --> check[scripts/isox-desktop-window-ready.sh]
+  check --> xwininfo[xwininfo + session + Openbox + Tint2 + ISO-X window]
+  probe --> marker[nonce marker]
+  marker --> monitor[isox-ci-stability.sh: repeat readiness check for configured interval]
+  monitor --> stable[ISOX_CI_STABLE or ISOX_CI_STABILITY_FAIL]
+  qemu[tests/qemu-acceptance.sh] --> runner[tests/qemu-runner.py]
+  runner --> serial[serial/QMP/screenshots/result JSON]
+  runner --> markers[wait for stable/failure marker]
+  runner --> crash[segfault classification]
+```
+
+`wmctrl` was removed from the readiness probe because the old probe coincided with its crashes; it remains a package/feature dependency elsewhere. The historic internal causes of `wmctrl` and Tint2 crashes remain unknown. The source now monitors Openbox, Tint2, and the ISO-X window after readiness and QEMU waits for the stable/failure marker. Regression tests cover the marker protocol; no guest run of this new path has completed yet.
