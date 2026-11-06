@@ -41,7 +41,7 @@ assert "--apt-indices false" not in auto_config
 assert 'linux-headers-amd64' not in auto_config, "Kernel headers should be optional with the watermark module"
 services_hook = (ROOT / "config/hooks/live/0300-isox-services.hook.chroot").read_text(encoding="utf-8")
 assert "/etc/lightdm/lightdm-gtk-greeter.conf" in services_hook
-assert "iso-x-desktop-wallpaper.png" in services_hook and "iso-x-dragon.png" in services_hook
+assert "iso-x-desktop-wallpaper.jpg" in services_hook and "reference-dragon-mark.jpg" in services_hook
 assert "/etc/lightdm/lightdm.conf.d/50-isox-live-autologin.conf" in services_hook
 assert "install -d -m 0755 /etc/lightdm /etc/lightdm/lightdm.conf.d" in services_hook
 assert "[Seat:*]" in services_hook and "autologin-user=user" in services_hook
@@ -68,6 +68,13 @@ for asset in (
     "desktop/chatgpt.desktop",
     "app/isox_launcher.py",
     "scripts/install-build-deps.sh", "scripts/isox-run.py", "scripts/isox-speedtest",
+    "scripts/extract-reference-assets.py", "scripts/verify-reference-assets.py",
+    "design/reference/iso-x-reference.html",
+    "assets/reference/reference-assets.json", "assets/reference/desktop-wallpaper-original.jpg",
+    "assets/reference/boot-screen-original.jpg", "assets/reference/dragon-mark-original.jpg",
+    "assets/reference/boot-screen.png", "assets/reference/dragon-mark.png",
+    "assets/reference/dragon-mark-icon-96.png", "docs/REFERENCE_DESIGN_MAPPING_AR.md",
+    "docs/UX_STANDARDS_AR.md",
     "scripts/apply-windows-look.sh", "scripts/toggle-airplane.sh", "config/hooks/live/0300-isox-services.hook.chroot",
     "tests/test_secure_vault.py", "tests/test_secureboot_validation.sh",
     "README.md", "build.sh", "docs/THIRD_PARTY_LICENSES.md",
@@ -81,12 +88,13 @@ for asset in (
     assert (ROOT / asset).is_file(), f"Missing feature/integration asset: {asset}"
 
 brand_generator = (ROOT / "scripts/generate-brand-assets.py").read_text(encoding="utf-8")
-brand_boot = ET.parse(ROOT / "assets/iso-x-boot.svg").getroot()
-brand_wallpaper = ET.parse(ROOT / "assets/iso-x-desktop-wallpaper.svg").getroot()
-assert any(element.tag.endswith("image") and element.get("href") == "iso-x-dragon.svg" for element in brand_boot)
-assert any(element.tag.endswith("image") and element.get("href") == "iso-x-dragon.svg" for element in brand_wallpaper)
+brand_extractor = (ROOT / "scripts/extract-reference-assets.py").read_text(encoding="utf-8")
 assert "generate-brand-assets.py" in build and "BRAND_ASSET_DIR" in build
-assert "import cairosvg" in brand_generator
+assert "extract-reference-assets.py" in brand_generator
+assert "data_uri_count" in brand_extractor and "original_sha256" in brand_extractor
+assert "iso-x-desktop-wallpaper.png" not in build and "iso-x-boot.svg" not in build
+assert "iso-x-dragon.svg" not in build and "iso-x-desktop-wallpaper.svg" not in build
+assert "wallpaper_mode=fit" in (ROOT / "scripts/apply-windows-look.sh").read_text(encoding="utf-8")
 
 assert {"appstream", "python3-yaml", "flatpak", "pulseaudio-utils"} <= packages
 assert {"at-spi2-core", "libglib2.0-bin", "udisks2", "exfatprogs", "ntfs-3g"} <= packages
@@ -117,9 +125,11 @@ for shortcut, url in (
     assert entry["Desktop Entry"]["Exec"] == f"firefox-esr --new-window {url}"
     assert 'install -m 0644 "$PROJECT_DIR/desktop/$shortcut.desktop"' in build
 
-assert 'Image("iso-x-plymouth.png")' in (ROOT / "plymouth/isox/isox.script").read_text()
-plymouth_dims = __import__("struct").unpack(">II", (ROOT / "assets/iso-x-plymouth.png").read_bytes()[16:24])
-assert max(plymouth_dims) <= 512, f"Plymouth logo should fit low-resolution screens: {plymouth_dims}"
+plymouth_script = (ROOT / "plymouth/isox/isox.script").read_text(encoding="utf-8")
+assert 'Image("iso-x-plymouth.png")' in plymouth_script
+assert "Math.Min" in plymouth_script and "source_image.Scale(image_width, image_height)" in plymouth_script
+assert "iso-x-desktop-wallpaper.jpg" in (ROOT / "scripts/apply-windows-look.sh").read_text(encoding="utf-8")
+assert 'usr/share/plymouth/themes/isox/iso-x-plymouth.png' in build
 assert "images/iso-x-dragon.png" in (ROOT / "three-d-login/src/main.rs").read_text()
 assert "png" in cargo["dependencies"]["bevy"]["features"]
 for xml in (ROOT / "desktop/openbox-menu.xml", ROOT / "desktop/openbox-rc.xml",

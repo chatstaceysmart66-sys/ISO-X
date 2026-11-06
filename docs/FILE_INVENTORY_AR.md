@@ -1,5 +1,26 @@
 # جرد ملفات ISO-X
 
+## الحالة الراهنة — 2026-11-06
+
+- عدد المسارات المتتبعة في Git: **152**؛ ملفات غير متتبعة ذات صلة بهذه الجولة: **11**. هذه الأعداد وقت التدقيق ولا تمثل بالضرورة حالة الشجرة بعد الالتزام؛ راجع `git status` قبل البناء.
+- الملفات الجديدة: 7 أصول/manifest تحت `assets/reference/`، ملف HTML مرجعي واحد، وثيقة UX واحدة، وأداتا استخراج/تحقق اثنتان. الأصل المرجعي المرئي المستخدم في الربط له سلسلة source→generator→build staging→hook/GTK موثقة في `docs/REFERENCE_DESIGN_MAPPING_AR.md`؛ مرحلة ISO/SquashFS غير متحققة لعدم البناء المحلي.
+- مراجع التشغيل التي أعيد التحقق منها: `scripts/isox-ci-ready.sh` يستدعي `scripts/isox-desktop-window-ready.sh`، الذي يشترط الآن تطبيق ISO-X وOpenbox وTint2 ونافذة X11؛ `tests/test_desktop_readiness.sh` يغطي غياب كل مكوّن. كما يصنف `tests/qemu-runner.py` سجلات `segfault` كفشل runtime. هذه اختبارات/بوابات، لا إصلاح لسبب Tint2 الجذري.
+- الجرد التفصيلي أدناه لقطة تاريخية من HEAD أقدم ولا يمثل تدقيقًا جديدًا لكل بايت في 152 مسارًا؛ لا تُفسر إحصاءاته القديمة على أنها جرد حالي كامل. الملفات المولدة/الثنائية تُراجع بصيغتها وأبعادها وبصماتها، لا كنص.
+
+## ملحق جرد أصول المرجع — 2026-11-06
+
+| المسار | الدور/المحتوى | المصدر أو المستهلك | التحقق والحالة |
+|---|---|---|---|
+| `design/reference/iso-x-reference.html` | نسخة مرشح HTML مضمنة الصور | منسوخة من `iso-x 22.html`؛ ليست مثبتة الهوية كمرفق `iso-x (1).txt` | SHA-256 `16f2b6d8007e01c612825823eada60627ee7040b690ea9032f86ab93490f2a35`؛ المصدر/الهوية مذكوران في manifest |
+| `scripts/extract-reference-assets.py` | تحليل Data URI واستخراج JPEG/المشتقات وتوليد manifest | `scripts/generate-brand-assets.py` ثم `scripts/build-iso.sh` | اختبار استخراج محدد؛ يتطلب Pillow (`python3-pil`) |
+| `scripts/verify-reference-assets.py` | يقارن بصمة HTML وملفات الأصول المنسوخة إلى شجرة rootfs مع manifest | يستدعيه `scripts/build-iso.sh` قبل live-build | نجح على شجرة rootfs اصطناعية؛ ISO/SquashFS غير متحققة |
+| `assets/reference/reference-assets.json` | بيانات الأدوار والأبعاد وMIME والبصمات ومسارات النظام | build ينشئ نسخة مطابقة المصدر في staging | لا يثبت وجود الملف في ISO حتى فحص SquashFS |
+| `assets/reference/*-original.jpg` | أصول JPEG المضمنة | خلفية سطح المكتب/LightDM، ومصدر الإقلاع والشعار | بصمات موثقة؛ wallpaper 1920×1080، boot 1920×1080، mark 100×106 |
+| `assets/reference/boot-screen.png` | تحويل lossless لصورة الإقلاع لفك Plymouth | Plymouth theme | ليس صورة مستقلة؛ اشتقاق من JPEG موثق |
+| `assets/reference/dragon-mark.png` | تحويل lossless للشعار لتطبيق Bevy الاختياري | لا يُثبت أنه في rootfs إلا عند تفعيل المكوّن الاختياري | اشتقاق من JPEG موثق |
+| `assets/reference/dragon-mark-icon-96.png` | أيقونة 96×96 باحتواء وتصغير متناسب | `/usr/share/icons/hicolor/96x96/apps/iso-x.png` حسب build | لا قص أو تمديد؛ لم يُفحص داخل ISO |
+| `docs/REFERENCE_DESIGN_MAPPING_AR.md`, `docs/UX_STANDARDS_AR.md` | ربط مرجع التصميم ومعايير RTL/الصور/الأمان | تُثبت كوثائق النظام | توثيق فقط؛ لا دليل بصري runtime |
+
 ## تحديث حالة الجرد — 2026-11-02
 
 - عند بدء هذه الجولة كان HEAD `f7e188293ac86d10a7b2205135605a2086fe2e20` والفرع `fix/isox-build-and-runtime` نظيفًا. التغيير الحالي يضيف اختبارًا لإعداد PCManFM ويحوّل نمط الخلفية إلى `fit`.

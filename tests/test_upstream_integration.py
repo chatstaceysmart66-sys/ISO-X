@@ -3,7 +3,6 @@
 from pathlib import Path
 import ast
 import re
-import struct
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -46,15 +45,9 @@ assert "gir1.2-gtk-3.0" in packages and "network-manager-gnome" in packages
 
 print("PASS: source-repo findings are documented, nonportable/unsafe Windows preset and ISO artifacts are not imported, and ISO-X-branded onboarding is wired into the build and desktop menu.")
 
-# Branding assets must be valid XML/PNG resources of the documented dimensions.
+# Historical SVG assets remain in the source tree, but are no longer staged.
 for vector in (ROOT / "assets/iso-x-dragon.svg", ROOT / "assets/iso-x-boot.svg"):
     ET.parse(vector)
-for image_path, expected in ((ROOT / "assets/iso-x-dragon.png", (1024, 1024)),
-                            (ROOT / "assets/iso-x-boot.png", (1024, 1024)),
-                            (ROOT / "assets/iso-x-plymouth.png", (512, 512))):
-    with image_path.open("rb") as f:
-        header = f.read(24)
-    assert header[:8] == b"\x89PNG\r\n\x1a\n", f"invalid PNG: {image_path}"
-    dims = struct.unpack(">II", header[16:24])
-    assert dims == expected, f"unexpected PNG dimensions for {image_path}: {dims}"
-print("PASS: ISO-X dragon SVGs are valid XML and branding PNG dimensions match the documented resources.")
+assert "assets/iso-x-dragon.svg" not in build
+assert "assets/iso-x-desktop-wallpaper.png" not in build
+print("PASS: legacy SVG sources remain valid but the ISO build stages artwork extracted from the reference.")

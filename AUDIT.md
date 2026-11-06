@@ -1,3 +1,22 @@
+## Current Audit Addendum — 2026-11-06
+
+- At audit start the branch was `fix/isox-build-and-runtime` at `be001c0f7b4669f1886e7624a1d257de07b0992b`, equal to origin. The stash was preserved and not applied.
+- Source dependency path: `design/reference/iso-x-reference.html` → `scripts/extract-reference-assets.py` → `assets/reference/*` and manifest → `scripts/generate-brand-assets.py` → `scripts/build-iso.sh` staging → Plymouth/LightDM/GTK consumers. Local asset/hash tests pass, but there is no local rootfs, SquashFS, or ISO to inspect.
+- Desktop readiness path: `systemd/isox-ci-ready.service` → `scripts/isox-ci-ready.sh` → `scripts/isox-desktop-window-ready.sh` → active user, ISO-X window, Openbox, and Tint2 process. `tests/test_desktop_readiness.sh` rejects a missing Tint2 process; `tests/qemu-runner.py` now rejects any logged `segfault`, even after the marker.
+- Latest existing CI run `42172193542` is on the base commit, not the current edits. Its BIOS and UEFI serial logs show Tint2 segfaults at 83.005462s and 134.285954s respectively, before readiness, while CI nevertheless passed. This is a gate defect, not an established Tint2 root cause.
+- Local verification: pytest 65 passed/1 skipped/4 subtests; smoke 27 tests; desktop readiness regression passed. The source runner recorded 89 passed, 0 failed, 1 skipped, 4 NOT_RUN and exited 1 because tools were missing. ISO build and local BIOS/UEFI boots remain NOT_RUN; the source HTML attachment `iso-x (1).txt` remains unavailable.
+- Decision: **NOT READY** until a new CI/build tests the changed readiness gate and confirms Tint2 does not crash after the marker; inspect the resulting ISO and complete the remaining hardware/persistence checks.
+
+## نتيجة جولة مرجع التصميم — 2026-11-06
+
+- الحالة: **تنفيذ مصدري جزئي؛ اعتماد المرفق وISO النهائي غير مثبتين**. المرجع المحدد `iso-x (1).txt` لم يكن متاحاً. النسخة الجديدة `design/reference/iso-x-reference.html` تطابق `iso-x 22.html` فقط، لا المرفق المفقود؛ بصمتها `16f2b6d8007e01c612825823eada60627ee7040b690ea9032f86ab93490f2a35`.
+- أداة الاستخراج تربط ستة Data URI بثلاثة أدوار وتتحقق من صور JPEG، الأحجام والبصمات. سلسلة source/build صارت تشير إلى خلفية المرجع في LightDM وPCManFM، وصورة مشهد المرجع في Plymouth، وشعار المرجع في GTK والأيقونات. الأصول القديمة تبقى في الشجرة كمصادر تاريخية؛ لا تُمرحّل بواسطة build الحالي.
+- أضاف build تحققاً من manifest وبصمات الملفات المنسوخة إلى staging، واختباراً لشجرة rootfs اصطناعية؛ لا يحل ذلك محل فحص rootfs/SquashFS الناتج عن live-build.
+- معاينة JavaScript لم تُنفّذ. عُثر على `Function()` في الحاسبة النموذجية، طرفية وحالات خدمات شكلية، وطلب كاميرا ومؤقت UI. لذلك HTML لا يُضمّن داخل ISO ولا يُستخدم كسطح مكتب؛ Openbox وGTK وPCManFM وTint2 وPlymouth هي المكونات التنفيذية.
+- إعداد المصدر لا يثبت محتويات ISO. لم يُبنَ rootfs أو SquashFS؛ تبقى الصور الفعلية داخل ISO، وعرض Plymouth، وLightDM، والاستقرار/لقطات الدقة **UNVERIFIED/NOT_RUN**. بيئة البناء المحلية تفتقر إلى root و20 GiB مساحة وأدوات البناء/QEMU.
+- التحقق المصدري: `python3 -m pytest -q` (**65 passed، 1 skipped، 4 subtests passed**)، `bash tests/smoke.sh` (exit 0)، وفحوص config/integration و`py_compile` و`bash -n` و`git diff --check` (exit 0). لا يثبت هذا اكتمال build أو الإقلاع.
+- لم يُعالج في هذه الجولة تحذير segfault التاريخي لـ`tint2` في BIOS/UEFI؛ لا تُفسر تعديلات الألوان أو نجاح المصدر كإصلاح runtime.
+
 # ISO-X 0.4.0 — تقرير التدقيق الفعلي (خط الأساس قبل الإصلاح)
 
 ## ملحق الحالة الحالية — 2026-11-02

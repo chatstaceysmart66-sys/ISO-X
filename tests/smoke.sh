@@ -14,6 +14,9 @@ python3 -m py_compile \
   "$ROOT/scripts/isox-preload.py" \
   "$ROOT/scripts/secure-vault.py" \
   "$ROOT/scripts/isox-run.py" \
+  "$ROOT/scripts/extract-reference-assets.py" \
+  "$ROOT/scripts/generate-brand-assets.py" \
+  "$ROOT/scripts/verify-reference-assets.py" \
   "$ROOT/scripts/encode-watermark.py" \
   "$ROOT/scripts/generate-store-sounds.py" \
   "$ROOT/scripts/isox-speedtest" \

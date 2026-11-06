@@ -222,6 +222,10 @@ assert classify("", False, 42, True, "readiness_marker", True, False, False, Tru
 assert classify("boot", True, 0, False, "timeout", True, False, False, False) == "BOOT_TIMEOUT"
 assert classify("", False, 0, True, "readiness_marker", True, False, False, False) == "QEMU_INFRASTRUCTURE_FAILURE"
 assert classify("", False, 0, False, "desktop_rendered", True, False, True, True) == "PASS_BOOT"
+assert classify(
+    "[  83.005462] tint2[1343]: segfault at 660000000000841f",
+    False, -signal.SIGTERM, True, "readiness_marker", True, False, False, True,
+) == "GUEST_RUNTIME_CRASH"
 PY
 
 if FAKE_QEMU_KIND=marker-exit-error FAKE_QEMU_NONCE="$NONCE" ISOX_QEMU_TIMEOUT=5 \

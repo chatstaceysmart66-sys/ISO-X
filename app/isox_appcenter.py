@@ -35,13 +35,13 @@ SETTINGS_PATH = Path.home() / ".config/iso-x/store.json"
 BRAND_IMAGE_PATH = next(
     (
         path for path in (
-            Path("/usr/share/iso-x/assets/iso-x-dragon.png"),
-            Path(__file__).resolve().parent / "assets/iso-x-dragon.png",
-            Path(__file__).resolve().parents[1] / "assets/iso-x-dragon.png",
+            Path("/usr/share/iso-x/assets/reference-dragon-mark.jpg"),
+            Path(__file__).resolve().parent / "assets/reference/dragon-mark-original.jpg",
+            Path(__file__).resolve().parents[1] / "assets/reference/dragon-mark-original.jpg",
         )
         if path.is_file()
     ),
-    Path("/usr/share/iso-x/assets/iso-x-dragon.png"),
+    Path("/usr/share/iso-x/assets/reference-dragon-mark.jpg"),
 )
 DEFAULT_SETTINGS = {"sounds_enabled": True, "sound_volume": 0.35, "theme": "dark", "language": "auto"}
 LANGUAGE_OVERRIDE = "auto"
@@ -63,28 +63,28 @@ SUPPORTED_CATEGORIES = (
 )
 CATALOG_PAGE_SIZE = 24
 CSS = b"""
-window { background: #0b1020; color: #edf4ff; }
+window { background: #0b1020; color: #cfeaff; }
 window.light { background: #f1f5fa; color: #142236; }
-label { color: #edf4ff; }
+label { color: #cfeaff; }
 window.light label { color: #142236; }
 window.light label.brand { color: #0879b7; }
-headerbar { background: #101a2d; color: #f2f7ff; border-bottom: 1px solid #234264; }
-headerbar .title { color: #55c9ff; font-weight: 700; }
+headerbar { background: #060e26; color: #cfeaff; border-bottom: 1px solid #5aaaff; }
+headerbar .title { color: #4fb4ff; font-weight: 700; }
 button {
     background: #182840; color: #edf4ff; border: 1px solid #2c4565;
     border-radius: 9px; padding: 7px 11px;
 }
-button:hover { background: #1b3858; border-color: #35c4ff; }
+button:hover { background: #1e6bff; border-color: #4fb4ff; }
 button:disabled { background: #151e30; color: #8798ae; }
 entry, combobox { background: #111b2e; color: #edf4ff; border-color: #294563; }
-button.suggested-action { background: #0879b7; color: #fff; }
+button.suggested-action { background: #1e6bff; color: #fff; }
 button.destructive-action { background: #8f3248; color: #fff; }
 button.category-tab { border-radius: 18px; padding: 5px 12px; }
-button.category-tab:checked { background: #0879b7; border-color: #35c4ff; color: #fff; }
+button.category-tab:checked { background: #1e6bff; border-color: #4fb4ff; color: #fff; }
 frame.card { background: #111b2e; border: 1px solid #253955; border-radius: 13px; }
 frame.card > border { border: 0; }
 label.muted { color: #a9b9d0; }
-label.brand { color: #35c4ff; font-weight: 700; }
+label.brand { color: #4fb4ff; font-weight: 700; }
 list { background: transparent; }
 list row { border-radius: 8px; padding: 4px; }
 list row:selected { background: #143c5c; }

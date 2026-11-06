@@ -1,13 +1,30 @@
-# ISO-X minimalist cyber-dragon boot screen
+# ISO-X reference-design boot scene; preserve the full image at every resolution.
 Window.SetBackgroundTopColor(0, 0, 0);
 Window.SetBackgroundBottomColor(0, 0, 0);
-logo_image = Image("iso-x-plymouth.png");
-logo_sprite = Sprite(logo_image);
-logo_sprite.SetX(Window.GetWidth() / 2 - logo_image.GetWidth() / 2);
-logo_sprite.SetY(Window.GetHeight() / 2 - logo_image.GetHeight() / 2);
+source_image = Image("iso-x-plymouth.png");
+logo_sprite = Sprite();
 logo_sprite.SetZ(100);
+last_width = -1;
+last_height = -1;
+fun layout_image() {
+  screen_width = Window.GetWidth();
+  screen_height = Window.GetHeight();
+  if (screen_width > 0 && screen_height > 0 &&
+      (screen_width != last_width || screen_height != last_height)) {
+    scale = Math.Min(screen_width / source_image.GetWidth(),
+                     screen_height / source_image.GetHeight());
+    image_width = Math.Int(source_image.GetWidth() * scale);
+    image_height = Math.Int(source_image.GetHeight() * scale);
+    display_image = source_image.Scale(image_width, image_height);
+    logo_sprite.SetImage(display_image);
+    logo_sprite.SetX((screen_width - image_width) / 2);
+    logo_sprite.SetY((screen_height - image_height) / 2);
+    last_width = screen_width;
+    last_height = screen_height;
+  }
+}
 fun refresh_callback() {
-  logo_sprite.SetX(Window.GetWidth() / 2 - logo_image.GetWidth() / 2);
-  logo_sprite.SetY(Window.GetHeight() / 2 - logo_image.GetHeight() / 2);
+  layout_image();
 }
 Plymouth.SetRefreshFunction(refresh_callback);
+layout_image();

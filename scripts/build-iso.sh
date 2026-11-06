@@ -72,6 +72,10 @@ MEM_KB="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"
 for cmd in lb xorriso debootstrap mksquashfs openssl; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "المتطلب غير موجود: $cmd" >&2; exit 3; }
 done
+python3 -c 'from PIL import Image' || {
+  echo "Missing Python image dependency: install Debian package python3-pil." >&2
+  exit 3
+}
 if [[ "$WATERMARK_ENABLED" == 1 ]]; then
   for cmd in make openssl; do
     command -v "$cmd" >/dev/null 2>&1 || { echo "المتطلب الاختياري غير موجود: $cmd" >&2; exit 3; }
@@ -200,6 +204,8 @@ install -m 0644 "$PROJECT_DIR/THIRD_PARTY_NOTICES.md" config/includes.chroot/usr
 install -m 0644 "$PROJECT_DIR/docs/THIRD_PARTY_LICENSES.md" config/includes.chroot/usr/share/doc/iso-x/THIRD_PARTY_LICENSES.md
 install -m 0644 "$PROJECT_DIR/docs/UPSTREAM_INTEGRATION_AR.md" config/includes.chroot/usr/share/doc/iso-x/UPSTREAM_INTEGRATION_AR.md
 install -m 0644 "$PROJECT_DIR/docs/ARCHITECTURE_AR.md" config/includes.chroot/usr/share/doc/iso-x/ARCHITECTURE_AR.md
+install -m 0644 "$PROJECT_DIR/docs/REFERENCE_DESIGN_MAPPING_AR.md" config/includes.chroot/usr/share/doc/iso-x/REFERENCE_DESIGN_MAPPING_AR.md
+install -m 0644 "$PROJECT_DIR/docs/UX_STANDARDS_AR.md" config/includes.chroot/usr/share/doc/iso-x/UX_STANDARDS_AR.md
 install -m 0644 "$PROJECT_DIR/docs/BUILD_AND_TEST_RESULTS_AR.md" config/includes.chroot/usr/share/doc/iso-x/BUILD_AND_TEST_RESULTS_AR.md
 install -m 0644 "$PROJECT_DIR/docs/HARDWARE_ACCEPTANCE_CHECKLIST_AR.md" config/includes.chroot/usr/share/doc/iso-x/HARDWARE_ACCEPTANCE_CHECKLIST_AR.md
 install -m 0644 "$PROJECT_DIR/docs/SHORTCUTS_AR.md" config/includes.chroot/usr/share/doc/iso-x/SHORTCUTS_AR.md
@@ -213,26 +219,36 @@ install -m 0644 "$PROJECT_DIR/db/migrations/003_isox_031.sql" config/includes.ch
 install -m 0644 "$PROJECT_DIR/db/migrations/004_isox_040.sql" config/includes.chroot/usr/share/iso-x/db/migrations/004_isox_040.sql
 BRAND_ASSET_DIR="$BUILD_DIR/generated-brand-assets"
 python3 "$PROJECT_DIR/scripts/generate-brand-assets.py" --output-dir "$BRAND_ASSET_DIR"
-install -m 0644 "$PROJECT_DIR/assets/iso-x-dragon.svg" config/includes.chroot/usr/share/iso-x/assets/iso-x-dragon.svg
-install -m 0644 "$BRAND_ASSET_DIR/iso-x-dragon.png" config/includes.chroot/usr/share/iso-x/assets/iso-x-dragon.png
-install -m 0644 "$BRAND_ASSET_DIR/iso-x-boot.svg" config/includes.chroot/usr/share/iso-x/assets/iso-x-boot.svg
-install -m 0644 "$BRAND_ASSET_DIR/iso-x-boot.png" config/includes.chroot/usr/share/iso-x/assets/iso-x-boot.png
-install -m 0644 "$PROJECT_DIR/plymouth/isox/isox.plymouth" config/includes.chroot/usr/share/iso-x/assets/isox.plymouth
-install -m 0644 "$PROJECT_DIR/plymouth/isox/isox.script" config/includes.chroot/usr/share/iso-x/assets/isox.script
-install -m 0644 "$BRAND_ASSET_DIR/iso-x-desktop-wallpaper.svg" config/includes.chroot/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.svg
-install -m 0644 "$BRAND_ASSET_DIR/iso-x-desktop-wallpaper.png" config/includes.chroot/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.png
-install -m 0644 "$PROJECT_DIR/assets/iso-x-dragon.svg" config/includes.chroot/usr/share/icons/hicolor/scalable/apps/iso-x.svg
+install -m 0644 "$BRAND_ASSET_DIR/reference-assets.json" config/includes.chroot/usr/share/iso-x/assets/reference-assets.json
+install -d -m 0755 config/includes.chroot/usr/share/iso-x/assets/reference
+install -m 0644 "$BRAND_ASSET_DIR/boot-screen-original.jpg" config/includes.chroot/usr/share/iso-x/assets/reference/boot-screen-original.jpg
+install -m 0644 "$BRAND_ASSET_DIR/dragon-mark-original.jpg" config/includes.chroot/usr/share/iso-x/assets/reference-dragon-mark.jpg
+install -D -m 0644 "$BRAND_ASSET_DIR/dragon-mark-icon-96.png" config/includes.chroot/usr/share/icons/hicolor/96x96/apps/iso-x.png
+install -m 0644 "$BRAND_ASSET_DIR/desktop-wallpaper-original.jpg" config/includes.chroot/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.jpg
+install -D -m 0644 "$BRAND_ASSET_DIR/boot-screen.png" config/includes.chroot/usr/share/plymouth/themes/isox/iso-x-plymouth.png
+install -m 0644 "$PROJECT_DIR/plymouth/isox/isox.plymouth" config/includes.chroot/usr/share/plymouth/themes/isox/isox.plymouth
+install -m 0644 "$PROJECT_DIR/plymouth/isox/isox.script" config/includes.chroot/usr/share/plymouth/themes/isox/isox.script
+for reference_image in "$BRAND_ASSET_DIR"/embedded-*-original.*; do
+  if [[ -f "$reference_image" ]]; then
+    reference_name="${reference_image##*/}"
+    install -D -m 0644 "$reference_image" \
+      "config/includes.chroot/usr/share/iso-x/assets/reference/$reference_name"
+  fi
+done
 if [[ "$CINEMATIC_READY" -eq 1 && -x "$CINEMATIC_BIN" ]]; then
   FONT_SOURCE="$(find /usr/share/fonts -type f \( -iname 'NotoSansArabic-Regular.ttf' -o -iname 'NotoSansArabic-VF.ttf' \) -print -quit 2>/dev/null || true)"
   if [[ -n "$FONT_SOURCE" ]]; then
     install -m 0755 "$CINEMATIC_BIN" config/includes.chroot/usr/local/bin/isox-cinematic
     install -D -m 0644 "$FONT_SOURCE" config/includes.chroot/usr/share/iso-x/cinematic-assets/fonts/NotoSansArabic-Regular.ttf
-    install -D -m 0644 "$BRAND_ASSET_DIR/iso-x-dragon.png" config/includes.chroot/usr/share/iso-x/cinematic-assets/images/iso-x-dragon.png
+    install -D -m 0644 "$BRAND_ASSET_DIR/dragon-mark.png" config/includes.chroot/usr/share/iso-x/cinematic-assets/images/iso-x-dragon.png
   else
     echo "تحذير: لا يوجد خط مشهد Bevy على المضيف؛ سيُستبعد المشهد من الصورة." >&2
   fi
 fi
-install -m 0644 "$BRAND_ASSET_DIR/iso-x-plymouth.png" config/includes.chroot/usr/share/iso-x/assets/iso-x-plymouth.png
+python3 "$PROJECT_DIR/scripts/verify-reference-assets.py" \
+  --manifest "$BRAND_ASSET_DIR/reference-assets.json" \
+  --rootfs config/includes.chroot \
+  --source "$PROJECT_DIR/design/reference/iso-x-reference.html"
 if [[ "$WATERMARK_ENABLED" == 1 ]]; then
   install -m 0644 "$PROJECT_DIR/kernel/isox-watermark/isox_watermark.c" config/includes.chroot/usr/src/isox-watermark-0.3.1/isox_watermark.c
   install -m 0644 "$PROJECT_DIR/kernel/isox-watermark/Makefile" config/includes.chroot/usr/src/isox-watermark-0.3.1/Makefile

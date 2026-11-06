@@ -35,13 +35,13 @@ EOF
 
 cat > "$TARGET_HOME/.config/gtk-3.0/gtk.css" <<'EOF'
 /* ISO-X cyber dark palette — GTK 3 only. */
-@define-color theme_bg_color #0b101b;
+@define-color theme_bg_color #0b1020;
 @define-color theme_base_color #101725;
-@define-color theme_fg_color #eaf4ff;
-@define-color theme_text_color #eaf4ff;
-@define-color theme_selected_bg_color #0078d4;
+@define-color theme_fg_color #cfeaff;
+@define-color theme_text_color #cfeaff;
+@define-color theme_selected_bg_color #1e6bff;
 @define-color theme_selected_fg_color #ffffff;
-@define-color accent_color #00c8ff;
+@define-color accent_color #4fb4ff;
 window, dialog { background-color: @theme_bg_color; color: @theme_fg_color; }
 button:focus, entry:focus, treeview.view:focus { outline-color: @accent_color; }
 button:hover { border-color: @accent_color; }
@@ -84,11 +84,11 @@ EOF
 
 cat > "$TARGET_HOME/.config/pcmanfm/isox/desktop-items-0.conf" <<'EOF'
 [*]
-wallpaper=/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.png
+wallpaper=/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.jpg
 wallpaper_mode=fit
 wallpaper_common=1
-desktop_bg=#050812
-desktop_fg=#eaf4ff
+desktop_bg=#060e26
+desktop_fg=#cfeaff
 desktop_shadow=#000000
 desktop_font=Noto Sans Arabic 10
 show_wm_menu=0

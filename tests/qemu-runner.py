@@ -150,6 +150,8 @@ def classify(
     serial = ANSI_ESCAPE.sub("", serial)
     if returncode not in (None, 0, -signal.SIGTERM, -signal.SIGKILL):
         return "QEMU_INFRASTRUCTURE_FAILURE"
+    if re.search(r"\bsegfault\b", serial, re.I):
+        return "GUEST_RUNTIME_CRASH"
     if marker_seen or desktop_seen:
         expected_shutdown = "readiness_marker" if marker_seen else "desktop_rendered"
         if (

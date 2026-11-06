@@ -2,7 +2,7 @@
 
 ## Evidence Context
 
-Graph is based on the clean tracked HEAD `22b9fc116ee278be22c5bbe30782f980100d85a1` plus locally reviewed edits in this audit. Filesystem/package edges are labeled as source-staged until an ISO build proves the final rootfs. CI run `40216891064` has source-check success; build was in progress at audit time.
+**Historical snapshot:** this graph reflects an earlier audit starting at `22b9fc116ee278be22c5bbe30782f980100d85a1` and CI run `40216891064`. It is not a current full-tree inventory. The current-state evidence and focused dependency paths are in the 2026-11-06 addendum in `AUDIT.md`; build/rootfs edges remain unverified until the current source is built.
 
 ## Build and Image Assembly
 

@@ -189,7 +189,7 @@ class ISOXGtk(Gtk.Window):
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         header.set_margin_top(10); header.set_margin_bottom(10); header.set_margin_start(18); header.set_margin_end(18)
         header.get_style_context().add_class("iso-card")
-        logo_path = Path("/usr/share/iso-x/assets/iso-x-dragon.svg")
+        logo_path = Path("/usr/share/iso-x/assets/reference-dragon-mark.jpg")
         if logo_path.is_file():
             logo = Gtk.Image.new_from_file(str(logo_path)); logo.set_pixel_size(46)
             header.pack_start(logo, False, False, 0)

@@ -1,5 +1,39 @@
 # نتائج البناء والاختبارات — ISO-X 0.4.0
 
+## تدقيق الحالة والبوابة — 2026-11-06
+
+| الأمر/الفحص | النتيجة | الدليل/القيد |
+|---|---|---|
+| `python3 -m pytest -q` | **PASS**, exit 0 — 65 passed، 1 skipped، 4 subtests passed | `/tmp/isox-source-audit-final.NAU83z/pytest.log` |
+| `bash tests/smoke.sh` | **PASS**, exit 0 — 27 اختبارًا | `/tmp/isox-source-audit-final.NAU83z/smoke.log` |
+| `python3 scripts/run-source-checks.py /tmp/isox-source-audit-final.NAU83z /tmp/isox-source-audit-final.NAU83z/pycache` | **89 PASS، 0 FAIL، 1 SKIP، 4 NOT_RUN**؛ exit 1 بسبب NOT_RUN | `source-tests.json` وسجلات الأوامر في مجلد الأدلة نفسه. المفقود: `sfdisk` و`xvfb-run`/`xdotool`/`wmctrl`/`openbox` و`shellcheck` و`desktop-file-validate`. |
+| `bash tests/test_desktop_readiness.sh` | **PASS**, exit 0 | يشترط وجود Openbox وTint2 وتطبيق ISO-X ونافذته؛ سيناريو غياب Tint2 يجب أن يفشل. |
+| `bash tests/test_qemu_headless_validation.sh` | **PASS**, exit 0 | يثبت أن وجود `segfault` في سجل الضيف يفشل التصنيف كـ`GUEST_RUNTIME_CRASH` حتى بعد علامة الجاهزية. |
+| `git diff --check` | **PASS**, exit 0 | لا يثبت صحة build أو تشغيل ISO. |
+| CI `42172193542` على `be001c0` | jobs كلها **SUCCESS** | أقدم من التغييرات غير الملتزمة الحالية. سجلا BIOS/UEFI يثبتان segfault لـTint2 قبل readiness رغم نجاح البوابتين؛ لا يُحتسب هذا دليلاً على حالة التغييرات الحالية. |
+| بناء ISO محلي وفحص SquashFS | **NOT_RUN** | UID 1000، مساحة متاحة 18 GiB مقابل 20 GiB حد البناء، وأدوات `lb`, `xorriso`, `debootstrap`, `mksquashfs`, `qemu-system-x86_64` غير موجودة. |
+| BIOS/UEFI للتغييرات المحلية | **NOT_RUN** | يتطلب CI/build جديدًا؛ يجب التحقق من بقاء Tint2 حيًا بعد readiness، وأن سجل segfault يفشل البوابة. |
+
+## جولة أصول المرجع — 2026-11-06
+
+| الأمر/الفحص | الحالة | الدليل/القيد |
+|---|---|---|
+| `python3 scripts/extract-reference-assets.py --output-dir assets/reference` | **PASS** | استخرج 3 أدوار من 6 Data URI؛ manifest يسجل MIME/JPEG magic والأبعاد والنسب والبصمات. المصدر هو `iso-x 22.html` المرشح لا المرفق الأصلي غير المتاح. |
+| `python3 -m pytest -q` | **PASS** — exit 0، `65 passed, 1 skipped, 4 subtests passed` | تشمل اختبار استخراج الصور الإضافية ومساراتها وعقد الملاءمة. |
+| تحقق بصمات rootfs عبر `scripts/verify-reference-assets.py` | **PASS** في rootfs اصطناعي | اختبارات البناء تنسخ أصول generator إلى شجرة مؤقتة ثم تتحقق من SHA-256 للمصدر والأصول والنسخ المشتقة؛ هذا ليس rootfs أو SquashFS من live-build. |
+| `bash tests/smoke.sh` | **PASS** — exit 0 | شغّل 27 اختبار smoke مع فحوص الخزنة والتوقيع وUSB وQEMU المصدرية؛ لا يثبت ISO/إقلاعاً. |
+| `python3 tests/test_source_config.py && python3 tests/test_upstream_integration.py` | **PASS** — exit 0 | يؤكد الإعدادات المصدرية وربط الأصول الحديثة وعدم مرحّلة SVG القديم. |
+| `py_compile` للملفات المعدلة، `bash -n` لسكربتات البناء/hooks، و`git diff --check` | **PASS** — exit 0 | تحقق syntax وwhitespace، وليس تشغيل واجهة أو build. |
+| فحص بصري لملفات JPEG المستخرجة | **PASS** على الأصول المصدرية | Wallpaper مشهد كامل 16:9 بتنين يميناً؛ boot مشهد مستقل كامل؛ العلامة 100×106. لا تعدّ هذه لقطات Desktop/Plymouth. |
+| خلفية PCManFM وLightDM من المصدر إلى rootfs | **SOURCE-CONFIGURED / ISO UNVERIFIED** | build يثبت JPEG المرجع؛ لا يوجد rootfs مبني لفحصه. |
+| Plymouth من المصدر إلى initramfs | **SOURCE-CONFIGURED / BOOT UNVERIFIED** | hook يتحقق من مجلد theme ويحدّث initramfs؛ لم يُبنَ أو يُقلع. |
+| دقات 1366×768، 1280×720، 1920×1080، 1920×1200، 2560×1440، 3840×2160 | **حساب الملاءمة فقط؛ لقطات NOT_RUN** | اختبار المصدر يفحص `fit` وحساب الاحتواء؛ لا توجد لقطات X11/QEMU بعد. |
+| بناء ISO وفحص SquashFS وSHA-256 | **NOT_RUN** | المضيف UID 1000، Ubuntu 24.04، 18 GiB متاحة (<20 المطلوبة)، وأدوات `lb`, `xorriso`, `debootstrap`, `mksquashfs`, `qemu-system-x86_64` غير موجودة. |
+| BIOS/UEFI وPersistence والصوت والعتاد الحقيقي | **NOT_RUN / UNVERIFIED** | تشغيل CI `42172193542` على HEAD الأساسي أقدم من تغييرات المصدر الحالية؛ Persistence والصوت والعتاد الحقيقي لم تختبر. |
+| Tint2 segfault | **FAIL في CI السابق / إصلاح الجذر غير مثبت** | سجلا BIOS/UEFI من `42172193542` يسجلان الانهيار قبل readiness؛ أضيف فحص العملية ومصنف السجل واختباراهما محليًا فقط. |
+
+أثناء التحقق، انتهى تشغيل smoke متزامن مع الاختبارات بإشارة 143، وأظهر تشغيل لاحق معزول إخفاق assertion في فحص QEMU؛ نجح فحص `tests/test_qemu_headless_validation.sh` منفرداً، ثم نجح تشغيلان كاملان منفصلان لـ`bash tests/smoke.sh` برمز 0. لم يُحدد سبب التذبذب؛ النتائج الخضراء لا تثبت عدم وجود flake مستقبلي.
+
 ## أحدث تحقق — 2026-11-02
 
 | العنصر | الحالة والدليل |

@@ -16,8 +16,7 @@ from gi.repository import Gtk, Gdk, GdkPixbuf, GLib
 APP_NAME = "ISO-X"
 DEVELOPER = "عبدالله لازم"
 LOGO_CANDIDATES = (
-    Path("/usr/share/iso-x/assets/iso-x-dragon.png"),
-    Path("/usr/share/iso-x/assets/iso-x-dragon.svg"),
+    Path("/usr/share/iso-x/assets/reference-dragon-mark.jpg"),
 )
 
 # Every action is an argument vector. Do not use shell=True for user-facing commands.
@@ -34,14 +33,14 @@ ACTIONS = {
 }
 
 CSS = b"""
-window { background: #080d17; color: #edf7ff; }
-headerbar { background: #101a2a; color: #edf7ff; border-bottom: 1px solid #173b58; }
-.title { color: #00c8ff; font-weight: 700; }
+window { background: #0b1020; color: #cfeaff; }
+headerbar { background: #060e26; color: #cfeaff; border-bottom: 1px solid #5aaaff; }
+.title { color: #4fb4ff; font-weight: 700; }
 .subtitle { color: #b4c5da; }
 .card { background: #101a2a; border: 1px solid #203b55; border-radius: 12px; padding: 12px; }
 button.action { background: #102b42; color: #f1f8ff; border: 1px solid #24628b; border-radius: 9px; padding: 10px; }
-button.action:hover { background: #124365; border-color: #00c8ff; }
-button.install { background: #07568a; color: white; border: 1px solid #12b9f5; border-radius: 9px; padding: 10px; }
+button.action:hover { background: #1e6bff; border-color: #4fb4ff; }
+button.install { background: #1e6bff; color: white; border: 1px solid #4fb4ff; border-radius: 9px; padding: 10px; }
 label.muted { color: #a8b8cb; }
 """
 
@@ -114,7 +113,7 @@ class WelcomeWindow(Gtk.Window):
             header.pack_start(logo, False, False, 0)
         names = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         title = Gtk.Label()
-        title.set_markup('<span size="xx-large" weight="bold" foreground="#00c8ff">ISO-X</span>')
+        title.set_markup('<span size="xx-large" weight="bold" foreground="#4fb4ff">ISO-X</span>')
         title.set_xalign(1)
         subtitle = Gtk.Label(label="نظام خفيف بواجهة مألوفة وأدوات أساسية جاهزة")
         subtitle.get_style_context().add_class("subtitle")

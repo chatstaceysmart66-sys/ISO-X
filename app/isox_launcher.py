@@ -117,17 +117,17 @@ class LauncherWindow(Gtk.Window):
     def _install_css(self) -> None:
         provider = Gtk.CssProvider()
         provider.load_from_data(b"""
-            window.isox-launcher { background: #0b1020; color: #edf4ff; }
-            .isox-launcher .title { color: #55c9ff; font-weight: 700; font-size: 15pt; }
+            window.isox-launcher { background: #0b1020; color: #cfeaff; }
+            .isox-launcher .title { color: #4fb4ff; font-weight: 700; font-size: 15pt; }
             .isox-launcher button.launcher-app {
-                background: #132239; color: #edf4ff; border: 1px solid #294563;
+                background: #132239; color: #cfeaff; border: 1px solid #5aaaff;
                 border-radius: 10px; padding: 8px; min-height: 54px;
             }
             .isox-launcher button.launcher-app:hover {
-                background: #1b3858; border-color: #35c4ff;
+                background: #1e6bff; border-color: #4fb4ff;
             }
             .isox-launcher button.suggested-action {
-                background: #0879b7; color: white; border-radius: 9px;
+                background: #1e6bff; color: white; border-radius: 9px;
             }
         """)
         screen = Gdk.Screen.get_default()

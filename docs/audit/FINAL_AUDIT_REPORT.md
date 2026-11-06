@@ -1,5 +1,7 @@
 # ISO-X Audit Report
 
+> Historical report: this snapshot predates the 2026-11-06 reference-asset work and current Tint2 readiness findings. Do not use its starting HEAD, tracked-path count, or CI status as current evidence. See the current audit addendum in `AUDIT.md` and `docs/BUILD_AND_TEST_RESULTS_AR.md`.
+
 ## Snapshot and Result
 
 - Repository branch at start: `fix/isox-build-and-runtime`.

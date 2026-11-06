@@ -1,4 +1,25 @@
-## متابعة الحالة الحالية — 2026-11-02
+## متابعة التدقيق — 2026-11-06
+
+- بدأ التدقيق على `fix/isox-build-and-runtime` عند `be001c0f7b4669f1886e7624a1d257de07b0992b`، مطابقًا لـ`origin/fix/isox-build-and-runtime`. بقي stash المستخدم السابق محفوظًا وغير مطبق؛ لم تُبدّل الفروع أو تُحذف تغييرات.
+- راجعت artifacts تشغيل CI `42172193542`: كل الوظائف انتهت بنجاح على HEAD الأساسي، لكن سجل BIOS يسجل `tint2` segfault عند `83.005462` ثانية وسجل UEFI عند `134.285954` ثانية، وكلاهما قبل `ISOX_CI_READY`. الملفات محفوظة محليًا في `/tmp/isox-audit-current/{bios,uefi}`. هذا يثبت قصور بوابة الجاهزية السابقة، لا سبب segfault.
+- أضيف شرط عملية `tint2` إلى `scripts/isox-desktop-window-ready.sh` واختبار `missing-tint2` إلى `tests/test_desktop_readiness.sh`. الاختبار المستهدف نجح؛ لا يثبت ذلك استقرار Tint2 بعد marker أو في ISO.
+- تحقق المجموعة: `python3 -m pytest -q` (65 passed، 1 skipped، 4 subtests)، `bash tests/smoke.sh` (27 tests)، واختبارات الجاهزية وتصنيف segfault كلها exit 0. مشغل المصدر سجل 89 PASS و0 FAIL و1 SKIP و4 NOT_RUN، ورمز خروجه 1 لأن أدوات البيئة ناقصة؛ تفاصيل السجلات في `/tmp/isox-source-audit-final.NAU83z`.
+- لم يُبنَ ISO محليًا: UID 1000، المتاح 18 GiB أقل من حد المشروع 20 GiB، وأدوات live-build وxorriso وdebootstrap وmksquashfs وQEMU غائبة. CI على HEAD الأساسي لا يشمل التغييرات المحلية. المرجع `iso-x (1).txt` ما زال غير متاح؛ المرشح المحفوظ لا يمكن إثبات مطابقته له.
+- الحالة تبقى **NOT READY**: يلزم CI جديد بعد نشر التغييرات، مع فشل readiness إن غاب Tint2، ثم فحص عدم حدوث segfault لاحق وظهور اللوحة في BIOS وUEFI.
+
+### جولة ربط مرجع التصميم المرشح — 2026-11-06
+
+- بدأ الاستكمال على الفرع `fix/isox-build-and-runtime` عند HEAD `be001c0f7b4669f1886e7624a1d257de07b0992b` المطابق للمرجع البعيد، مع إبقاء stash المستخدم السابق دون تطبيق.
+- لم يُعثر على المرفق المحدد `iso-x (1).txt`. حُفظ المرشح الموجود في المستودع `iso-x 22.html` حرفياً في `design/reference/iso-x-reference.html`؛ SHA-256 للنسختين `16f2b6d8007e01c612825823eada60627ee7040b690ea9032f86ab93490f2a35`. هذا يثبت النسخ من المرشح فقط، ولا يثبت مطابقته للمرفق.
+- أنشئت أداة `scripts/extract-reference-assets.py` وmanifest `assets/reference/reference-assets.json`. استخرجت 6 Data URI إلى 3 صور JPEG فريدة، وتحققت من MIME/magic bytes والبكسلات والأبعاد والنسب والبصمات والتكرارات.
+- أضيف `scripts/verify-reference-assets.py` إلى build للتحقق من SHA-256 لملف المرجع والأصول الأصلية والمشتقات بعد نسخها إلى staging؛ اجتاز اختبار شجرة rootfs اصطناعية. لا يثبت ذلك محتوى ISO/SquashFS الفعلي.
+- أُعيد توجيه سلسلة بناء الخلفية إلى JPEG المرجع في PCManFM وLightDM، ومشهد Plymouth إلى PNG مشتق lossless مع احتواء متناسب، وعلامة التطبيقات إلى JPEG المرجع وأيقونة 96×96 مشتقة دون قص أو تشويه. ظل Openbox وPCManFM وTint2 وGTK مسؤولة عن مكونات سطح المكتب؛ لم يُشغّل HTML كواجهة نظام.
+- فُحص JavaScript دون تشغيله: المرجع يحتوي حاسبة `Function()` وطرفية/حالة خدمات نموذجية وطلب كاميرا ومؤقت انتقال. بقي HTML محفوظاً في المستودع ولا يُدرج في ISO؛ الصور تُستخرج محلياً فقط.
+- عُدّل Tint2 إلى 48px وألوان مرجع التصميم، ووُحّدت ألوان GTK ذات الصلة. لا يعني ذلك اختباراً بصرياً أو جهازياً.
+- ISO غير مبنية في هذه الجولة: المضيف Ubuntu 24.04 وغير root، المساحة المتاحة 18 GiB مقابل 20 GiB المطلوبة، وأدوات `live-build` و`xorriso` وQEMU غير متاحة. لم تُختبر SquashFS أو BIOS/UEFI أو Persistence لهذه التغييرات. سجل Tint2 السابق ما زال تحذيراً غير محلول.
+- تحقق الإنهاء: `python3 -m pytest -q` (**65 passed، 1 skipped، 4 subtests passed**)، و`bash tests/smoke.sh` (exit 0، 27 اختبار smoke)، و`python3 tests/test_source_config.py` و`python3 tests/test_upstream_integration.py` و`py_compile` و`bash -n` و`git diff --check` كلها exit 0. هذه اختبارات مصدر فقط، ولا تغير حواجز ISO/العتاد أعلاه.
+
+# متابعة الحالة الحالية — 2026-11-02
 
 - الحالة قبل تعديل هذه الجولة: الفرع `fix/isox-build-and-runtime`، والـHEAD المحلي والبعيد `f7e188293ac86d10a7b2205135605a2086fe2e20`، وكانت شجرة العمل نظيفة. PR #1 مفتوح كمسودة على `main`.
 - آخر Action مفحوص هو `41500842716` على HEAD المذكور. نجحت source-check وbuild وفحوص BIOS/UEFI، لكن مرحلة `promote` كانت لا تزال قيد التشغيل وقت الفحص؛ لا تُسجل النتيجة النهائية للـworkflow كنجاح مكتمل.

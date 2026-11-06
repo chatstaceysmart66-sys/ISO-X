@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Static regression checks; these do not imply successful ISO build or boot."""
 from pathlib import Path
+import base64
 import configparser
+import hashlib
 import json
 import re
 import os
+import shutil
 import sys
 import subprocess
 import tempfile
@@ -295,32 +298,199 @@ def test_user_click_and_menu_contrast_settings_are_applied_and_built():
         assert theme_file.read_text(encoding="utf-8") == result
 
 
-def test_master_dragon_generates_boot_wallpaper_and_app_pngs():
+def test_reference_design_assets_are_extracted_and_staged():
     generator = ROOT / "scripts/generate-brand-assets.py"
     build = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
-    assert "python3-cairosvg" in (ROOT / "scripts/install-build-deps.sh").read_text(encoding="utf-8")
-    assert "python3-cairosvg" in (ROOT / ".github/workflows/iso-build.yml").read_text(encoding="utf-8")
-    assert build.index('generate-brand-assets.py" --output-dir "$BRAND_ASSET_DIR"') < build.index('"$BRAND_ASSET_DIR/iso-x-dragon.png"')
+    deps = (ROOT / "scripts/install-build-deps.sh").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/iso-build.yml").read_text(encoding="utf-8")
+    reference = ROOT / "design/reference/iso-x-reference.html"
+    assert "python3-pil" in deps and "python3-pil" in workflow
+    assert 'generate-brand-assets.py" --output-dir "$BRAND_ASSET_DIR"' in build
+    assert "iso-x (1).txt" in (ROOT / "scripts/extract-reference-assets.py").read_text(encoding="utf-8")
 
     with tempfile.TemporaryDirectory(prefix="isox-brand-render-") as temporary:
         output = Path(temporary)
         subprocess.run([sys.executable, str(generator), "--output-dir", str(output)],
                        check=True, capture_output=True, text=True)
+        manifest = json.loads((output / "reference-assets.json").read_text(encoding="utf-8"))
+        checked_in = json.loads(
+            (ROOT / "assets/reference/reference-assets.json").read_text(encoding="utf-8")
+        )
+        assert manifest["source"]["reported_attachment_found"] is False
+        assert manifest["source"]["source_identity_verified_as_attachment"] is False
+        assert manifest["source"]["sha256"] == hashlib.sha256(reference.read_bytes()).hexdigest()
+        assert checked_in["source"]["sha256"] == manifest["source"]["sha256"]
+        assert manifest["source"]["data_uri_count"] == 6
+        assert {asset["role"] for asset in manifest["assets"]} == {
+            "desktop-wallpaper", "boot-screen", "dragon-mark",
+        }
+        by_role = {asset["role"]: asset for asset in manifest["assets"]}
+        assert by_role["desktop-wallpaper"]["rootfs_original_path"] == (
+            "/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.jpg"
+        )
+        assert by_role["boot-screen"]["rootfs_original_path"] == (
+            "/usr/share/iso-x/assets/reference/boot-screen-original.jpg"
+        )
+        assert by_role["boot-screen"]["derived_files"][0]["rootfs_path"] == (
+            "/usr/share/plymouth/themes/isox/iso-x-plymouth.png"
+        )
+        assert by_role["dragon-mark"]["rootfs_original_path"] == (
+            "/usr/share/iso-x/assets/reference-dragon-mark.jpg"
+        )
+        assert by_role["dragon-mark"]["derived_files"][1]["rootfs_path"] == (
+            "/usr/share/icons/hicolor/96x96/apps/iso-x.png"
+        )
         expected = {
-            "iso-x-dragon.png": (1024, 1024),
-            "iso-x-boot.png": (1024, 1024),
-            "iso-x-plymouth.png": (512, 512),
-            "iso-x-desktop-wallpaper.png": (3840, 2160),
+            "dragon-mark.png": (100, 106),
+            "boot-screen.png": (1920, 1080),
+            "dragon-mark-icon-96.png": (96, 96),
         }
         for name, dimensions in expected.items():
             image = output / name
             assert image.is_file() and image.stat().st_size > 1000
             assert image.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
             assert __import__("struct").unpack(">II", image.read_bytes()[16:24]) == dimensions
-        assert (output / "iso-x-boot.svg").is_file()
-        assert (output / "iso-x-desktop-wallpaper.svg").is_file()
-        assert 'config/includes.chroot/usr/share/iso-x/assets/iso-x-dragon.png' in build
-        assert 'config/includes.chroot/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.png' in build
+        for asset in manifest["assets"]:
+            original = output / asset["original_file"]
+            assert hashlib.sha256(original.read_bytes()).hexdigest() == asset["original_sha256"]
+            assert original.read_bytes()[:3] == b"\xff\xd8\xff"
+            tracked_original = ROOT / "assets/reference" / asset["original_file"]
+            assert tracked_original.read_bytes() == original.read_bytes()
+        assert all(
+            asset["data_uri_occurrences"] == 2 and
+            asset["width"] > 0 and asset["height"] > 0 and
+            asset["aspect_ratio_decimal"] > 0 and
+            asset["dominant_colors_rgb_approx"]
+            for asset in manifest["assets"]
+        )
+        assert not (output / "desktop-wallpaper.png").exists()
+        with tempfile.TemporaryDirectory(prefix="isox-reference-rootfs-") as temporary:
+            rootfs = Path(temporary) / "rootfs"
+            for asset in manifest["assets"]:
+                original_path = rootfs / asset["rootfs_original_path"].lstrip("/")
+                original_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(output / asset["original_file"], original_path)
+                for derived in asset["derived_files"]:
+                    if derived.get("rootfs_path"):
+                        derived_path = rootfs / derived["rootfs_path"].lstrip("/")
+                        derived_path.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(output / derived["file"], derived_path)
+            staged_manifest = rootfs / "usr/share/iso-x/assets/reference-assets.json"
+            staged_manifest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(output / "reference-assets.json", staged_manifest)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/verify-reference-assets.py"),
+                    "--manifest",
+                    str(output / "reference-assets.json"),
+                    "--rootfs",
+                    str(rootfs),
+                    "--source",
+                    str(reference),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            assert "PASS: verified reference source and 5 installed image files." in result.stdout
+    assert 'usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.jpg' in build
+    assert 'usr/share/iso-x/assets/reference-dragon-mark.jpg' in build
+    assert 'usr/share/icons/hicolor/96x96/apps/iso-x.png' in build
+    assert 'usr/share/plymouth/themes/isox/iso-x-plymouth.png' in build
+    assert 'usr/share/iso-x/assets/reference/boot-screen-original.jpg' in build
+    assert 'usr/share/doc/iso-x/design-reference.html' not in build
+    assert "verify-reference-assets.py" in build
+    assert "iso-x-desktop-wallpaper.png" not in build
+    assert "assets/iso-x-dragon.svg" not in build
+
+
+def test_reference_wallpaper_and_boot_scene_fit_supported_resolutions():
+    resolutions = (
+        (1366, 768), (1280, 720), (1920, 1080),
+        (1920, 1200), (2560, 1440), (3840, 2160),
+    )
+    wallpaper = (1920, 1080)
+    for screen_width, screen_height in resolutions:
+        scale = min(screen_width / wallpaper[0], screen_height / wallpaper[1])
+        image_width = round(wallpaper[0] * scale)
+        image_height = round(wallpaper[1] * scale)
+        assert image_width <= screen_width and image_height <= screen_height
+        assert abs(image_width / image_height - wallpaper[0] / wallpaper[1]) < 0.002
+    desktop_setup = (ROOT / "scripts/apply-windows-look.sh").read_text(encoding="utf-8")
+    plymouth_script = (ROOT / "plymouth/isox/isox.script").read_text(encoding="utf-8")
+    assert "wallpaper_mode=fit" in desktop_setup
+    assert "Math.Min(screen_width / source_image.GetWidth()" in plymouth_script
+    assert "logo_sprite.SetX((screen_width - image_width) / 2)" in plymouth_script
+    assert "logo_sprite.SetY((screen_height - image_height) / 2)" in plymouth_script
+    assert "panel_size = 100% 48" in (ROOT / "desktop/tint2rc").read_text(encoding="utf-8")
+
+
+def test_extractor_preserves_additional_unique_inline_images():
+    source = (ROOT / "design/reference/iso-x-reference.html").read_bytes()
+    extra_png = base64.b64encode(
+        (ROOT / "assets/reference/dragon-mark-icon-96.png").read_bytes()
+    )
+    addition = b"<script>about:()=>'<img src=\"data:image/png;base64," + extra_png + b"\">'</script>"
+    source = source.replace(b"</html>", addition + b"</html>", 1)
+    with tempfile.TemporaryDirectory(prefix="isox-reference-extra-") as temporary:
+        root = Path(temporary)
+        reference = root / "reference.html"
+        output = root / "assets"
+        reference.write_bytes(source)
+        subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/extract-reference-assets.py"),
+                "--source",
+                str(reference),
+                "--output-dir",
+                str(output),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        manifest = json.loads((output / "reference-assets.json").read_text(encoding="utf-8"))
+        assert manifest["source"]["data_uri_count"] == 7
+        assert manifest["source"]["unique_image_count"] == 4
+        extra = next(asset for asset in manifest["assets"] if asset["role"].startswith("embedded-"))
+        assert extra["mime_type"] == "image/png"
+        assert extra["usages"][0]["element"] == "About view"
+        assert (output / extra["original_file"]).read_bytes() == base64.b64decode(extra_png)
+        assert extra["rootfs_original_path"] == (
+            f"/usr/share/iso-x/assets/reference/{extra['original_file']}"
+        )
+        build = (ROOT / "scripts/build-iso.sh").read_text(encoding="utf-8")
+        assert '"/embedded-*-original.*' in build
+        rootfs = root / "rootfs"
+        for asset in manifest["assets"]:
+            original_path = rootfs / asset["rootfs_original_path"].lstrip("/")
+            original_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(output / asset["original_file"], original_path)
+            for derived in asset["derived_files"]:
+                if derived.get("rootfs_path"):
+                    derived_path = rootfs / derived["rootfs_path"].lstrip("/")
+                    derived_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(output / derived["file"], derived_path)
+        staged_manifest = rootfs / "usr/share/iso-x/assets/reference-assets.json"
+        staged_manifest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(output / "reference-assets.json", staged_manifest)
+        subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/verify-reference-assets.py"),
+                "--manifest",
+                str(output / "reference-assets.json"),
+                "--rootfs",
+                str(rootfs),
+                "--source",
+                str(reference),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 def test_legacy_tk_shell_is_not_staged_as_a_second_desktop():
