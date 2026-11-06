@@ -20,24 +20,26 @@ case "$*" in
   *) exit 2 ;;
 esac
 PGREP
-cat > "$TMP/bin/wmctrl" <<'WMCTRL'
+cat > "$TMP/bin/xwininfo" <<'XWININFO'
 #!/bin/sh
-[ "${1:-}" = "-l" ] && [ "${2:-}" = "-G" ] || exit 2
+[ "${1:-}" = "-root" ] && [ "${2:-}" = "-tree" ] || exit 2
+[ "${FAKE_XWININFO_STATUS:-0}" = 0 ] || exit "${FAKE_XWININFO_STATUS}"
 printf '%s\n' "${FAKE_WINDOWS:-}"
-WMCTRL
-chmod 0755 "$TMP/bin/id" "$TMP/bin/pgrep" "$TMP/bin/wmctrl"
+XWININFO
+chmod 0755 "$TMP/bin/id" "$TMP/bin/pgrep" "$TMP/bin/xwininfo"
 
-VALID_WINDOW='0x03a00007  0  0  0  1160  740 host ISO-X Desktop'
+VALID_WINDOW='     0x03a00007 "ISO-X Desktop": ("iso-x" "ISO-X")  1160x740+0+0  +0+0'
 if ! FAKE_APP_PRESENT=1 FAKE_OPENBOX_PRESENT=1 FAKE_TINT2_PRESENT=1 FAKE_WINDOWS="$VALID_WINDOW" PATH="$TMP/bin:$PATH" \
   sh "$ROOT/scripts/isox-desktop-window-ready.sh" user :0 "$TMP/xauthority"; then
   echo "FAIL: a running ISO-X window with desktop dimensions was rejected." >&2
   exit 1
 fi
 
-for scenario in missing-app missing-openbox missing-tint2 missing-window small-window wrong-title missing-auth; do
+for scenario in missing-app missing-openbox missing-tint2 missing-window small-window wrong-title xwininfo-failure missing-auth; do
   app_present=1
   openbox_present=1
   tint2_present=1
+  xwininfo_status=0
   windows="$VALID_WINDOW"
   auth="$TMP/xauthority"
   case "$scenario" in
@@ -45,11 +47,12 @@ for scenario in missing-app missing-openbox missing-tint2 missing-window small-w
     missing-openbox) openbox_present=0 ;;
     missing-tint2) tint2_present=0 ;;
     missing-window) windows='' ;;
-    small-window) windows='0x03a00007 0 0 0 100 100 host ISO-X Desktop' ;;
-    wrong-title) windows='0x03a00007 0 0 0 1160 740 host Terminal' ;;
+    small-window) windows='     0x03a00007 "ISO-X Desktop": ("iso-x" "ISO-X")  100x100+0+0  +0+0' ;;
+    wrong-title) windows='     0x03a00007 "Terminal": ("xterm" "XTerm")  1160x740+0+0  +0+0' ;;
+    xwininfo-failure) xwininfo_status=139 ;;
     missing-auth) auth="$TMP/missing" ;;
   esac
-  if FAKE_APP_PRESENT="$app_present" FAKE_OPENBOX_PRESENT="$openbox_present" FAKE_TINT2_PRESENT="$tint2_present" FAKE_WINDOWS="$windows" PATH="$TMP/bin:$PATH" \
+  if FAKE_APP_PRESENT="$app_present" FAKE_OPENBOX_PRESENT="$openbox_present" FAKE_TINT2_PRESENT="$tint2_present" FAKE_XWININFO_STATUS="$xwininfo_status" FAKE_WINDOWS="$windows" PATH="$TMP/bin:$PATH" \
     sh "$ROOT/scripts/isox-desktop-window-ready.sh" user :0 "$auth"; then
     echo "FAIL: invalid desktop readiness was accepted ($scenario)." >&2
     exit 1

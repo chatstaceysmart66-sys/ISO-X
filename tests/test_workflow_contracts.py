@@ -64,6 +64,9 @@ for check_name in (
 assert "xorriso -indev" in build_helper and "iso-validated.ok" in build
 assert "qemu-acceptance.sh bios-headless" in bios
 assert "qemu-acceptance.sh uefi-headless" in uefi
+assert "timeout-minutes: 30" in bios and "timeout-minutes: 30" in uefi
+assert "apt-get install --no-install-recommends -y qemu-system-x86" in bios
+assert "apt-get install --no-install-recommends -y qemu-system-x86 ovmf" in uefi
 assert "boot_status != 'PASS_BOOT'" in bios and "boot_status != 'PASS_BOOT'" in uefi
 assert "::error title=BIOS boot acceptance::" in bios
 assert "::error title=UEFI boot acceptance::" in uefi

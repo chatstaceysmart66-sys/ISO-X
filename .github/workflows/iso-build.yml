@@ -254,7 +254,7 @@ jobs:
     needs: build
     if: always() && needs.build.outputs.validated == 'true' && needs.build.outputs.candidate_uploaded == 'success'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     outputs:
       boot_status: ${{ steps.result.outputs.boot_status }}
       duration: ${{ steps.result.outputs.duration }}
@@ -263,7 +263,7 @@ jobs:
       - name: Check out test harness
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
       - name: Install BIOS QEMU
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y qemu-system-x86
       - name: Download validated candidate
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
         with:
@@ -327,7 +327,7 @@ jobs:
     needs: build
     if: always() && needs.build.outputs.validated == 'true' && needs.build.outputs.candidate_uploaded == 'success'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     outputs:
       boot_status: ${{ steps.result.outputs.boot_status }}
       duration: ${{ steps.result.outputs.duration }}
@@ -336,7 +336,7 @@ jobs:
       - name: Check out test harness
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
       - name: Install UEFI QEMU and OVMF
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86 ovmf
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y qemu-system-x86 ovmf
       - name: Download validated candidate
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2, Node.js 24
         with:

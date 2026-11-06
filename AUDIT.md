@@ -7,6 +7,13 @@
 - Local verification: pytest 65 passed/1 skipped/4 subtests; smoke 27 tests; desktop readiness regression passed. The source runner recorded 89 passed, 0 failed, 1 skipped, 4 NOT_RUN and exited 1 because tools were missing. ISO build and local BIOS/UEFI boots remain NOT_RUN; the source HTML attachment `iso-x (1).txt` remains unavailable.
 - Decision: **NOT READY** until a new CI/build tests the changed readiness gate and confirms Tint2 does not crash after the marker; inspect the resulting ISO and complete the remaining hardware/persistence checks.
 
+## CI Failure Investigation — 2026-11-06
+
+- Run `42206164401` built a diagnostic ISO successfully (2,785,017,856 bytes; SHA-256 `d3330d055e006f02096d931bf2eb634dc20834b4bf67af390ffc3359eb808453`). It is not release-eligible.
+- UEFI serial evidence records two `wmctrl` segfaults at 134.222499s and 138.077028s while the readiness probe repeatedly invoked `wmctrl -l -G`; both precede the nonce marker. The log shows the failing process and libc instruction address but is insufficient to identify an internal wmctrl/libc root cause. The probe now uses `xwininfo -root -tree`, and `x11-utils` is included in the live package list; regression coverage includes a failing xwininfo process.
+- BIOS did not boot: the 20-minute job timeout cancelled apt while installing QEMU, before downloading the ISO. Apt planned 85 packages/46.3MB with recommends. Both QEMU install commands now use `--no-install-recommends`; BIOS/UEFI job limits are 30 minutes.
+- Acceptance summary failed, promote was skipped. No Tint2 segfault appeared in the UEFI log for this run, but post-readiness panel stability still requires an end-to-end rerun.
+
 ## نتيجة جولة مرجع التصميم — 2026-11-06
 
 - الحالة: **تنفيذ مصدري جزئي؛ اعتماد المرفق وISO النهائي غير مثبتين**. المرجع المحدد `iso-x (1).txt` لم يكن متاحاً. النسخة الجديدة `design/reference/iso-x-reference.html` تطابق `iso-x 22.html` فقط، لا المرفق المفقود؛ بصمتها `16f2b6d8007e01c612825823eada60627ee7040b690ea9032f86ab93490f2a35`.

@@ -102,6 +102,9 @@ assert "x11-xserver-utils" in packages, "Openbox snap shortcuts require xrandr f
 assert "user-setup" in packages, "live-config needs user-setup to create the configured live account."
 assert "pkexec" in packages, "The store backend requires the pkexec package for privileged APT operations."
 assert "isox-desktop-window-ready.sh" in build, "CI readiness must verify the ISO-X application window."
+assert "x11-utils" in packages, "Desktop readiness requires xwininfo from x11-utils."
+readiness = (ROOT / "scripts/isox-desktop-window-ready.sh").read_text(encoding="utf-8")
+assert "xwininfo -root -tree" in readiness and "wmctrl" not in readiness
 for store_asset, image_path in (
     ("$PROJECT_DIR/app/isox_store_backend.py", "config/includes.chroot/usr/share/iso-x/isox_store_backend.py"),
     ('"$PROJECT_DIR"/assets/sounds/*.wav', "config/includes.chroot/usr/share/iso-x/assets/sounds/"),
