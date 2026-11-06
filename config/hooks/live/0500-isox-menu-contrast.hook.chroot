@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+
+ROOT="${ISOX_HOOK_ROOT:-}"
+THEMERC="${ROOT}/usr/share/themes/Clearlooks/openbox-3/themerc"
+
+if [ ! -f "$THEMERC" ]; then
+  echo "Openbox Clearlooks theme file is missing: $THEMERC" >&2
+  exit 1
+fi
+
+set_theme_value() {
+  key="$1"
+  value="$2"
+  if ! grep -Fq "$key:" "$THEMERC"; then
+    echo "Openbox theme key is missing: $key" >&2
+    exit 1
+  fi
+  sed -i "s|^${key}:.*|${key}: ${value}|" "$THEMERC"
+}
+
+set_theme_value menu.items.bg "Flat Solid"
+set_theme_value menu.items.bg.color "#000000"
+set_theme_value menu.items.text.color "#ffffff"
+set_theme_value menu.items.disabled.text.color "#aab4c4"
+set_theme_value menu.items.active.bg "Flat Solid"
+set_theme_value menu.items.active.bg.color "#0078d4"
+set_theme_value menu.items.active.text.color "#ffffff"
+set_theme_value menu.title.bg "Flat Solid"
+set_theme_value menu.title.bg.color "#101725"
+set_theme_value menu.title.text.color "#ffffff"
+set_theme_value menu.border.color "#2c3b4d"
+set_theme_value menu.separator.color "#45566b"

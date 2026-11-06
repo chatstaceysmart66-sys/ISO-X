@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+[ "$(id -u)" -eq 0 ] || exit 1
+command -v zramctl >/dev/null 2>&1 || { echo "zramctl is missing" >&2; exit 1; }
+modprobe zram num_devices=1 2>/dev/null || modprobe zram
+TOTAL_KB=$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo)
+[ -n "$TOTAL_KB" ] || { echo "Cannot read MemTotal" >&2; exit 1; }
+SIZE_KB=$((TOTAL_KB / 2))
+if swapon --show=NAME --noheadings 2>/dev/null | grep -q '^/dev/zram'; then
+    sysctl -w vm.swappiness=10 >/dev/null
+    exit 0
+fi
+DEV=$(zramctl --find --algorithm zstd --size "${SIZE_KB}K" 2>/dev/null || true)
+[ -n "$DEV" ] || { echo "Unable to create a zstd ZRAM device" >&2; exit 1; }
+mkswap "$DEV" >/dev/null
+swapon --priority 100 "$DEV"
+sysctl -w vm.swappiness=10 >/dev/null
+printf 'ISO-X: configured %s at half of MemTotal with zstd; vm.swappiness=10\n' "$DEV"

@@ -1,0 +1,11 @@
+[Unit]
+Description=ISO-X optional idle preload schedule
+
+[Timer]
+OnBootSec=8min
+OnUnitInactiveSec=6h
+RandomizedDelaySec=10min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

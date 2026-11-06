@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "source": {
+    "file": "design/reference/iso-x-reference.html",
+    "reported_attachment_name": "iso-x (1).txt",
+    "reported_attachment_found": false,
+    "source_identity_verified_as_attachment": false,
+    "sha256": "16f2b6d8007e01c612825823eada60627ee7040b690ea9032f86ab93490f2a35",
+    "size_bytes": 1181650,
+    "data_uri_count": 6,
+    "unique_image_count": 3,
+    "note": "The preserved source is the repository candidate iso-x 22.html; the specifically named task attachment was not available for byte comparison."
+  },
+  "assets": [
+    {
+      "role": "desktop-wallpaper",
+      "element": "#wall CSS variable --wp; repeated in Pictures view",
+      "mime_type": "image/jpeg",
+      "original_file": "desktop-wallpaper-original.jpg",
+      "original_sha256": "34438ee49fc927e5c1cc9ffb10bcca47349d92bcb78a5beb0ebab6bd28da6391",
+      "size_bytes": 240067,
+      "width": 1920,
+      "height": 1080,
+      "aspect_ratio": "1920:1080",
+      "aspect_ratio_decimal": 1.777778,
+      "dominant_colors_rgb_approx": [
+        "#093082",
+        "#1d6bc9",
+        "#020d2c",
+        "#051f62",
+        "#04194a"
+      ],
+      "data_uri_occurrences": 2,
+      "usages": [
+        {
+          "element": "#wall CSS variable --wp",
+          "source_byte_offset": 6790
+        },
+        {
+          "element": "Pictures view",
+          "source_byte_offset": 595343
+        }
+      ],
+      "rootfs_original_path": "/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.jpg",
+      "derived_files": [],
+      "system_integration": {
+        "desktop_path": "/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.jpg",
+        "lightdm_background_path": "/usr/share/backgrounds/iso-x/iso-x-desktop-wallpaper.jpg"
+      }
+    },
+    {
+      "role": "boot-screen",
+      "element": "#boot CSS variable --bp; repeated in Pictures view",
+      "mime_type": "image/jpeg",
+      "original_file": "boot-screen-original.jpg",
+      "original_sha256": "fe9b77769e0b3e39405b1d4419967ecf5ce307a0786d07c0d82abdfb58899f64",
+      "size_bytes": 190033,
+      "width": 1920,
+      "height": 1080,
+      "aspect_ratio": "1920:1080",
+      "aspect_ratio_decimal": 1.777778,
+      "dominant_colors_rgb_approx": [
+        "#010615",
+        "#00030a",
+        "#031035",
+        "#0939a7",
+        "#1b8aea"
+      ],
+      "data_uri_occurrences": 2,
+      "usages": [
+        {
+          "element": "#boot CSS variable --bp",
+          "source_byte_offset": 326946
+        },
+        {
+          "element": "Inline HTML/CSS image",
+          "source_byte_offset": 915477
+        }
+      ],
+      "rootfs_original_path": "/usr/share/iso-x/assets/reference/boot-screen-original.jpg",
+      "derived_files": [
+        {
+          "file": "boot-screen.png",
+          "sha256": "9b75c06cf04842f5ef96a144c07e66c1880a9b10033fa4db7219880b7c0e06f3",
+          "width": 1920,
+          "height": 1080,
+          "transformation": "Lossless PNG encoding of decoded JPEG pixels; no crop or resize.",
+          "rootfs_path": "/usr/share/plymouth/themes/isox/iso-x-plymouth.png"
+        }
+      ],
+      "system_integration": {
+        "plymouth_path": "/usr/share/plymouth/themes/isox/iso-x-plymouth.png"
+      }
+    },
+    {
+      "role": "dragon-mark",
+      "element": "#start image; repeated in About/Pictures view",
+      "mime_type": "image/jpeg",
+      "original_file": "dragon-mark-original.jpg",
+      "original_sha256": "0b889457625b2f3af0fc3e31f9484338d5091a0bc8a56047497a960f1e28b892",
+      "size_bytes": 6174,
+      "width": 100,
+      "height": 106,
+      "aspect_ratio": "100:106",
+      "aspect_ratio_decimal": 0.943396,
+      "dominant_colors_rgb_approx": [
+        "#020716",
+        "#020c35",
+        "#072871",
+        "#185cb5",
+        "#45a5e6"
+      ],
+      "data_uri_occurrences": 2,
+      "usages": [
+        {
+          "element": "#start image",
+          "source_byte_offset": 580574
+        },
+        {
+          "element": "About view",
+          "source_byte_offset": 1169240
+        }
+      ],
+      "rootfs_original_path": "/usr/share/iso-x/assets/reference-dragon-mark.jpg",
+      "derived_files": [
+        {
+          "file": "dragon-mark.png",
+          "sha256": "b3dfdefbd974619674dac2661c2dcd62b431f4ac7af0dbabe80211269101b0a3",
+          "width": 100,
+          "height": 106,
+          "transformation": "Lossless PNG encoding of decoded JPEG pixels; no crop or resize.",
+          "rootfs_path": null
+        },
+        {
+          "file": "dragon-mark-icon-96.png",
+          "sha256": "159839351f876754db2f79d1d9343897bdd86b7473af6a49f21924a563750b7b",
+          "width": 96,
+          "height": 96,
+          "transformation": "Proportional downscale/contain within transparent 96x96 canvas; no crop or upscale.",
+          "rootfs_path": "/usr/share/icons/hicolor/96x96/apps/iso-x.png"
+        }
+      ],
+      "system_integration": {
+        "application_asset_path": "/usr/share/iso-x/assets/reference-dragon-mark.jpg",
+        "icon_theme_path": "/usr/share/icons/hicolor/96x96/apps/iso-x.png",
+        "optional_cinematic_asset_path": "/usr/share/iso-x/cinematic-assets/images/iso-x-dragon.png"
+      }
+    }
+  ]
+}

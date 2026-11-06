@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ChatGPT
+Comment=Open ChatGPT in Firefox
+Comment[ar]=فتح ChatGPT في Firefox
+Exec=firefox-esr --new-window https://chatgpt.com/
+Icon=web-browser
+Terminal=false
+Categories=Network;WebBrowser;

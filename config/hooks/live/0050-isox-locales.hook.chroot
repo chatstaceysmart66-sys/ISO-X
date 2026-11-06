@@ -1,0 +1,11 @@
+#!/bin/bash
+set -euo pipefail
+if command -v locale-gen >/dev/null 2>&1; then
+  for locale in ar_IQ.UTF-8 ar_SA.UTF-8 en_US.UTF-8; do
+    grep -qxF "$locale UTF-8" /etc/locale.gen || printf '%s UTF-8\n' "$locale" >> /etc/locale.gen
+  done
+  locale-gen
+fi
+if command -v update-locale >/dev/null 2>&1; then
+  update-locale LANG=ar_IQ.UTF-8 LANGUAGE=ar_IQ:ar:en_US:en
+fi

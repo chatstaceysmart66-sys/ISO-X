@@ -1,0 +1,19 @@
+#!/bin/bash
+set -euo pipefail
+THEME=/usr/share/plymouth/themes/isox
+for asset in "$THEME/iso-x-plymouth.png" "$THEME/isox.plymouth" "$THEME/isox.script"; do
+  if [[ ! -r "$asset" ]]; then
+    echo "Missing ISO-X reference Plymouth asset: $asset" >&2
+    exit 1
+  fi
+done
+command -v plymouth-set-default-theme >/dev/null 2>&1 || {
+  echo "Missing required command: plymouth-set-default-theme" >&2
+  exit 1
+}
+command -v update-initramfs >/dev/null 2>&1 || {
+  echo "Missing required command: update-initramfs" >&2
+  exit 1
+}
+plymouth-set-default-theme isox
+update-initramfs -u -k all

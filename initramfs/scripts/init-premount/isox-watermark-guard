@@ -1,0 +1,42 @@
+#!/bin/sh
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case "${1:-}" in prereqs) prereqs; exit 0 ;; esac
+
+warn() {
+    MESSAGE="ISO-X: watermark optional; $1. Continuing boot."
+    if command -v plymouth >/dev/null 2>&1; then
+        plymouth message --text="$MESSAGE" 2>/dev/null || true
+        plymouth quit 2>/dev/null || true
+    fi
+    echo "$MESSAGE" >&2
+    [ -w /dev/console ] && echo "$MESSAGE" >/dev/console
+}
+
+ROOTFS="${ISOX_INITRAMFS_ROOT:-}"
+ISX_ETC="${ROOTFS}/etc/isox"
+MODULES_DIR="${ROOTFS}/lib/modules"
+[ -r "$ISX_ETC/watermark-policy" ] || { warn "policy metadata is missing"; exit 0; }
+[ -r "$ISX_ETC/watermark-public.pem" ] || { warn "public key is missing"; exit 0; }
+[ -r "$ISX_ETC/isox_watermark.ko.sig" ] || { warn "signature is missing"; exit 0; }
+[ -r "$ISX_ETC/isox_watermark.sha256" ] || { warn "checksum is missing"; exit 0; }
+MODULE_PATH=$(find "$MODULES_DIR" -type f -name 'isox_watermark.ko' 2>/dev/null | head -n 1)
+[ -n "$MODULE_PATH" ] && [ -s "$MODULE_PATH" ] || { warn "module is missing"; exit 0; }
+cd "$ROOTFS/" || cd / || { warn "cannot access root filesystem"; exit 0; }
+if ! openssl dgst -sha256 -verify /etc/isox/watermark-public.pem \
+    -signature /etc/isox/isox_watermark.ko.sig "$MODULE_PATH" >/dev/null 2>&1; then
+    warn "signature verification failed"
+    exit 0
+fi
+if ! sha256sum -c /etc/isox/isox_watermark.sha256 >/dev/null 2>&1; then
+    warn "checksum verification failed"
+    exit 0
+fi
+if ! modprobe isox_watermark 2>/dev/null; then
+    warn "kernel refused to load the module"
+    exit 0
+fi
+# Successful modprobe runs the module init function. Check sysfs rather than
+# parsing dmesg, which may be restricted under kernel lockdown.
+[ -d /sys/module/isox_watermark ] || { warn "module did not register"; exit 0; }
+exit 0

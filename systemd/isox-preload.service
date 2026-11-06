@@ -1,0 +1,7 @@
+[Unit]
+Description=ISO-X optional local preload cache warmup
+ConditionPathExists=%h/.local/share/iso-x/iso-x.db
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/isox-preload

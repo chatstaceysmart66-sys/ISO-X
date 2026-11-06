@@ -1,0 +1,18 @@
+[package]
+name = "isox-cinematic"
+version = "0.4.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "ISO-X lightweight 3D boot/login-transition cinematic (does not authenticate users)"
+
+[dependencies]
+# Bevy 0.19.x is the compatibility baseline for the 0.4.0 prototype.
+# `2d_bevy_render` is also enabled because Bevy Text2d is rendered as 2D text
+# inside the 3D scene. Audio is intentionally not enabled.
+bevy = { version = "0.19.1", default-features = false, features = ["3d", "2d_bevy_render", "x11", "png"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

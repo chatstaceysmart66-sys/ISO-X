@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+# Debian's firefox-esr reads system-wide default preferences from this file.
+# Append after packaged defaults so ISO-X wins over an earlier declaration,
+# while remaining a default that an individual user can override.
+ROOTFS="${ISOX_HOOK_ROOT:-}"
+PREFS="${ROOTFS}/etc/firefox-esr/firefox-esr.js"
+START_FILE="${ROOTFS}/usr/share/iso-x/start.html"
+START_PAGE=file:///usr/share/iso-x/start.html
+MARKER='ISO-X local start page'
+
+[ -d "${ROOTFS}/etc/firefox-esr" ] || { echo "Firefox ESR configuration directory is missing" >&2; exit 1; }
+[ -r "$START_FILE" ] || { echo "ISO-X local browser start page is missing" >&2; exit 1; }
+touch "$PREFS"
+if ! grep -Fq "$MARKER" "$PREFS"; then
+  {
+    printf '\n// %s; user profiles may override this default.\n' "$MARKER"
+    printf 'pref("browser.startup.homepage", "%s");\n' "$START_PAGE"
+    printf 'pref("browser.startup.page", 1);\n'
+  } >> "$PREFS"
+fi

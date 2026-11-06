@@ -1,0 +1,327 @@
+## متابعة التدقيق — 2026-11-06
+
+- بدأ التدقيق على `fix/isox-build-and-runtime` عند `be001c0f7b4669f1886e7624a1d257de07b0992b`، مطابقًا لـ`origin/fix/isox-build-and-runtime`. بقي stash المستخدم السابق محفوظًا وغير مطبق؛ لم تُبدّل الفروع أو تُحذف تغييرات.
+- راجعت artifacts تشغيل CI `42172193542`: كل الوظائف انتهت بنجاح على HEAD الأساسي، لكن سجل BIOS يسجل `tint2` segfault عند `83.005462` ثانية وسجل UEFI عند `134.285954` ثانية، وكلاهما قبل `ISOX_CI_READY`. الملفات محفوظة محليًا في `/tmp/isox-audit-current/{bios,uefi}`. هذا يثبت قصور بوابة الجاهزية السابقة، لا سبب segfault.
+- أضيف شرط عملية `tint2` إلى `scripts/isox-desktop-window-ready.sh` واختبار `missing-tint2` إلى `tests/test_desktop_readiness.sh`. الاختبار المستهدف نجح؛ لا يثبت ذلك استقرار Tint2 بعد marker أو في ISO.
+- تحقق المجموعة في الفحص الأولي: `python3 -m pytest -q` (65 passed، 1 skipped، 4 subtests)، و`bash tests/smoke.sh` (27 tests). سجل source-runner آنذاك 89 PASS و0 FAIL و1 SKIP و4 NOT_RUN بسبب نقص أدوات البيئة؛ تجاوزته إعادة التحقق اللاحقة بعد تثبيت الأدوات، ونتيجتها موثقة في ملحق 2026-11-06 أدناه.
+- لم يُبنَ ISO محليًا: UID 1000، المتاح 18 GiB أقل من حد المشروع 20 GiB، وأدوات live-build وxorriso وdebootstrap وmksquashfs وQEMU غائبة. CI على HEAD الأساسي لا يشمل التغييرات المحلية. المرجع `iso-x (1).txt` ما زال غير متاح؛ المرشح المحفوظ لا يمكن إثبات مطابقته له.
+- الحالة تبقى **NOT READY**: يلزم CI جديد بعد نشر التغييرات، مع فشل readiness إن غاب Tint2، ثم فحص عدم حدوث segfault لاحق وظهور اللوحة في BIOS وUEFI.
+
+## متابعة فشل الإقلاع — 2026-11-06
+
+- CI `42206164401` للالتزام `49870a87b5c160f08924bc3db7e121bd836893e2`: source-check وISO build/structure **PASS**. الصورة التشخيصية 2,785,017,856 بايت، SHA-256 `d3330d055e006f02096d931bf2eb634dc20834b4bf67af390ffc3359eb808453`.
+- UEFI سجل عمليتي `wmctrl` segfault (134.222499 و138.077028s) من مسار مسبار الجاهزية قبل marker. السجل يحدد الأمر المستدعى لا السبب الداخلي للـsegfault. أزيل استدعاء `wmctrl` من فحص الجاهزية واستعيض عنه بـ`xwininfo -root -tree`؛ أضيفت حزمة `x11-utils`، واختبار الانحدار يرفض فشل الأداة أو غياب/صغر نافذة ISO-X.
+- BIOS لم يبدأ: انتهت مهلة job البالغة 20 دقيقة أثناء apt install لـQEMU؛ سجل APT يوضح 85 حزمة و46.3MB وتوقف التنزيل قبل خطوة تنزيل ISO. لتفادي التبعيات الموصى بها ورفع المهلة أضيف `--no-install-recommends` و30 دقيقة إلى وظيفتي BIOS/UEFI.
+- فشل Acceptance Summary لأن UEFI فشلت وBIOS أُلغيت؛ promote skipped. لم يتكرر دليل Tint2 في UEFI لهذا التشغيل، لكن ثباته بعد readiness لا يزال بحاجة إلى تحقق.
+- التغييرات التصحيحية جاهزة للفحص المصدري ثم النشر لإطلاق CI جديد. لا يعتبر هذا التشغيل إعادة قبول، والحالة تظل **NOT READY** حتى نجاح BIOS وUEFI وفحص السجلات واللقطات.
+
+## نتيجة إعادة CI بعد الإصلاح — 2026-11-06
+
+- دُفعت الإصلاحات في الالتزام `246f4555745d9dd5f1e73977d2f27e527fecf3a2`، وتشغيل Actions `42212462133` انتهى **SUCCESS** في جميع jobs: source-check، build، BIOS، UEFI، promote وacceptance-summary.
+- فحوص المصدر: 90 PASS، 0 FAIL، 0 SKIP، 0 NOT_RUN. بناء ISO التشخيصية وفحص SHA/El Torito/System Area اجتازا؛ الحجم 2,785,017,856 بايت وSHA-256 `a35e05baabc8292b1cbf0a50fb31cacb59584d09bec2dff15cf5859302765a9c`.
+- Diagnostic BIOS/UEFI: PASS_BOOT؛ 206.545s و154.110s. العلامة أُصدرت بعد تحقق وجود Openbox وTint2 ونافذة ISO-X، واللقطات النهائية صالحة. لا segfault لـwmctrl أو Tint2 في سجلي serial لهذين الإقلاعين.
+- Normal-boot ISO: BIOS PASS_BOOT و`desktop_seen=true` خلال 217.556s؛ UEFI PASS_BOOT و`desktop_seen=true` خلال 220.964s؛ كلاهما أظهر لقطة نهائية صالحة واجتاز enforce gate. حجمها 2,781,609,984 بايت؛ SHA-256 `3efbd25cacb7b23e0fa49066c2c04995bc5753b8837274ce392b54be0db8d2f2`. هي artifact مرشح CI وليست إصداراً.
+- انتهت مشكلة wmctrl على مسار الاستعداد ومهلة تثبيت QEMU في هذا التشغيل. لا نعرف السبب الداخلي للانهيارين التاريخيين ولا ندعي تشخيصه؛ عطل Tint2 السابق لم يتكرر في السجلات الجديدة لكن جذره غير مثبت.
+- لا يزال هذا **اختبار QEMU وليس قبول عتاد**. persistence بعد reboot، اختبار أجهزة فعلية، والتحقق من مطابقة ملف `iso-x (1).txt` الأصلي غير متاحة/غير منفذة. الحالة: بوابات CI للتمهيد وسطح المكتب **PASS**؛ الإصدار والعتاد **NOT READY / UNVERIFIED**.
+
+### جولة ربط مرجع التصميم المرشح — 2026-11-06
+
+- بدأ الاستكمال على الفرع `fix/isox-build-and-runtime` عند HEAD `be001c0f7b4669f1886e7624a1d257de07b0992b` المطابق للمرجع البعيد، مع إبقاء stash المستخدم السابق دون تطبيق.
+- لم يُعثر على المرفق المحدد `iso-x (1).txt`. حُفظ المرشح الموجود في المستودع `iso-x 22.html` حرفياً في `design/reference/iso-x-reference.html`؛ SHA-256 للنسختين `16f2b6d8007e01c612825823eada60627ee7040b690ea9032f86ab93490f2a35`. هذا يثبت النسخ من المرشح فقط، ولا يثبت مطابقته للمرفق.
+- أنشئت أداة `scripts/extract-reference-assets.py` وmanifest `assets/reference/reference-assets.json`. استخرجت 6 Data URI إلى 3 صور JPEG فريدة، وتحققت من MIME/magic bytes والبكسلات والأبعاد والنسب والبصمات والتكرارات.
+- أضيف `scripts/verify-reference-assets.py` إلى build للتحقق من SHA-256 لملف المرجع والأصول الأصلية والمشتقات بعد نسخها إلى staging؛ اجتاز اختبار شجرة rootfs اصطناعية. لا يثبت ذلك محتوى ISO/SquashFS الفعلي.
+- أُعيد توجيه سلسلة بناء الخلفية إلى JPEG المرجع في PCManFM وLightDM، ومشهد Plymouth إلى PNG مشتق lossless مع احتواء متناسب، وعلامة التطبيقات إلى JPEG المرجع وأيقونة 96×96 مشتقة دون قص أو تشويه. ظل Openbox وPCManFM وTint2 وGTK مسؤولة عن مكونات سطح المكتب؛ لم يُشغّل HTML كواجهة نظام.
+- فُحص JavaScript دون تشغيله: المرجع يحتوي حاسبة `Function()` وطرفية/حالة خدمات نموذجية وطلب كاميرا ومؤقت انتقال. بقي HTML محفوظاً في المستودع ولا يُدرج في ISO؛ الصور تُستخرج محلياً فقط.
+- عُدّل Tint2 إلى 48px وألوان مرجع التصميم، ووُحّدت ألوان GTK ذات الصلة. لا يعني ذلك اختباراً بصرياً أو جهازياً.
+- ISO غير مبنية في هذه الجولة: المضيف Ubuntu 24.04 وغير root، المساحة المتاحة 18 GiB مقابل 20 GiB المطلوبة، وأدوات `live-build` و`xorriso` وQEMU غير متاحة. لم تُختبر SquashFS أو BIOS/UEFI أو Persistence لهذه التغييرات. سجل Tint2 السابق ما زال تحذيراً غير محلول.
+- تحقق الإنهاء: `python3 -m pytest -q` (**65 passed، 1 skipped، 4 subtests passed**)، و`bash tests/smoke.sh` (exit 0، 27 اختبار smoke)، و`python3 tests/test_source_config.py` و`python3 tests/test_upstream_integration.py` و`py_compile` و`bash -n` و`git diff --check` كلها exit 0. هذه اختبارات مصدر فقط، ولا تغير حواجز ISO/العتاد أعلاه.
+
+# متابعة الحالة الحالية — 2026-11-02
+
+- الحالة قبل تعديل هذه الجولة: الفرع `fix/isox-build-and-runtime`، والـHEAD المحلي والبعيد `f7e188293ac86d10a7b2205135605a2086fe2e20`، وكانت شجرة العمل نظيفة. PR #1 مفتوح كمسودة على `main`.
+- آخر Action مفحوص هو `41500842716` على HEAD المذكور. نجحت source-check وbuild وفحوص BIOS/UEFI، لكن مرحلة `promote` كانت لا تزال قيد التشغيل وقت الفحص؛ لا تُسجل النتيجة النهائية للـworkflow كنجاح مكتمل.
+- ملف `iso-x (1).txt` لم يوجد في مساحة العمل أو المسارات المؤقتة/المرفقات التي أمكن فحصها. لم يُستخدم `assets/iso-x.html` بديلًا، ولم تُنشأ نسخة مرجعية أو بصمة أو صور منسوبة إلى المرفق. حالة الربط التفصيلية في `docs/REFERENCE_DESIGN_MAPPING_AR.md`.
+- سجل UEFI في Action `41500842716` يسجل `tint2` segfault عند `137.191616` ثانية، قبل علامة `ISOX_CI_READY`. نسخة الحزمة أثناء البناء `17.0.1-1.2`. بقي السبب الجذري غير محسوم؛ لا تُعد علامة الجاهزية دليلًا على سلامة الشريط.
+- عُزل مرشح محتمل للانهيار: إعداد `panel_items=LTBESC` كان يفعّل وحدة البطارية الداخلية `B` حتى في QEMU بلا بطارية. أزيلت هذه الوحدة؛ يبقى `xfce4-power-manager` المثبت والمشغّل مسؤولًا عن عرض البطارية في منطقة الإشعارات عند وجودها. هذا فرضية قابلة للاختبار، وليس إثباتًا للسبب أو نجاح الإصلاح إلى أن يعاد إقلاع ISO التشخيصية.
+- إصلاح محلي محدود: استُبدل `wallpaper_mode=stretch` بـ`wallpaper_mode=fit` في إعداد PCManFM، وأضيف تحقق للعقد المُنشأ. عُزل أيضًا مكوّن tint2 للبطارية كمرشح crash. `python3 -m pytest -q tests/test_build_contracts.py` (exit 0، `19 passed`)، و`python3 tests/test_source_config.py` (exit 0)، و`bash tests/smoke.sh` (exit 0) نجحت. لا يثبت ذلك لقطة شاشة أو سلوك ISO مبنية أو زوال segfault.
+- ISO التشخيصية من CI السابق: الحجم `2,782,298,112` بايت، SHA-256 `681df93f90cbf838720643d01b7748837b10d7f8ca9e498cf74e3fde6428e375`؛ ليست إصدارًا ولا تحتوي تغيير هذه الجولة. لا يوجد بناء ISO جديد لهذا التعديل.
+- لا تزال اختبارات عتاد حقيقي وPersistence بعد reboot والصوت الفعلي وAPT التفاعلي غير مثبتة. لا يُعلن قبول نهائي لتصميم المرجع أو ISO.
+
+## متابعة المرحلة الإضافية — 2026-11-02
+
+- تحقق مصدر المتجر: `auto/config` كان يمرر `--apt-indices false` رغم اعتماد فهرسة التطبيقات والحزم على APT المحلي؛ غُيّر إلى `true` وأضيف اختبار عقد. هذا يعالج سببًا مباشرًا لقائمة غير متاحة دون اتصال، مع أثر متوقع على حجم ISO لم يُقَس بعد ببناء جديد.
+- أُصلح مسار ملفات gzip المنتهية قبل علامة النهاية في AppStream XML وDEP-11، وأضيف اختبار يثبت بقاء نتيجة صالحة عند وجود ملف XML مضغوط تالف.
+- فُحصت حزم الصوت الحالية ومضيف Codespace: الصورة كانت تحتوي PipeWire وWirePlumber و`alsa-utils` لكنها تفتقد ALSA UCM وfirmware Intel SST/SOF. أضيفت حزم Debian Trixie `alsa-ucm-conf` و`firmware-intel-sound` و`firmware-sof-signed` مع عقود مصدرية. المضيف لا يملك `aplay` أو أدوات PipeWire/PulseAudio أو `systemd --user` أو جهاز ALSA؛ لذلك بقي اختبار الصوت والخدمات الفعلية غير ممكن، ولم يُعلن نجاح الصوت.
+- تحقق مركّز: `pytest -q tests/test_store_backend.py tests/test_source_config.py tests/test_build_contracts.py` (**46 passed**). المجموعة كاملة: **63 passed، 1 skipped، 4 subtests passed**؛ ونجح `bash tests/smoke.sh` واختبار GTK/Openbox مرتين بعد مزامنة EWMH. لقطات المتجر عربية/إنجليزية ببيانات اصطناعية.
+- خلال الاستكمال ظهر سباق اختبار عند قراءة حجم النافذة فور طلب التكبير بعد التصغير؛ صار الاختبار ينتظر حالة EWMH المطلوبة قبل قراءة الحجم، ونجح مرتين متتاليتين تحت Xvfb بعد الإصلاح.
+- اكتمل CI `41494710750` على commit `35b65ff`: اجتاز 88 فحص مصدر، وبنى ISO تشخيصية، وثبت أثناء البناء أن live-build تلقى `--apt-indices true` وحزم الصوت الجديدة. نجحت فحوص بنية ISO وإقلاع BIOS/UEFI التشخيصي، كما اجتازت صورة الإقلاع العادي BIOS/UEFI وأظهرت سطح ISO-X. بصمة ISO التشخيصية `7e825b4d26f6f8843dfa1feb35d1f8d98b4c555eccb4cb4b940dd4065f875c70` والحجم `2,782,298,112` بايت؛ المرشح ليس إصدارًا. بقيت Persistence بعد reboot وAPT الفعلي والصوت على عتاد غير مثبتة.
+
+- فُحصت حالة Git والفرع والـCI الحالي من جديد؛ الفرع `fix/isox-build-and-runtime` كان عند `6f24092` قبل هذه التعديلات، وworktree نظيف عند بدء الجولة.
+- أصلحت صفحة التطبيقات الرسومية لتمييز نوع AppStream وعدم دمج مكونات مختلفة في الحزمة نفسها، وأبقيت الحزم العامة في صفحة APT المنفصلة. صار فشل ملف بيانات واحد تحذيرًا ظاهرًا بدل إسقاط كل الفهرس بصمت.
+- أضيف fallback تشغيل لمدخلات Desktop عبر `gio launch`، وحماية إزالة حزم النظام الأساسية، واختبارات محاكاة لرمز الخروج والفشل.
+- أثبت اختبار Openbox التفاعلي أن النقر على حقل أو زر في نافذة غير نشطة يرفعها ويُبقي النقرة فعالة. أُصلح أيضًا مؤقت بحث GTK لمنع إزالة source منتهٍ.
+- كشف CI `41483673606` أن fixture اختبار ISO كان يفتقد سطر GRUB الذي يجعل Persistence افتراضيًا؛ أُصلح fixture، واجتاز اختبار ISO المتكامل في CI `41485010996`. سجّلت تشغيلات ISO التشخيصية في `41494710750` أيضًا انهيار `tint2` في BIOS وUEFI؛ التحذير غير محلول، رغم نجاح رسم سطح المكتب في اختبارات ISO الإقلاع العادي.
+- دليل CI السابق أظهر أن مسبار الجلسة كتب علامة الجاهزية بعد تحقق graphical.target وLightDM وXorg ونافذة ISO-X؛ كما رُصد `tint2` segfault في BIOS وUEFI. هذا التحذير ما زال غير محلول وموثق في `KNOWN_WARNINGS_AR.md`؛ لا يعني ظهور النافذة نجاح الشريط.
+- أضيف حفظ اختيار تخطيط AR/EN بملف إعداد مستخدم خاص الأذونات واستعادته في Openbox، مع اختبار وحدات ووثيقة `SHORTCUTS_AR.md`. يلزم reboot فعلي لإثبات الاحتفاظ عبر Persistence.
+- أضيفت حزم AT-SPI وudisks2 وexFAT وNTFS إلى قائمة الحزم دون تركيب وسيط حقيقي. لم تختبر أجهزة USB أو Wi-Fi أو الصوت أو HDMI على عتاد.
+- أضافت الجولة اختبار انحدار لملفات AppStream/DEP-11 gzip المبتورة، وضمانًا أن اختبار بناء العقود يمرر `--apt-indices true` كوسيط واحد إلى `lb`. وجرى تصحيح سباق EWMH في اختبار runtime بانتظار حالة النافذة قبل قياسها. التحقق المحلي شمل pytest وsmoke وGTK/Openbox المتكرر وفحوص وسيطات live-build.
+- **الحدود:** اجتاز commit `35b65ff` بناء وBIOS/UEFI في CI، لكن ذلك ليس إصدارًا منشورًا. لم تُختبر Persistence بعد reboot أو تثبيت/إزالة APT من الواجهة أو صوت مسموع على عتاد. الأدلة والقيود التفصيلية في `BUILD_AND_TEST_RESULTS_AR.md` و`KNOWN_WARNINGS_AR.md`.
+
+## استكمال التحقق — 2026-11-02
+
+- أُصلح تباين نصوص متجر GTK وعناصر التحكم بعد مراجعة اللقطات، وأُعيد الالتقاط بعد انتظار اكتمال تحميل البطاقات.
+- نجح `xvfb-run -a -s '-screen 0 1366x1024x24' /usr/bin/python3 tests/test_gtk_window_runtime.py` تحت Xvfb/Openbox؛ شمل اختبار إدخال العربية والإنجليزية، دورة العدسة، تحديث القائمة، تشغيل التطبيق بالنقر، Esc والنقر خارجها.
+- عولج تداخل ملفات `.desktop`: ملفات المستخدم الصالحة ذات `Hidden=true` أو `NoDisplay=true` تحجب نسخة النظام ذات المعرّف نفسه، مع اختبار GTK/Openbox يمنع عودة النسخ المخفية.
+- استخدم رأس المتجر صورة التنين الفعلية بحجم صغير من ملف الشعار بدلاً من اسم أيقونة قد لا يكون مسجلاً في GTK theme.
+- نجح `/usr/bin/python3 scripts/run-source-checks.py /tmp/isox-acceptance-final /tmp/isox-acceptance-cache-final`: **49 اختبار pytest ناجح، 1 متخطى، و24 فحصاً إضافياً ناجحاً**، بلا فشل أو عناصر لم تُنفّذ.
+- أُعيد التقاط `docs/ui-evidence/store-ar.png` و`store-en.png` بعد إصلاح شعار الرأس، عبر GTK 3 في Xvfb؛ أصبح الالتقاط قابلاً لإعادة التنفيذ بـ`tests/capture_store_ui.py`. استُخدمت بيانات متجر اختبارية ثابتة؛ اللقطات تثبت الرسم واتجاه RTL/LTR فقط، ولا تثبت وجود الحزم أو تثبيتها. التفاصيل في `docs/ui-evidence/README_AR.md`.
+- لم يُنفذ بناء ISO مطابق للـworktree الحالي في هذه البيئة: المستخدم UID 1000، المساحة المتاحة 18 GiB دون شرط 20 GiB، وأدوات `lb` و`debootstrap` و`mksquashfs` و`xorriso` غائبة. لا يُستخدم أي snapshot سابق لإثبات البناء الحالي.
+- ما زالت اختبارات تثبيت APT وإزالته فعلياً، إقلاع BIOS/UEFI للصورة النهائية، Persistence بعد reboot، الصوت والأجهزة الفعلية وHDMI غير مثبتة.
+
+---
+
+# سجل تدقيق وإصلاح ISO-X
+
+## الجولة الحالية — 2026-10-21
+
+### المرحلة 1: الجرد — قيد التنفيذ
+
+#### الحالة عند البدء
+
+- `git status --short --branch`: `## fix/isox-build-and-runtime...origin/fix/isox-build-and-runtime`؛ لا تغييرات محلية ظاهرة قبل إنشاء هذا السجل.
+- `git rev-parse HEAD`: `4f27287bf0cb438ce1dc334c7b65763dcc7a6e04`.
+- الفرع البعيد المحلي `origin/fix/isox-build-and-runtime` عند commit نفسه؛ `origin/main` عند `5a4c11951dfbe2ef021710376a41a7fcf535a419`.
+- `git diff --stat origin/main...HEAD`: 114 مسارًا متغيرًا (113 ملفًا حاليًا وملف ZIP محذوفًا من الفرع)، 10,466 سطر إضافة في إحصاء Git؛ منها 10 أصول ثنائية حالية.
+- `git ls-files`: 113 ملفًا متتبعًا حاليًا. ملفات PNG/WAV العشرة ثنائية؛ يجري فحص النوع والأبعاد/الحجم فقط، ولا تُقرأ كمحتوى نصي.
+- commits الفرع العشرة منذ `origin/main`، من الأقدم إلى الأحدث:
+  `34696ba`، `cca8531`، `842713c`، `569b0d5`، `caf5859`، `b5b444d`، `598c3c6`، `dba48b5`، `a28d26f`، `4f27287`.
+- يوجد ISO محلي سابق بحجم `2,657,157,120` بايت، مع sidecar؛ لم يُعَد بعد فحص بصمته أو هيكله في هذه الجولة. لا يُضمّن في commits.
+- تنزيل أدلة run `39558122675` لم يبدأ: `gh run download ...` exit 4 لأن GitHub CLI غير مصادق. لا يجوز استنتاج الفحص الذي فشل من وصف سابق؛ يلزم سجل CI أو ملفات الأدلة.
+
+#### تغطية القراءة
+
+بدأت القراءة المنهجية، واكتملت قراءة الملفات الآتية بالكامل: `.github/workflows/iso-build.yml`، `auto/config`، `config/package-lists/iso-x.list.chroot`، hooks الخمسة تحت `config/hooks/live/`، `build.sh`، `scripts/ci-build-in-trixie.sh`، `scripts/build-iso.sh`، `scripts/install-build-deps.sh`. لم تكتمل بعد قراءة بقية الملفات.
+
+| الحالة | العدد الحالي |
+|---|---:|
+| قُرئ بالكامل | 67 |
+| قُرئ جزئيًا | 0 |
+| ثنائي (فُحصت بياناته فقط) | 10 |
+| لم يُقرأ بعد | 36 |
+
+#### تحديث تغطية القراءة — 2026-10-21
+
+بعد مراجعة بقية ملفات المستودع:
+
+| الحالة | العدد |
+|---|---:|
+| قُرئ بالكامل | 103 ملفًا نصيًا |
+| قُرئ جزئيًا | 0 |
+| ثنائي (فُحصت بيانات النوع/الأبعاد/الحجم فقط) | 10 |
+| لم يُقرأ | 0 |
+| الإجمالي المتتبع من `git ls-files` | 113 |
+
+شملت الدفعة الوثائق التاريخية وتقارير البناء، وملفات SVG/HTML، ومصدر Bevy، ومدخل متجر سطح المكتب ومولّد الأصوات واختبارات المتجر. ملفات WAV/PNG العشرة فُحصت كبيانات ثنائية ولم تُقرأ بايتاتها كنص. لم تُجر اختبارات أو بناء خلال هذه الدفعة.
+
+بعد إضافة الملفات الخمسة التالية في worktree وقبل commit، قُرئت/راجعت كلها بالكامل: `config/bootloaders/grub-pc/grub.cfg`، `config/bootloaders/isolinux/isolinux.cfg`، `config/bootloaders/syslinux_common/live.cfg.in`، `scripts/validate-iso-boot-config.sh`، و`tests/test_write_usb_persistence.sh`. مع `docs/WORKLOG_AR.md` الجديد تصبح تغطية worktree المحلي 109 ملفات نصية كاملة + 10 ملفات ثنائية مفحوصة بياناتها = 119 مسارًا؛ 0 جزئي و0 غير مقروء. عدد HEAD السابق يبقى 113 ملفًا متتبعًا.
+
+ظهرت اختلافات توثيقية مهمة يلزم عدم التعامل معها كحالة HEAD الحالي:
+
+- `docs/FILE_INVENTORY_AR.md` و`docs/PROJECT_MAP_AR.md` يصفان لقطات أقدم (HEAD `caf5859...` وأعداد 104/92 ملفًا)؛ الشجرة الحالية 113 ملفًا وHEAD `4f27287...`. كما أن قائمة التغطية القديمة لا تشمل ملفات متجر ISO-X والأصوات المضافة لاحقًا.
+- `README_AR.md` يسرد ترحيل `004_isox_040.sql` مرتين، ويقول إن `install-build-deps.sh` يثبت Rust عبر rustup؛ هذا لا يطابق `README.md` ومسار البناء الحالي الموصوف كاختياري لمشهد Bevy.
+- `README.md` يسرد مجلد `security/` ضمن بنية المستودع، لكنه غير موجود في `git ls-files`.
+- `docs/RELEASE_NOTES_0.3.0_AR.md` يقدّم خيار persistence بوصفه ميزة في أمر USB، بينما `scripts/write-usb.sh` الحالي يرفض persistence.
+- `docs/ARCHITECTURE_AR.md` يبدأ بفقرة مرقمة `9. Data` قبل عنوان الوثيقة، وهو ترتيب/محتوى غير متسق.
+- `AUDIT.md` و`docs/BUILD_AND_TEST_RESULTS_AR.md` يسجلان بناءات وCI تاريخية من commits أقدم، منها `dba48b5...` و`39471524581`. هذه الأدلة لا تثبت بناء أو إقلاع HEAD الحالي ولا تحسم فشل run `39558122675`.
+
+#### أدلة ونتائج ظهرت أثناء القراءة
+
+- ملف workflow الكامل يحتوي شروط تحقق صامتة في خطوة `Validate candidate and write validation manifest`: اختبار SHA وnonce ووجود ملفات evidence وعدة `grep -Eiq`. لم يُحسم بعد أنها سبب فشل run `39558122675` لأن تنزيل أدلة run يتطلب مصادقة GitHub؛ الخطوة Exit 4 قبل الوصول إلى محتوى artifact.
+- إعداد `auto/config` يستخدم `--apt-indices false`، ويضبط BIOS+UEFI (`syslinux grub-efi`). خيار `--apt-indices false` لا يلغي فهارس apt اللازمة للتثبيت؛ سيُختبر حل قائمة الحزم فعليًا بحاوية Trixie قبل الحكم.
+- `build-iso.sh` لا يهيئ Persistence حاليًا؛ كما أن Openbox autostart يوجه بعض سجلات التطبيقات إلى `/tmp`. يلزم تقييم استمرار هذه المسارات بعد live-boot overlay.
+- metadata في workflow تصرح حاليًا `"persistence": {"status": "NOT_IMPLEMENTED", ...}`؛ لا توجد في القائمة الحالية معاملات `persistence` أو إعداد لقسم تخزين persist.
+- الـISO الموجودة سابقة لهذا الفرع النهائي؛ لا تُستخدم كدليل على محتويات commit `4f27287` قبل مقارنة بصمتها/تاريخ البناء.
+- جرى فحص ملفات النظام منخفضة المستوى والـhooks و21 سكربتًا بالكامل، بما فيها ذيل `scripts/create-ci-results.py` و` scripts/secure-vault.py`.
+- `scripts/write-usb.sh` يصرّح في التعليق والواجهة بأن Persistence غير مدعوم. الكتابة تستخدم `dd` إلى قرص USB بعد طلب `WIPE <disk>`؛ لا يُسمح بتجربة ذلك على جهاز حقيقي. يلزم إضافة حماية تمنع قرص النظام قبل تنفيذ أي ميزة كتابة.
+- قُرئ كاملًا كل من `app/isox_appcenter.py` و`app/isox_store_backend.py`. المتجر يستخدم AppStream المحلي وAPT وFlatpak user remotes المفعّلة، وعمليات APT تمر عبر `pkexec` إلى `apt-get` بوسائط argv منفصلة، وFlatpak محدد بـ`--user`. تصنيفات Games/Windows الحالية مطابقة كلمات مفتاحية فقط وليست بيانات توافق أو اختبارات موثقة.
+- إعدادات الأصوات تحفظ للمستخدم، و`paplay` يعمل عبر process غير حاجب؛ إذا تعطلت الأداة يُعرض تشخيص داخل المتجر. لا يعني ذلك أن خرج الصوت متاح في هذه البيئة.
+- فُحصت صور المشروع الخمس وملفات WAV الخمسة باستخدام `file` و`stat`. النتائج: PNG (1024²، 3840×2160، 1024²، 512²، 1600×900)، وWAV mono PCM 16-bit 24 kHz؛ إجمالي الأصول الصوتية الخمسة أحجامها 20,204–41,804 بايت. لم تُفحص جودة السماع الفعلية.
+- قُرئت ملفات الواجهة الأساسية `app/iso_x_gtk.py` و`app/iso_x_shell.py` و`app/isox_welcome.py` وملفات DB الأربعة، ومجموعة الاختبارات الحالية بالكامل.
+- عيب اختبار ظاهر: `tests/test_source_config.py` يمر على `xml_root.iter("command")` رغم أن ملفات Openbox تستخدم default XML namespace؛ لذلك هذا المرور لا يرى عناصر `command` المؤهلة بالـnamespace، ولا يثبت وجود أوامر Exec المذكورة. سيُتحقق منه باختبار XML فعلي/إصلاح الاختبار.
+- توجد ملفات قديمة/بديلة لا تدخل البناء وفق قراءة المصدر: واجهة Tkinter `app/iso_x_shell.py` ليست staged بواسطة build، بينما الواجهتان GTK هما التطبيق المكتبي/الترحيبي؛ سيُراجع ذلك مقابل staging الفعلي قبل تصنيف اليتيم.
+- `git status --short --branch --ignored` يعرض الملف الجديد `docs/WORKLOG_AR.md` فقط كغير متتبع. `.venv/` وISO القديمة وملفات `__pycache__/` موجودة كملفات ignored قبل أي اختبار هذه الجولة؛ لن تُضاف أو تُحذف.
+
+### سجل الاختبارات والنتائج
+
+#### فحوص المصدر والصورة المحلية — 2026-10-21
+
+| الأمر/الفحص | النتيجة الفعلية | ما لا يثبته |
+|---|---|---|
+| `PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider -q` | تعذر أول تشغيل: `No module named pytest`، exit 1. بعد تثبيت pytest 9.1.1 إلى `/tmp/isox-pydeps` فقط: `26 passed in 2.78s`، exit 0؛ cache خارج المستودع. | لا يثبت GTK runtime أو بناء/إقلاع ISO. |
+| `PYTHONDONTWRITEBYTECODE=1 bash tests/smoke.sh` | 14 اختبارًا ناجحًا، إضافة لفحوص التوقيع/Secure Boot والتحقق السلبي من USB وQEMU؛ exit 0. | لا يثبت تشغيل ISO أو الإقلاع الحقيقي بحد ذاته. |
+| `sha256sum ISO-X-0.4.0-live-amd64.iso` و`sha256sum --check ISO-X-0.4.0-live-amd64.iso.sha256` | الملف ignored موجود محليًا، حجمه 2,657,157,120 بايت؛ SHA-256 `ad282899b7e1c51fd96590807437d29bffa97c898c7e77e09323a2e3c9b28da1`، sidecar مطابق، exit 0. هذه بصمة تاريخية لملف محلي وليست دليلًا أنه بُني من HEAD `4f27287`. | لا يثبت تطابق source الحالي أو سلامة runtime. |
+| `xorriso -indev ISO-X-0.4.0-live-amd64.iso -report_el_torito plain -report_system_area plain` | exit 0؛ وسيط ISO hybrid يحمل El Torito BIOS `/isolinux/isolinux.bin` وUEFI `/boot/grub/efi.img`، مع MBR/GPT/APM. | وجود مدخلات الإقلاع لا يثبت أن kernel/جلسة تقلع. |
+| استخراج `/isolinux/isolinux.cfg`, `/isolinux/live.cfg`, `/boot/grub/grub.cfg` و`/boot/grub/config.cfg` من الصورة إلى `/tmp` | BIOS config يحتوي `prompt 0`, `timeout 0`, `default vesamenu.c32`; مدخل live الافتراضي موجود و`append` يحمل `boot=live ... console=ttyS0,115200n8`. GRUB يحدد `default=0`، لكن لا يحدد timeout في الملف المستخرج. لا توجد معاملات `isox.ci` أو nonce في هذه الصورة القديمة. | لا يصف مدخلات ISO جديدة من HEAD الحالي ولا UEFI boot فعلي. |
+| `tests/qemu-acceptance.sh bios-headless ... /tmp/isox-current-iso-bios-test` | QEMU 8.2.2، BIOS، TCG (`/dev/kvm` غير قابل للقراءة/الكتابة)، 2 vCPU/1024 MiB. بعد 20.185 ثانية صنّف runner `NO_SERIAL_OUTPUT`, `timed_out=true`, `marker_seen=false`, `serial_bytes=0`, helper exit 10. التُقطت QMP/VGA snapshots مبكر/لاحق/نهائي؛ لقطة النهاية تعرض قائمة Debian “Press ENTER to boot...” وما زالت عندها. stderr لا يسجل إلا إنهاء QEMU من runner. | لا يثبت kernel/initramfs failure؛ لا يوجد serial خرج من الضيف. لا يختبر BIOS لصورة مبنية من HEAD الحالي. |
+| `git status --short --branch --ignored` بعد هذه الأوامر | لا ملفات جديدة متتبعة/غير متتبعة سوى `docs/WORKLOG_AR.md`. ISO و`.venv/` و`__pycache__/` ظاهرة كـignored وكانت مسجلة قبل تشغيل هذه الاختبارات. | لا يعني أن ملفات ignored آمنة للإضافة إلى commit؛ يجب استبعادها. |
+
+**استنتاج مضبوط:** فرضية أن BIOS في الصورة المحلية يقف عند قائمة الإقلاع مدعومة مباشرةً بملف `/isolinux/isolinux.cfg` (`timeout 0`) ولقطة شاشة QEMU النهائية التي تبقى على boot menu بعد 20 ثانية. هذا يثبت `BOOTLOADER_STALL` لتلك الصورة المحلية فقط. لا يجوز تعميم النتيجة على ISO مبنية من HEAD الحالي قبل إصلاح الإعداد، إعادة البناء، ثم إعادة QEMU.
+
+الأدوات المتاحة على المضيف: `xorriso`, `qemu-system-x86_64`, `qemu-img`, `shellcheck`, `xmllint`, `desktop-file-validate`, `systemd-analyze`. الغائبة: `lb`, `mksquashfs`, `debootstrap`, `actionlint`. المضيف Ubuntu 24.04.5، المساحة المتاحة 15 GiB تقريبًا، والذاكرة المتاحة 4.3 GiB؛ لذلك لا يُتوقع أن يجتاز build guard المحلي الذي يشترط 20 GiB ومسار Trixie.
+
+ما زالت فحوص الحزم في Debian Trixie، وactionlint/YAML، بقية syntax/systemd/desktop، UEFI، build الحالي وPersistence قيد التنفيذ. لم تُشغّل GitHub Actions؛ `gh auth status` exit 1 بسبب غياب تسجيل الدخول.
+
+### العوائق المفتوحة
+
+- GitHub Actions يتطلب مصادقة؛ `gh auth status` يقول إن الحساب غير مسجّل الدخول. لا يمكن تنزيل run المشار إليه أو تشغيل workflow قبل توفير مصادقة رسمية.
+- يلزم تنفيذ القراءة المنهجية لجميع ملفات المصدر والاختبارات والوثائق، ثم تحديث التغطية بمسارات الملفات الفعلية.
+- يلزم التحقق من متطلبات مساحة البناء والذاكرة قبل البناء؛ لم يبدأ أي بناء في هذه الجولة.
+
+#### استكمال فحوص المصدر — 2026-10-21
+
+| الأمر/الفحص | النتيجة الفعلية | ما لا يثبته |
+|---|---|---|
+| `actionlint` 1.7.12 على `.github/workflows/iso-build.yml` | مرّ، exit 0. | لا يشغّل workflow ولا يتحقق من منطق manifest أثناء التنفيذ. |
+| `apt-get install --dry-run` لقائمة `config/package-lists/iso-x.list.chroot` في Debian Trixie | المحاولة الأولى مع `main` فقط لم تجد حزم firmware من `non-free`; بعد تفعيل `main contrib non-free non-free-firmware` حلّ APT القائمة كاملة: 1 ترقية، 1150 تثبيتًا جديدًا، 0 إزالة، exit 0. | لا يثبت نجاح بناء chroot أو توفر كل الحزم في كل مرآة لحظة البناء. |
+| shell syntax وShellCheck للملفات shell فقط | اكتمل فحص جميع ملفات shell المحددة بعد تصحيح أول أمر فحص كان يمرر ملف Python إلى Bash خطأً؛ النتيجة النهائية سليمة، exit 0. | لا يختبر المسارات الفعلية في بيئة Debian Trixie أو QEMU. |
+| Python compile إلى cache مؤقت | 22 ملف Python جُمعت دون أخطاء، مع `PYTHONDONTWRITEBYTECODE=1` واستخدام مجلد cache خارج المستودع؛ exit 0. | لا يثبت سلوك الواجهة أو عمليات إدارة الحزم عند التشغيل. |
+| `xmllint` و`desktop-file-validate` | ملفات XML وDesktop التي فُحصت اجتازت التحقق، exit 0. | لا يثبت أن أوامر `Exec` متوفرة في صورة البناء؛ يوجد فحص/اختبار منفصل مطلوب لهذا العقد. |
+| `systemd-analyze verify --root=/tmp/isox-systemd-root-check isox-zram.service isox-ci-ready.service isox-ci-ready.timer` | وحدات النظام اجتازت، exit 0. | وحدات المستخدم لم تُتحقق: المحاولة باستخدام مسارات صريحة لم تجدها في root المؤقت، والتحقق عبر user manager يحتاج بيئة D-Bus غير موجودة. النتيجة لوحدات المستخدم `NOT_RUN`. |
+| `apt-indices` حسب وصف `lb_config` في live-build Trixie | `--apt-indices false` يعطّل الاحتفاظ بفهرس APT في صورة/كاش البناء للاستخدام offline؛ لا يعطّل تنزيل الفهرس المطلوب لتثبيت الحزم أثناء البناء. | لم يُشغّل `lb build` على هذا المضيف. |
+| `git status --short --branch --ignored` بعد الفحوص | لا تغييرات مصدر جديدة؛ `docs/WORKLOG_AR.md` هو الملف المحلي غير المتتبع الوحيد. ملفات ISO و`.venv/` و`__pycache__/` هي ignored ظاهرة مسبقًا، ولم تُضف. | لا يجيز ضم الملفات ignored إلى commit. |
+
+#### إصلاحات المصدر المطلوبة قبل دورة الفحص التالية
+
+- **BIOS boot menu stall:** الصورة القديمة تتضمن `timeout 0` في `/isolinux/isolinux.cfg`، ولا يوجد override حالي في المشروع. أضيف لاحقًا override صريح بمهلة محدودة ومدخل Persistence اختياري؛ لا يُعد ذلك إثباتًا حتى تظهر الإعدادات في ISO مبنية من HEAD المعدل ويعاد اختبار QEMU.
+- **UEFI GRUB timeout وPersistence:** ملف GRUB المولد في الصورة القديمة لا يحدد مهلة. يلزم قالب GRUB صريح بمهلة ومدخل عادي وآخر `persistence` مع بقاء kernel args التشخيصية محصورة في CI.
+- **فحوص manifest الصامتة:** خطوة workflow تحتوي `sha256sum --check` وregex و`test -s` و`grep` بلا أسماء فحوص في رسائل `::error::`. لم تُحسم بعد أيّها أسقط run `39558122675`؛ التنزيل ما زال ممنوعًا لغياب GitHub auth.
+- **Persistence USB:** لم تُنفذ. لا كتابة إلى قرص فعلي؛ اختبار التكامل المطلوب يجب أن يتم فقط على raw image افتراضية قابلة للنسخ/إعادة البناء.
+
+#### دفعة إصلاحات الإقلاع وUSB وCI — 2026-10-21
+
+##### نتائج جديدة كشفتها التجربة
+
+- فُحصت الصورة المحلية القديمة للقراءة فقط عبر `xorriso -indev ISO-X-0.4.0-live-amd64.iso -report_system_area plain -report_el_torito plain`. أظهرت El Torito BIOS وUEFI، وMBR بمدخلين، وGPT entries متداخلة عمدًا (`GPT entry array ... overlapping`، و`ISOHybrid` مع `ISOHybrid1`). الصورة ما زالت تاريخية وليست بناء HEAD الحالي.
+- أُنشئت نسخة raw مؤقتة بحجم 4 GiB تحت `/tmp` فقط، ووُضع محتوى ISO القديم في بدايتها. `sgdisk --verify` أعاد exit 2 بسبب تداخل MBR/GPT الخاص بالـisohybrid؛ وفشلت محاولة `sgdisk --print`/`--move-second-header` على هذه البنية. هذا أثبت أن تنفيذ Persistence المبني على `sgdisk` غير صالح لهذا النوع من الصور، فأزيل بدل الإبقاء على مسار فاشل.
+- جرى اختبار `sfdisk --append` على نسخة raw فقط: أضاف مدخل MBR رقم 3 في المساحة بعد الصورة بنجاح (exit 0)، ثم `partx --show` أظهر مدخل Linux `0x83`. `mkfs.ext4` على offset بالقيمة `2657157120` بايت أنشأ ext4 label=`persistence` و`blkid -p -O ...` أكّد `TYPE=ext4`. لا يثبت هذا إقلاع النظام أو اكتشاف live-boot لقسم MBR؛ الجهاز الافتراضي loop تعذر ربطه بسبب `losetup ... Permission denied`.
+- أساس اختيار MBR موثق من خرج الصورة ومن Linux 6.12 `block/partitions/efi.c`: فاحص EFI لا يقبل GPT دون Protective MBR يحتوي نوع `0xEE` عند LBA 1؛ الصورة المخرجة لا تحتوي هذا المدخل وتحتوي MBR type `0x00` و`0xEF`. لذلك يستخدم kernel مسار DOS/MBR؛ أضيف قسم Persistence كمدخل MBR ثالث مع إبقاء بيانات GPT/إقلاع الصورة الأصلية دون تعديل.
+
+##### تغييرات المصدر المنفذة
+
+- أضيفت قوالب BIOS/UEFI صريحة تحت `config/bootloaders/`: مهلة Syslinux مقدارها 10 ثوانٍ، مهلة GRUB مقدارها 10 ثوانٍ، ومدخل Persistence مستقل بجانب الافتراضي العادي.
+- `scripts/build-iso.sh` ينسخ القوالب إلى staging ثم يستخرج إعدادات الإقلاع الفعلية من ISO الناتجة ويمررها إلى `scripts/validate-iso-boot-config.sh`. الفاحص يرفض timeout غير محدود، أو مدخل Persistence مفقود، أو تسرب معلمات CI إلى بناء الإصدار، أو nonce CI خاطئ.
+- استبدل `scripts/write-usb.sh` محاولة GPT الفاشلة بمسار MBR فقط: يثبت أن مصدر ISO يحمل مدخلي MBR المتوقعين، يكتشف قرص النظام ويرفض الكتابة إذا تعذر تحديد topology، يتحقق من السعة/sector قبل `dd`، ويطلب تأكيدَي `WIPE <disk>` و`CREATE PERSISTENCE`. لا يُنشأ إلا مدخل MBR ثالث من النوع `0x83`؛ ثم ext4 label=`persistence` و`persistence.conf` بمحتوى `/ union`.
+- أضيف `fdisk` (يوفر `sfdisk`) و`e2fsprogs` لقائمة الحزم؛ حُذفت إضافة `gdisk` لأنها غير مستخدمة. APT dry-run المحدّث داخل `debian:trixie` حل كامل القائمة: `1 upgraded, 1153 newly installed, 0 to remove`, exit 0؛ منها `fdisk` و`e2fsprogs`.
+- أضيف فحص مسمّى ورسالة `::error::` إلى كل فحوص manifest الصامتة، وكذلك بوابتا BIOS وUEFI، لتعرض محتوى ملف الدليل عند الفشل. بقي رفع مرشح ISO قبل اختبارات BIOS/UEFI؛ فشل الإقلاع لا يحذف artifact.
+- عُدّل build metadata و`create-ci-results.py` ليصنّفا Persistence على أنها `NOT_RUN` مع وصف تنفيذ writer والاختبار الطرفي غير المنفذ، بدل الادعاء بأنها `NOT_IMPLEMENTED`. بقي schema يدعم `NOT_RUN` مسبقًا، وأضيف assertion يمنع رجوع الوصف القديم.
+- أضيف `tests/test_write_usb_persistence.sh` إلى source-check runner؛ ينشئ ملف MBR خامًا sparse ويختبر `sfdisk --append` ومحتوى `/ union` باستخدام mocks للتركيب/formatting. workflow يثبت حزمة `fdisk` كي يتوفر `sfdisk`، والفحص يسجل `NOT_RUN` عند غياب الأداة محليًا بدل نجاح وهمي.
+- أصلح `tests/test_source_config.py` ليقرأ عناصر Openbox ذات namespace باستخدام `{*}command`. قبل الإصلاح كان الاختبار لا يرى أوامر Exec، وكان يعلن نجاحًا غير مبرر. أضيفت اختبارات سلبية للقوالب، nonce، جدول MBR المتوقع، واكتشاف قرص النظام والفشل المغلق.
+
+##### التحقق بعد الدفعة
+
+| الأمر | النتيجة | القيود |
+|---|---|---|
+| `PYTHONPATH=/tmp/isox-pydeps PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider -q` | 28 passed، exit 0. | اختبارات المنطق/العقود لا تثبت إقلاع ISO أو Persistence بعد restart. |
+| `bash tests/test_write_usb_validation.sh` | PASS، exit 0؛ البصمة الصحيحة مقبولة، العبث مرفوض، وقرص النظام/التخطيط غير المعروف مرفوضان. | لا كتابة فعلية إلى block device. |
+| `bash tests/test_qemu_headless_validation.sh` | PASS، exit 0؛ رفض nonce المضلل، serial الفارغ، timeout، QEMU error وغياب QMP/screenshots. | يختبر runner بأداة QEMU مزيفة؛ لا يثبت إقلاع صورة. |
+| `bash -n scripts/build-iso.sh scripts/write-usb.sh scripts/validate-iso-boot-config.sh tests/test_write_usb_validation.sh` وShellCheck للملفات نفسها مع استثناء SC1091 المعروف في `/etc/os-release` | exit 0. | لا يشمل تشغيل build. |
+| `actionlint` 1.7.12 (binary من release الرسمي، SHA-256 مطابق لملف checksums) على `.github/workflows/iso-build.yml` | exit 0. | لا يشغل GitHub Actions. محاولة `go install` الأولى تعثرت عند الاتصال بـsum.golang.org؛ لم تُعتمد، ثم تحقق الملف الرسمي بالبصمة. |
+| `docker run ... debian:trixie ... apt-get install --simulate` لقائمة الحزم الحالية ومكونات المستودع `main contrib non-free non-free-firmware` | 1 upgraded, 1153 newly installed, 0 to remove، exit 0. | محاكاة حل التبعيات فقط؛ لا تثبيت أو بناء chroot. |
+| `sfdisk --append` + `partx --show` + `mkfs.ext4 -E offset=...` + `blkid -p -O ...` على `/tmp/isox-usb-persistence-test.raw` فقط | MBR partition 3 ظهر من start `5189760`, type `0x83`; filesystem label `persistence`, type `ext4`؛ الأوامر نجحت. | ليس loop block device؛ لم ينشأ `persistence.conf` داخل filesystem ولم يُقلع guest بها. |
+| `losetup -fP /tmp/isox-usb-persistence-test.raw` | `Permission denied`، exit 1. | يمنع اختبار kernel partition nodes/تركيب filesystem وإعادة تشغيل guest في البيئة. |
+| `actionlint` على الـworkflow المعدل، `git diff --check`، وفحوص Python/Shell النهائية | كلها exit 0. | لا workflow run؛ لا توجد مصادقة GitHub. |
+| `scripts/run-source-checks.py /tmp/isox-source-evidence-2 /tmp/isox-source-pycache-2` مع `PYTHONPATH=/tmp/isox-pydeps` و`PATH` يحوي `sfdisk` | جميع الفحوص 23/23 PASS، exit 0: compile, pytest, smoke, USB validation/persistence partition, QEMU fake, ShellCheck, desktop/XML, workflow contracts, CI results وdiff-check. | أول تشغيل كشف assertion خاطئًا في `test_workflow_contracts.py` (طلب اسم check من YAML لا من runner)، صُحح ليستهدف `scripts/run-source-checks.py` ثم أعيدت المجموعة كاملة ونجحت. لا يثبت بناء ISO أو hardware. |
+| `gh auth status` | `You are not logged into any GitHub hosts`, exit 1. | لا يمكن تنزيل run `39558122675`، أو push، أو تشغيل workflow. |
+
+#### متابعة بعد استكمال GitHub authentication — 2026-10-21
+
+- `gh auth status`: مصادقة ناجحة للحساب `jnkmmdndmd-arch`، scopes تشمل `repo` و`workflow`. `gh api repos/chatstaceysmart66-sys/ISO-X` أكد `permissions.push=true`.
+- الحالة قبل العمل: الفرع `fix/isox-build-and-runtime`، `HEAD=84e8b96b6e9ded0e966a68565a7f01167455d991`، لا تغييرات Git، والفرع البعيد عند نفس commit. دفع commit جرى سابقًا بنجاح بعد `gh auth setup-git`؛ لم يستخدم force. رابط commit: `https://github.com/chatstaceysmart66-sys/ISO-X/commit/84e8b96b6e9ded0e966a68565a7f01167455d991`.
+- ملف `ISO-X-0.4.0-live-amd64.iso` كان موجودًا في جذر المستودع، غير متتبع ومطابقًا لقاعدة `.gitignore` `*.iso`. قبل حذفه وحده سُجل حجمه `2,657,157,120` بايت وSHA-256 `ad282899b7e1c51fd96590807437d29bffa97c898c7e77e09323a2e3c9b28da1`. حُذف من worktree بالمسار المحدد فقط؛ لا يوجد ملف ISO في Git ولم يُعدّل التاريخ.
+- التشغيل `39558122675` (HEAD قديم `4f27287...`): نزّلنا `isox-build-evidence-39558122675-1` و`isox-acceptance-report-39558122675-1`. تقريره يقول source checks PASS، بناء الصورة وبنيتها FAIL، وBIOS/UEFI NOT_RUN. سجل manifest القديم يعرض `ISO-X-0.4.0-ci-39558122675-1.iso: OK` قبل exit 1، دون رسالة فحص.
+- أُعيدت منفردة على ملفات الأدلة المحفوظة جميع اختبارات وجود الملفات الخمسة، ونمطي El Torito BIOS وUEFI، ونمط system-area MBR؛ كلها exit 0. sidecar SHA-256 ظهر `OK` في سجل الخطوة. الـartifact التاريخي لا يحتوي ISO المرشح أو nonce، والسجل لا يحتوي traceback/اسم check؛ لذلك الفحص الدقيق الذي أنهى الخطوة القديمة **غير معروف** ولا يجوز استنتاجه. تختلف هذه الأدلة التاريخية عن إصلاحات manifest المسمّاة المضافة في commit `84e8b96`.
+- تشغيل جديد للرأس الحالي: [run 39644678919](https://github.com/chatstaceysmart66-sys/ISO-X/actions/runs/39644678919)، event `push`، commit `84e8b96...`. GitHub `source-check` نجح، لكن خطوة البناء فشلت، وBIOS/UEFI تخطّيا لعدم وجود مرشح. سجل `xorriso` وصل لاستخراج ملفات boot config؛ الفشل المحدد كان `BOOT CONFIG ERROR: BIOS normal and persistence entries are invalid`. ملف `live.cfg` الفعلي يضع `menu default` و`append` بعد tab، بينما الـvalidator كان يطابق بداية السطر فقط. `lb build` وصل إلى مرحلة التحقق بعد البناء، لكن لم تُرفع ISO مرشحة ولا يمكن اعتبارها ناتجًا متاحًا.
+- الفحوص المحلية بعد استعادة المتطلبات (`fdisk` عبر apt و`pytest` خارج المشروع في `/tmp/isox-pydeps`) أعادت تشغيل `scripts/run-source-checks.py` كاملة: 23 check، وكلها PASS، 50 عدًّا ناجحًا، 0 failed، 0 NOT_RUN، exit 0. لم تُكتب ملفات اختبار داخل المستودع.
+- Codespace لا يزال غير مناسب لبناء ISO محلي: `/workspaces` لديه 15 GiB متاح، و`lb` و`debootstrap` و`mksquashfs` غير موجودة. `xorriso` وQEMU موجودان فقط. لذلك لا يوجد بناء محلي جديد. الـworkflow الحالي يبني صورة كاملة المصدر داخل Trixie، لكنه يصرّح بأنها **CI-only diagnostic** ويضبط `release_eligible=false`; حتى نجاحه لا يثبت قبول release عادي أو Persistence.
+- إصلاح العطل الفعلي: أصبح `scripts/validate-iso-boot-config.sh` يقبل المسافة البادئة في تعليمات Syslinux، وتحوّل fixture إلى تنسيق live-build الفعلي لاكتشاف regressions. أضيف `scripts/create-user-iso.py` ومرحلة `promote` مشروطة بنجاح BIOS وUEFI: تنشئ نسخة boot عادية من نفس ISO عبر xorriso دون إعادة بناء root filesystem، تتحقق من إزالة CI nonce ومن بقاء El Torito BIOS/UEFI وMBR، وتحفظ sidecar SHA-256 وmetadata. يبقى `release_eligible=false` لأن اختبار Persistence عبر reboot غير منفذ؛ لا يُنشأ GitHub Release.
+- تم اختبار الترويج محليًا على ISO fixture مؤقتة بـxorriso 1.5.6: تغيّرت ملفات boot المقصودة فقط، بقيت إدخالات El Torito BIOS وUEFI وMBR، واختفى nonce من إعدادات التشغيل، ونجح sidecar hash. أصول الإقلاع في fixture اصطناعية وليست قابلة للإقلاع؛ هذا يختبر إعادة كتابة الصورة لا إقلاع ISO المشروع.
+- بعد إضافة تحويل ISO واختبار xorriso integration، `scripts/run-source-checks.py` اجتاز 23 check، 54 PASS، 0 FAIL، 0 NOT_RUN، exit 0؛ `actionlint` 1.7.12 و`git diff --check` وShellCheck اجتازوا أيضًا. اختبار xorriso أنشأ fixture اصطناعية وفحص إعادة الكتابة والـmetadata؛ لا يثبت إقلاع الصور الاصطناعية.
+- عدد التغطية المرجعي من الجرد السابق يبقى 119 مسارًا (109 نصية قُرئت بالكامل، 10 ثنائية فُحصت بياناتها فقط). لم تُجرَ في هذه المتابعة إعادة قراءة شاملة للملفات؛ انصب العمل على الحالة الفعلية وملفات وأدلة CI ذات الصلة.
+- الحالة التالية: التعديلات التي تصلح validator وتضيف Artifact نسخة الإقلاع العادية ما زالت محلية غير committed/unpushed، بعد اجتياز المصدر. يجب تثبيت commit ودفعه، ثم مراجعة workflow الجديد وسجل بناء Trixie وBIOS/UEFI وArtifact النسخة العادية. BIOS/UEFI على بناء `84e8b96` skipped بسبب validator، وPersistence لم يبدأ. لا Release ولا ادعاء جاهزية قبل دليلها.
+- إعادة التحقق في هذه المتابعة: التشغيل الأول دون `PYTHONPATH` فشل لأن مفسر Codespace النشط لا يحتوي pytest (`No module named pytest`)، وليس بسبب فشل test. أُعيد `scripts/run-source-checks.py` مع `PYTHONPATH=/tmp/isox-pydeps`, و`PYTHONDONTWRITEBYTECODE=1` ومجلدي evidence/cache خارج المشروع: جميع 23 check PASS، منها 32 اختبار pytest، والإجمالي 54 PASS و0 FAIL و0 NOT_RUN، exit 0. شُغّل `tests.test_user_iso` منفرداً: 4/4 PASS.
+- تحققات إضافية: `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/iso-build.yml` exit 0؛ ShellCheck و`git diff --check` exit 0. فحص العمل لم يجد ملفات `.pyc` جديدة بعد إزالة ملفي bytecode المحددين اللذين أنشأهما اختبار `py_compile`. لا يثبت أي من هذه الفحوص بناء ISO أو BIOS/UEFI أو الجلسة الرسومية أو Persistence عبر reboot.
+- تحقق Git قبل الالتزام: `gh auth status` نجح للحساب الحالي مع scope `repo` و`workflow`، و`git fetch origin fix/isox-build-and-runtime` أظهر أن المحلي والبعيد كلاهما عند `84e8b96b6e9ded0e966a68565a7f01167455d991` (0 ahead/behind). التعديلات الحالية ما زالت غير committed وغير pushed؛ لا يوجد تشغيل CI جديد بعد هذه التغييرات.
+
+##### حالة البناء والإقلاع وPersistence
+
+- لم يُنفذ `lb build`: المضيف Ubuntu 24.04.5 وليس Debian Trixie، والمساحة الحرة نحو 15 GiB مقابل شرط السكربت 20 GiB، وأدوات `lb`, `debootstrap`, `mksquashfs` غير مثبتة. وجود RAM كافية لا يزيل هذه القيود.
+- لا يوجد ISO جديد من `HEAD` بعد تغييرات bootloader/Persistence. نتيجة BIOS القديمة `BOOTLOADER_STALL` تخص الصورة التاريخية فقط. BIOS وUEFI على النسخة الجديدة `NOT_RUN`.
+- بناء قسم Persistence في ملف raw تمت تجربته حتى MBR/ext4 فقط. اكتشاف live-boot، إنشاء `persistence.conf` داخل filesystem mounted، كتابة ملف المستخدم/Firefox/الحزمة، إعادة تشغيل guest والتحقق من بقائها: `NOT_RUN`، لأن loop device ممنوع ولا توجد ISO جديدة تقلع من التعديلات.
+- عند تسجيل هذه الملاحظة لم يكن قد حدث commit أو push أو تشغيل workflow. الـISO القديمة ignored، ونسخة raw وأدوات الفحص في `/tmp` فقط؛ لا تُضمّن أيًا منها في commit. `gh auth status` غير مصادق، لذلك لا push ولا تشغيل CI في هذه الجولة.
+
+#### إصلاح تعارض تنسيق CI nonce — 2026-10-21
+
+- تشغيل `39650015616` على commit `6a1cccb61e90046795383ab9311243b9f7ffa9c0` اكتمل بالفشل عند `Validate candidate and write validation manifest`. السجل المرفق في جلسة الإصلاح يثبت أن `candidate/ci-nonce.txt` احتوى `nonce: b8c826a2105b6f374c2043d4fab04be7`، بينما فحص الـworkflow يتطلب 32 خانة hex عارية.
+- السبب الجذري: workflow كان ينشئ الملف بالقيمة الخام، ثم `scripts/ci-build-in-trixie.sh` يكتب فوق الملف نفسه مع السابقة النصية `nonce: `. أزيلت الكتابة الثانية، وأضيف `scripts/read-ci-nonce.sh` لفرض الصيغة نفسها على مستهلكي nonce في التحقق وBIOS وUEFI والترويج؛ لا يُخفف التحقق.
+- أضيف اختبار يمرر قيمة خام صالحة ويرفض البادئة، والأحرف الكبيرة، والقيمة القصيرة، والسطور الزائدة؛ وأضيف فحص عقد workflow يثبت أن المصدر الوحيد يكتب raw token وأن helper البناء لا يستبدل الملف.
+- التحقق المحلي بعد التعديل: `scripts/run-source-checks.py` = 23 check PASS، 55 PASS، 0 FAIL، 0 NOT_RUN، exit 0؛ pytest شغّل 33 حالة PASS. `actionlint v1.7.12`, ShellCheck للسكربتين، `bash -n` و`git diff --check` exit 0. النتيجة لا تثبت build أو boot.
+- تشغيل `39650015616` أكد source-check PASS، build FAIL بسبب nonce، BIOS/UEFI/promote SKIPPED، ولا يوجد Artifact ISO؛ Artifacts الظاهرة هي source-check وbuild-evidence وacceptance-report فقط. لا تُعتبر صورة ذلك التشغيل منتجًا قابلاً للتنزيل.
+
+#### تشخيص BOOT_TIMEOUT في الجلسة الرسومية — 2026-10-21
+
+- run `39653105216` على commit `f624d5478af54d62997a80874482e5e29ebf83d5` نجح في البناء وفحوص بنية ISO، لكنه فشل في BIOS وUEFI بعد 600 ثانية (`BOOT_TIMEOUT`). نُزّلت أدلة QEMU: BIOS وUEFI كلاهما أظهرا `kernel=true`, `initramfs=true`, `systemd=true`, `display_manager=true`, `graphical_target=false`, `marker_seen=false`. سجل serial يصل إلى `Debian GNU/Linux 13 iso-x ttyS0` و`iso-x login:`؛ خدمة الجاهزية انتهت بالفشل، ولم توجد جلسة `user` نشطة.
+- السبب في إعداد المصدر: hook `0300-isox-services.hook.chroot` كان يكتب إعداد greeter فقط ولا يكتب إعداد LightDM auto-login. لا توجد إعدادات auto-login في مصدر المشروع. هذا لا يطابق تصميم Live Desktop: bootappend يحدد `username=user`، وOpenbox autostart يبدأ سطح ISO-X بعد الدخول، واختبار القبول يتطلب جلسة رسومية نشطة لذلك المستخدم. لذلك شاشة greeter ليست سلوك القبول النهائي المقصود.
+- الإصلاح الجاري يضيف drop-in `/etc/lightdm/lightdm.conf.d/50-isox-live-autologin.conf` يربط `user` بجلسة `openbox`، ويتحقق أثناء hook أن `/usr/share/xsessions/openbox.desktop` موجود. اختبار source-config يثبت تطابق اسم الحساب والجلسة مع auto/config ووجود أمر بدء ISO-X. لا يغيّر فحص readiness ولا يصنع PASS. نتائج QEMU لهذا الإصلاح غير متاحة حتى يكتمل التشغيل التالي.
+- غير محسوم/غير منفذ بعد: BIOS/UEFI على الصورة بعد تعديل LightDM، عرض سطح المكتب الفعلي بعد تسجيل الدخول التلقائي، اختبار Persistence عبر reboot، وتشغيل متجر GTK/الصوت على عتاد فعلي. لا يوجد إصدار معتمد.
+- أول تشغيل بعد هذا التعديل (`39658364621`, commit `3e23f90`) فشل قبل إنتاج الصورة في hook `0300-isox-services`: الدليل الكامل `.../config/hooks/live/0300-isox-services.hook.chroot: line 21: /etc/lightdm/lightdm.conf.d/50-isox-live-autologin.conf: No such file or directory`. package LightDM لا ينشئ مجلد drop-ins في هذه البيئة. الإصلاح التالي ينشئ `/etc/lightdm/lightdm.conf.d` صراحة قبل كتابة الملف؛ لا علاقة لهذا الفشل باختبار الجلسة أو QEMU.
+- تشغيل `39660867703` على `f89aa9e` نجح في بناء ISO وفحص El Torito/MBR لكنه فشل BIOS وUEFI بـ`BOOT_TIMEOUT`. الصورة الجديدة احتوت drop-in autologin وملف `/usr/share/xsessions/openbox.desktop`، لكن لقطة UEFI أظهرت greeter. فحص `var/lib/dpkg/status` داخل `filesystem.squashfs` أكد أن `user-setup` **غير مثبت** رغم وجود `live-config`; مصدر live-config `usr/lib/live/config/0030-user-setup` يخرج بلا إنشاء حساب عندما يفشل `pkg_is_installed "user-setup"`. لذلك لم يكن مستخدم `user` موجودًا عند محاولة LightDM autologin. الإصلاح يضيف `user-setup` إلى package list ويثبت ذلك باختبار source-config؛ نتائج البناء والإقلاع بعد الإصلاح لم تُنفذ بعد.
+
+## إصلاح قبول الرسوميات — 2026-10-21
+
+- عولج تفسير إنهاء QEMU: نتيجة الإقلاع تتطلب marker صحيحًا، أن يكون runner قد طلب الإنهاء فعلًا، عدم التصعيد إلى SIGKILL، نظافة مجموعة العمليات، ولقطة نهائية صالحة. الخروج 0 غير المطلوب لا يثبت نجاحًا؛ والخروج 0 بعد SIGTERM المطلوب مقبول فقط مع بقية أدلة الضيف.
+- أصبحت لقطة النهاية تنتظر مهلة تصيير، وتُرفض PPM المفقودة/المعطوبة/أصغر من 640×480 أو التي لا تحتوي ألوان ISO-X الأساسية. probe الحالي يتطلب Openbox وGTK shell ونافذة ISO-X ذات أبعاد سطح مكتب قبل إصدار nonce.
+- أُضيفت اختبارات lifecycle واللقطات ونافذة X11. في Debian Trixie سجّلت source suite ‏55 PASS و0 FAIL و1 NOT_RUN؛ فحص pytest سجّل 33 PASS. الفحص غير المنفذ هو `git diff --check` داخل mount للقراءة فقط، ونُفذ بنجاح على المضيف. اجتازت أيضًا ShellCheck وdesktop-file-validate واختبار قسم ext4 على قرص raw مؤقت.
+- اختبار persistence تحقق من قسم MBR ثالث وext4 باسم `persistence` وملف `/ union` وبقاء ملف marker بعد unmount وإعادة فتح صورة ext4. هذا لا يختبر إقلاع ISO أو reboot حقيقي للضيف، وما زال ذلك غير متحقق.
+- لا تُعد صورة `39673715501` نتيجة لهذا الإصلاح: لم يُبنَ ISO جديد ولم تُشغّل BIOS/UEFI بعد. يلزم CI جديد وفحص لقطات فعلية؛ USB persistence عبر reboot ما زالت غير متحققة.
+- تشغيل `39691070776` على commit `0c2a6ecbdbf87c5a7261b23c7098ab05f389ddb0` نجح في source-check والبناء والتحقق البنيوي، ووصل BIOS وUEFI إلى marker مع `qemu_exit_code=0` و`termination_requested=true` و`process_group_clean=true`. أظهرت اللقطات النهائية نافذة ISO-X GTK الفعلية في الوضعين. فشلت بوابتا CI لأن validator رفض إطار BIOS المبكر 720×400 ولأن ألوان خلفية الصور النهائية انحرفت عن RGB الدقيق في CSS؛ ليست هذه نتيجة قبول ناجحة. عُدّل parser بعد هذا التشغيل ليدعم أحجام الإقلاع الفعلية وتفاوت الالتقاط المحدود، وأضيف regression لها. يلزم run جديد على التعديل قبل اعتماد BIOS/UEFI؛ persistence عبر reboot لم تُختبر.
+
+## إصلاح promote لصورة normal-boot — 2026-10-22
+
+- run `39742060324` على commit `778dc13cc634146ec2de7e93118331741cf3dc88` اجتاز source-check والبناء وBIOS/UEFI للمرشح التشخيصي، ثم فشل `promote` في `normalize_config()` بسبب `PermissionError` عند الكتابة فوق `live.cfg` الذي أخرجه xorriso للقراءة فقط.
+- يستبدل الإصلاح النص ذريًا من ملف مؤقت في المجلد نفسه، ويحفظ mode الأصلي، ويرفض symlink أو ملفًا غير عادي. اختبارات Syslinux وGRUB تحاكي `Path.write_text` غير المتاح، وتتحقق من المدخلين العادي وpersistence وإزالة nonce/وسائط CI ورفض تغيرات arguments غير المتوقعة.
+- اختبار التكامل في Debian Trixie يبني ISO هجينة، يجعل `live.cfg` و`grub.cfg` للقراءة فقط، ويتحقق أن xorriso يستخرجهما بهذه الأذونات، ثم ينشئ الصورة العادية ويتحقق من configs وEl Torito BIOS/UEFI وMBR وsidecar SHA-256 والـmetadata النهائية. نتيجة `tests/test_user_iso.py`: 9 اختبارات نجحت.
+- يضيف `promote` إقلاعًا منفصلًا للصورة المحوّلة نفسها في BIOS وUEFI، ولقطات/JSON lifecycle منفصلة، ثم يرفع artifact مرشحًا قبل فرض البوابتين. تظل `release_eligible=false`؛ إثبات قسم ext4 أو كتابة `persistence.conf` لا يثبت persistence عبر reboot حقيقي.
+- run `39806454958` على `5727354` أكد أن إصلاح الأذونات الذري تجاوز `PermissionError`، لكن كشف `ValueError` جديدًا: GRUB المولد يحتوي `findiso=${iso_path}` غير الموجود في fixtures القديمة. أصبح هذا token متوقعًا فقط في GRUB ويُحفظ للصورة العادية؛ أي `findiso` آخر أو token إضافي يبقى مرفوضًا. كذلك أصبحت خطوة metadata مشروطة بنجاح التحويل، والرفع مشروطًا بنجاحها. اختبارات unit/integration لهذه الحالة نجحت محليًا في Trixie؛ يلزم workflow جديد لإثبات promote وBIOS/UEFI على الصورة المحوّلة.
+- source suite في Trixie على الحالة المعلقة: 59 PASS، 0 FAIL، و1 NOT_RUN لأن حاوية المصدر read-only لا تحتوي `git` لتشغيل diff-check؛ تحقق `git diff --check` على المضيف بنجاح. اجتازت أيضًا أدوات ShellCheck وdesktop-file-validate وxorriso واختبار قسم USB الافتراضي. لم تُشغّل بعد GitHub Actions على هذه التغييرات.
+## متابعة الملحق الإلزامي — 2026-11-02
+
+### ما تغيّر في هذه الجولة
+
+- توحيد مشاهد الإقلاع والخلفية حول `assets/iso-x-dragon.svg` كمصدر التنين الرئيسي، وإعادة توليد الأصول النقطية منه عبر CairoSVG. هذا تصميم SVG يدوي؛ لم تكن أداة توليد صور متاحة ولم يُدّعَ توليد صورة جديدة بها.
+- تحديث متجر ISO-X لعرض الصفحات والتصنيفات ونتائج قابلة للترقيم، وربط البحث وقائمة الحزم، وإظهار أخطاء APT/Flatpak بدلاً من الخلط بينها وبين نتائج فارغة. اختبارات المصدر لا تثبت نجاح واجهة GTK أو تثبيت حزمة فعلية.
+- إضافة مشغّل GTK يعتمد ملفات `.desktop` القابلة للعرض فعلياً؛ يختار 8 تطبيقات موجودة كحد أقصى للواجهة الأولية، ويعرض بقية التطبيقات عبر «المزيد» والبحث والتحميل على دفعات، ويحدّث القائمة عند إعادة الفتح. استُبعدت مداخل ISO-X الداخلية وتُحترم `NoDisplay` و`Hidden` من خلال `Gio.DesktopAppInfo.should_show()`.
+- ربط المشغّل بمدخل tint2 ثابت، وتوفير أسماء/تلميحات عربية، وإبقاء النافذة ضمن قائمة المهام لإظهار حالتها النشطة. أزيل ربط `W` المنفرد من Openbox؛ اختصارات Super المركبة باقية.
+- أضيفت اختصارات Google وYouTube وChatGPT إلى سطح المكتب في `/etc/skel/سطح المكتب/`، وتفتح عناوينها الصحيحة بواسطة Firefox ESR. بقي اختصار Firefox المثبت في tint2 واحداً؛ لم تُنشأ تطبيقات ويب مزيفة داخل قائمة التطبيقات.
+- أضيف `desktop/isox-launcher.desktop` كملف مصدر ثابت بدلاً من توليده inline، ووُسّعت اختبارات المصدر واختبار GTK/Openbox للتحقق من الصفحات والبحث والتشغيل والإغلاق والكتابة وتحديث القائمة.
+
+### التحقق الفعلي وحدوده
+
+- `pytest -q tests/test_build_contracts.py tests/test_store_backend.py tests/test_source_config.py`: **37 passed**.
+- `python3 -m compileall -q app scripts tests`، `python3 tests/test_store_backend.py` (**20 passed**)، و`git diff --check`: نجاح.
+- لم تتوفر `xvfb-run` أو `openbox` أو `xdotool` أو GTK 3 typelib أو `desktop-file-validate` على المضيف. لذلك لم يُنفّذ `tests/test_gtk_window_runtime.py`، ولم تُختبر استجابة النقرة الخارجية/اللمس أو شكل RTL/LTR داخل جلسة فعلية. لم تتوفر صور واجهة عربية/إنجليزية.
+- لم يُنفذ `live-build` أو إقلاع ISO أو اختبار تثبيت/إزالة APT حقيقي. لا تتوفر في هذه الجولة أدلة جديدة على BIOS/UEFI أو صوت HDMI/الأجهزة أو الشبكة. Persistence عبر إعادة التشغيل ما تزال غير منفذة/غير متحققة بحسب حالة المصدر السابقة.
+- لا تُعتبر هذه الجولة استيفاءً كاملاً للملحق؛ يلزم بناء صورة وتشغيل اختبارات القبول الرسومية وPersistence/BIOS/UEFI وتوثيق النتائج قبل اعتماد الإصدار.
+
+## متابعة مراقبة ما بعد الجاهزية — 2026-11-06
+
+- أعدت الاستعلام عن CI `42221229398`: اكتمل workflow بـSUCCESS في build/source/BIOS/UEFI/promote/acceptance-summary على `b15647056fc609fba9e2d26748864dcc5ec50487`. الـISO التشخيصية 2,785,017,856 بايت، SHA-256 `ada797696e3ea9cbee4367bcfe8befa914cbf06ab0b876ebfd029299883c37fd`. التشغيل سابق للتعديلات المحلية؛ BIOS/UEFI لم يشترطا marker استقرار ما بعد readiness، وPersistence مصنفة `NOT_RUN`.
+- أضيف معامل CI `isox.ci.stability=30`، وخدمة readiness تصدر marker الجاهزية ثم تراقب Openbox وTint2 وعملية ISO-X وحجم النافذة كل ثانية؛ فقدان أي عنصر يصدر failure marker. ينتظر QEMU runner stable/failure marker ويصنف timeout أو الفشل كعدم قبول.
+- اجتازت اختبارات الجاهزية وQEMU المصدرية، واختبار fake-runtime يغطي markers الصحيحة والمبكرة/الخاطئة. بعد تثبيت أدوات البيئة ومحدد مفسر GTK أعيد `scripts/run-source-checks.py`: **93 PASS، 0 FAIL، 1 SKIP، 0 NOT_RUN**؛ pytest ‏70 tests مع skipped واحد، وGTK/Openbox/XKB/xterm وقسم ext4 الافتراضي PASS. السجل تحت `/tmp/isox-source-audit-final-L349pm`.
+- لم يُبنَ ISO ولم يُجر QEMU/BIOS/UEFI على هذه التغييرات بعد، ولم يُختبر persistence reboot أو 6 نوافذ/الأداء. السبب الداخلي التاريخي لانهيارات `wmctrl` وTint2 لا يزال غير محسوم؛ لا تُعلن الجاهزية قبل CI جديد وأدلة guest.
+
+## إصلاح ترقية normal-boot بعد معامل الاستقرار — 2026-11-06
+
+- CI `42234381984` على `913266c4d219a3c62182d78f4dd6f7beeb0fdbb1` نجح في source-check وbuild وإقلاعي BIOS/UEFI التشخيصيين. فشل `promote` عند تطبيع إعداد Syslinux؛ `create-user-iso.py` لم يكن يسمح بالمعامل المضاف حديثاً `isox.ci.stability=30`، لذا لم تُنشأ أو تُختبر ISO normal-boot. لا يُعد هذا نجاح قبول كامل.
+- أضيف `isox.ci.stability=30` إلى قائمة معاملات التشخيص المعروفة التي تُزال عند التطبيع، وظل رفض أي معامل CI غير معروف قائماً. أضيفت قيمة المعامل إلى fixtures Syslinux/GRUB، بما فيها مسار بناء ISO كامل.
+- `python3 -m pytest -q tests/test_user_iso.py`: **11 passed، 1 skipped، 6 subtests passed**؛ `python3 -m pytest -q`: **66 passed، 1 skipped، 6 subtests passed**. اختبار ISO end-to-end المتخطى يعتمد على `xorriso` غير المتاح محلياً، ولا يمكن تثبيته بحساب غير root؛ syntax و`git diff --check` اجتازا.
+- يلزم دفع الإصلاح وإعادة CI لإثبات create/promote وإقلاع normal-boot عبر BIOS وUEFI. الحالة تبقى **NOT READY** حتى ذلك وإغلاق فجوات Persistence/performance/HTML الموثقة.

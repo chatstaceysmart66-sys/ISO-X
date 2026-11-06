@@ -1,0 +1,12 @@
+# Repair Log
+
+| Repair | Files | Cause and implementation | Validation | Image/runtime status |
+|---|---|---|---|---|
+| Restore window-test click offsets | `tests/test_gtk_window_runtime.py` | Offset regression disagreed with Openbox `NLIMC` title button layout. Restored tested positions and added state-based polling. | CI run `40210339242`: Openbox controls, move, eight resize zones, focus and GTK/xterm input passed. | Same code passed current-at-that-time ISO desktop acceptance; not related to current package edits. |
+| Explicit menu contrast + single click | `scripts/apply-windows-look.sh`, `config/hooks/live/0500-isox-menu-contrast.hook.chroot`, `scripts/build-iso.sh`, `tests/test_build_contracts.py` | Openbox theme is separate from GTK theme; libfm default is double-click. Add explicit theme colors and per-user libfm option; stage hook. | Temp HOME/config and temp-root idempotence test passed; hook was also applied to the actual Debian Clearlooks file under `/tmp`; source CI `40216891064` passed the then-HEAD. | Current run build was in progress; no visual image confirmation yet. |
+| Make Secure Vault menu actionable | `scripts/secure-vault.py`, `desktop/openbox-menu.xml`, `tests/test_secure_vault.py` | Menu launched CLI without mandatory mode/paths. TTY-only prompt now gets mode and paths; passwords remain handled by existing TTY secret flow. | Baseline no-args failure reproduced; route selection/dispatch, actual OpenSSL roundtrip, Unicode, wrong secret and tamper checks pass. | No real xterm/menu run; local source changes are not included in current CI run. |
+| Package snap dependency | `config/package-lists/iso-x.list.chroot`, `tests/test_source_config.py` | Script uses `xrandr`, provided by omitted `x11-xserver-utils`. | Inspected Debian package file list; source config test passes. | Build and actual shortcut use pending. |
+| Package privilege helper | `config/package-lists/iso-x.list.chroot`, `tests/test_source_config.py` | APT backend uses `pkexec`; manifest only had `polkitd` and `lxpolkit`. | Debian package file list confirms `/usr/bin/pkexec`; source config and 16 backend tests pass. | Build and real Polkit prompt pending. |
+| Inventory/graph/report set | `docs/audit/*.md` | Replaced stale count assumptions with HEAD snapshot, call paths, test matrix and explicit defect statuses. | `git diff --check`; executable checks recorded separately. | Documentation does not establish runtime acceptance. |
+
+No data or user disks were modified. Test-created files are confined to temporary directories and `/tmp`.
